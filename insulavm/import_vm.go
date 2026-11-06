@@ -21,10 +21,14 @@ type VMImportRequest struct {
 func(e *Engine)ImportToVM(ctx context.Context,request VMImportRequest)(*ImportResult,error){
  if ctx==nil{return nil,errors.New("context is required")}
  if request.VMID==""{return nil,errors.New("VMID is required")}
- record,err:=e.GetVM(ctx,request.VMID)
+ checked,err:=e.GetVMStatus(ctx,request.VMID)
  if err!=nil{return nil,err}
+ record:=checked.Record
+ if !checked.IsRunning(){
+  return nil,fmt.Errorf("VM %s is not running in Libvirt (actual state: %s; SQLite state: %s)",record.ID,checked.LibvirtState,record.Status)
+ }
  if record.Status!="running"{
-  return nil,fmt.Errorf("VM %s is not running (status %s)",record.ID,record.Status)
+  return nil,fmt.Errorf("VM %s is active in Libvirt but SQLite state is %s; inspect with 'insula vm status -id %s' before importing",record.ID,record.Status,record.ID)
  }
  if record.IP==""||record.SSHPort<1||record.SSHPort>65535{
   return nil,errors.New("VM has no valid SSH address in registry")
