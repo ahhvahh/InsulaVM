@@ -3,12 +3,16 @@
 
 # FLUX-001 — Execução de Action com manifesto `insula.yaml`
 
-**Estado:** Proposto — não implementado.
+**Estado:** fluxo completo proposto; execução sequencial SSH e gravação de logs implementadas em [FLUX-003](FLUX-003-execucao-sequencial-logs.md).
 **Versão aprovada:** nenhuma.
 **Ponto de entrada:** futura CLI com `insula.yaml` referenciando perfil de VM publicado.
 **Arquitetura do motor:** [ARQ-001](../arquitetura/ARQ-001-motor-insulavm.md).
 **Perfis e overlays:** [ARQ-002](../arquitetura/ARQ-002-perfis-vm.md).
 **Criação de perfil:** [FLUX-002](FLUX-002-criacao-perfil-vm.md).
+
+## Limite atual da implementação
+
+O [FLUX-003](FLUX-003-execucao-sequencial-logs.md) implementa somente a fase em que uma VM já está inicializada e a aplicação já está presente no diretório remoto. Preparação de perfil QCOW2, provisionamento Libvirt, obtenção do repositório e limpeza da VM continuam pendentes.
 
 ## Objetivo
 
