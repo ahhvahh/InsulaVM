@@ -44,6 +44,7 @@ func run(args []string) error {
 			fmt.Println("       insula vm start -config config.yaml -profile debian-minimal")
 			fmt.Println("       insula vm list -config config.yaml")
 			fmt.Println("       insula vm show -config config.yaml -id UUIDv7")
+			fmt.Println("       insula vm status -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm exec -id UUIDv7 -command \"id -u\" [-sudo]")
 			fmt.Println("       insula vm import -id UUIDv7 -source /host/projeto")
@@ -181,6 +182,9 @@ func runAction(args []string) error {
 		KnownHosts: *hostsOverride,
 		CommandTimeout: *timeout,
 		Output: os.Stdout,
+		OnVMProgress: func(event insulavm.VMProgress){
+			fmt.Fprintf(os.Stderr,"[InsulaVM][vm:%s] %s\n",event.Stage,event.Message)
+		},
 	})
 	if result != nil && result.LogDirectory != "" {
 		fmt.Println("Logs:", result.LogDirectory)
