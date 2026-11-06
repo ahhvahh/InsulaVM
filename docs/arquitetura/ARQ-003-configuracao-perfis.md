@@ -11,9 +11,20 @@
 
 | Arquivo | Escopo | Quando é lido |
 | --- | --- | --- |
-| [`config.yaml`](../../config.yaml) | Caminhos, Libvirt, rede, SQLite, usuário SSH e política sudo | CLI e biblioteca Go |
+| [`config.yaml`](../../config.yaml) | Caminhos, `guest.destination` comum às VMs, Libvirt, SQLite, usuário SSH padrão e sudo | CLI e biblioteca Go |
 | `data/profiles/<nome>/profile.yaml` | Nome, OS, RAM (MiB), vCPUs, disco, versão, caminho QCOW2 e eventuais overrides SSH | Consulta, registro e execução do perfil |
-| [`insula.yaml`](../../insula.yaml.example) | Perfil escolhido, origem identificadora do projeto, workspace, setup e pipelines/jobs | Execução da Action |
+| [`insula.yaml`](../../insula.yaml.example) | Perfil, `ssh.user` opcional, imports de origens locais, setup e jobs; sem destino nem chaves SSH | Execução da Action |
+
+O destino dos arquivos é configurado apenas uma vez em `config.yaml`:
+
+```yaml
+guest:
+  destination: /tmp/insulavm/workspace
+ssh:
+  user: insula
+```
+
+O manifesto de Action pode trazer `ssh.user: buildagent`, caso deseje outro usuário não-root; se omitido, a configuração global prevalece. Nas VMs novas, esse usuário e sua chave pública são provisionados automaticamente pelo Cloud-Init. Arquivos adicionais enviados por `vm import -id ... -source ...` são extraídos no mesmo destino.
 
 O perfil **não** contém a instalação do sistema por si só: `profile.yaml` aponta para um arquivo binário `base.qcow2` com o sistema operacional já instalado. Os segredos não devem constar dos YAMLs.
 
@@ -80,14 +91,14 @@ go run . profile show -config config.yaml -name debian-minimal
 - O usuário/daemon Libvirt precisa de permissões apropriadas para atravessar as pastas e abrir o QCOW2. A aplicação cria pastas privadas; configure ACLs/grupos explicitamente, **não** libere leitura ou escrita irrestrita em imagens.
 - O InsulaVM cria a identidade SSH de cada convidado, injeta no Cloud-Init e gera o `known_hosts` correspondente antes da autenticação. A imagem-base precisa ter o cache Cloud-Init limpo antes do registro e ser adequada à clonagem.
 - Apenas discos QCOW2 são suportados; imagens de instalação ISO não são diretamente executáveis como perfil pronto.
-- A rotina de runtime não cria o repositório nem o `workspace`: ambos devem existir dentro da VM antes da Action.
+- O InsulaVM prepara `guest.destination` por SSH antes de executar a Action e pode importar arquivos locais. **Não clona** automaticamente um repositório Git remoto. O usuário SSH precisa de permissão para criar o destino escolhido.
 - Para segurança, erros de destruição que não permitam confirmar a parada da VM bloqueiam remoção do overlay.
 
 ## Pendências
 
 1. Instalar SO a partir da ISO local com console/terminal, validar a instalação e publicar um novo perfil, conforme [FLUX-002](../fluxos/FLUX-002-criacao-perfil-vm.md).
 2. Validar Cloud-Init NoCloud e a autenticação automática em uma VM KVM real; a implementação e os testes simulados estão em [ARQ-006](ARQ-006-identidade-registro-sudo.md).
-3. Transferência do repositório e criação automática do workspace antes dos jobs.
+3. Checkout automático de um repositório Git remoto; a importação de arquivos locais e criação do diretório compartilhado já estão implementadas.
 4. Versionamento de perfis além de `v001`, locks de publicação, autenticação de operações de manutenção e política de retenção de logs.
 
 ## Fontes técnicas
