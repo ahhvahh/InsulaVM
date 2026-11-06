@@ -14,7 +14,7 @@ func TestParseIPv4Lease(t *testing.T){
 
 func TestDomainXMLAttributesAreEscaped(t *testing.T){
  result:=domainXML("vm",512,1,"/tmp/guest's.qcow2","default","52:54:00:aa:bb:cc")
- if !strings.Contains(result,"guest&apos;s.qcow2"){t.Fatalf("unescaped attribute: %s",result)}
+ if !strings.Contains(result,"guest&#39;s.qcow2") && !strings.Contains(result,"guest&apos;s.qcow2"){t.Fatalf("unescaped attribute: %s",result)}
  if !strings.Contains(result,"<memory unit='MiB'>512</memory>"){t.Fatal("RAM not present")}
  if !strings.Contains(result,"<vcpu>1</vcpu>"){t.Fatal("vCPU not present")}
 }
