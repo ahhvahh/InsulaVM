@@ -109,6 +109,14 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
  xmlSpec:=domainXMLWithSeed(instance.LibvirtUUID,instance.Name,p.MemoryMiB,p.VCPUs,overlay,seed.ISO,c.Virtualization.Network,instance.MACAddress)
  xmlPath:=filepath.Join(dir,"domain.xml")
  if err:=os.WriteFile(xmlPath,[]byte(xmlSpec),0600);err!=nil{return nil,err}
+ // With qemu:///system, Libvirt launches QEMU under a separate non-root
+ // Linux account. Grant it access only to the backing disk, overlay and
+ // cloud-init seed, without exposing SSH client keys or listing directories.
+ if c.Virtualization.QEMUUID > 0 {
+  if err:=grantQEMUStorageAccess(ctx,c.Virtualization.QEMUUID,image,overlay,seed.ISO);err!=nil{
+   return nil,fmt.Errorf("prepare QEMU disk permissions: %w",err)
+  }
+ }
 
  store,err:=registry.Open(instance.registryPath)
  if err!=nil{return nil,err}
