@@ -5,7 +5,7 @@
 
 **Estado geral:** configuração global, catálogo de perfis QCOW2, criação de overlay, inicialização de VM transitória via Libvirt e execução SSH sequencial implementados; instalação a partir da ISO, Cloud-Init automático e transferência de repositório ainda pendentes.
 
-O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perfil selecionado em `insula.yaml`, inicia uma VM descartável usando overlay QCOW2 ou usa uma VM SSH existente, e grava logs por job. A CLI e outros projetos Go podem usar o mesmo motor através do pacote importável `insulavm`. A instalação inicial a partir de ISO e a preparação do repositório dentro do guest ainda dependem de desenvolvimento.
+O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perfil selecionado em `insula.yaml`, pode importar arquivos/pastas locais em TAR.GZ antes dos jobs, inicia uma VM descartável usando overlay QCOW2 ou usa uma VM SSH existente, e grava logs por job. A CLI e outros projetos Go podem usar o mesmo motor através do pacote importável `insulavm`. A instalação inicial a partir de ISO e a preparação do repositório dentro do guest ainda dependem de desenvolvimento.
 
 ## Mapa de leitura
 
@@ -15,6 +15,7 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 | [ARQ-002 — Perfis de VM](arquitetura/ARQ-002-perfis-vm.md) | Arquitetura | Instalação inicial proposta, metadados QCOW2 e overlays descartáveis |
 | [ARQ-003 — Configuração e catálogo](arquitetura/ARQ-003-configuracao-perfis.md) | Arquitetura implementada | Config global, perfis por diretório, seleção e execução por Libvirt |
 | [ARQ-004 — Biblioteca Go](arquitetura/ARQ-004-biblioteca-go.md) | Integração implementada | API Go para orquestradores externos, `Run(ctx, request)`, retorno estruturado e ciclo de vida |
+| [ARQ-005 — Importação TAR.GZ](arquitetura/ARQ-005-importacao-arquivos.md) | Transferência implementada | Compactar host, enviar SSH, extrair na VM, confirmar e informar progresso ao consumidor |
 | [FLUX-001 — Execução de manifesto](fluxos/FLUX-001-execucao-manifesto.md) | Fluxo parcialmente implementado | Executar Actions a partir de perfil, preparar repositório, setup, jobs, logs e limpeza |
 | [FLUX-002 — Criar perfil de VM](fluxos/FLUX-002-criacao-perfil-vm.md) | Fluxo proposto | Perguntas de recursos e ISO, instalação Debian, terminal e salvamento |
 | [FLUX-003 — Execução sequencial e logs](fluxos/FLUX-003-execucao-sequencial-logs.md) | Fluxo implementado | Uma sessão por comando, fluxo de stdout/stderr e persistência física por job |
@@ -30,7 +31,7 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 
 | Prefixo | Finalidade | Documentos atuais |
 | --- | --- | --- |
-| `ARQ` | Arquitetura | [ARQ-001](arquitetura/ARQ-001-motor-insulavm.md), [ARQ-002](arquitetura/ARQ-002-perfis-vm.md), [ARQ-003](arquitetura/ARQ-003-configuracao-perfis.md), [ARQ-004](arquitetura/ARQ-004-biblioteca-go.md) |
+| `ARQ` | Arquitetura | [ARQ-001](arquitetura/ARQ-001-motor-insulavm.md), [ARQ-002](arquitetura/ARQ-002-perfis-vm.md), [ARQ-003](arquitetura/ARQ-003-configuracao-perfis.md), [ARQ-004](arquitetura/ARQ-004-biblioteca-go.md), [ARQ-005](arquitetura/ARQ-005-importacao-arquivos.md) |
 | `FLUX` | Fluxos de execução | [FLUX-001](fluxos/FLUX-001-execucao-manifesto.md), [FLUX-002](fluxos/FLUX-002-criacao-perfil-vm.md), [FLUX-003](fluxos/FLUX-003-execucao-sequencial-logs.md) |
 | `INTF-TERM` | Interface de terminal | [INTF-TERM-001](interfaces/terminal/INTF-TERM-001-criar-perfil-vm.md), [INTF-TERM-002](interfaces/terminal/INTF-TERM-002-executar-manifesto.md), [INTF-TERM-003](interfaces/terminal/INTF-TERM-003-configuracao-perfis.md) |
 
