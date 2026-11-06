@@ -71,3 +71,9 @@ func SaveKnownHost(path,ip string,pub ssh.PublicKey)error{
  line:=knownhosts.Line([]string{ip},pub)+"\n"
  return os.WriteFile(path,[]byte(line),0600)
 }
+
+// Fingerprint returns the pinned SHA-256 fingerprint of a public host key.
+func Fingerprint(pub ssh.PublicKey)string{
+ if pub==nil{return ""}
+ return ssh.FingerprintSHA256(pub)
+}
