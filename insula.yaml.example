@@ -1,0 +1,21 @@
+# Example only: connect to a Debian VM with an existing checkout.
+# The CLI does not provision a VM or clone repositories in this cycle.
+repository:
+  name: example-repo
+action: test
+workspace: /app/repo-workspace
+setup:
+  - "echo Debian environment is ready"
+pipelines:
+  - name: validation
+    jobs:
+      - name: run-tests
+        commands:
+          - "python3 -m pytest"
+          - "echo tests finished"
+        allow_failure: false
+      - name: inspect
+        commands:
+          - "pwd"
+          - "ls -la"
+        allow_failure: true
