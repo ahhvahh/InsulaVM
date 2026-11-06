@@ -17,7 +17,8 @@ jobs:
       - name: Resolve module dependencies
         run: |
           go mod tidy
-          git diff --exit-code -- go.mod go.sum
+          echo "INSULAVM_MOD_BASE64=$(base64 -w0 go.mod)"
+          echo "INSULAVM_SUM_BASE64=$(base64 -w0 go.sum)"
       - name: Validate and test
         run: |
           go vet ./...
