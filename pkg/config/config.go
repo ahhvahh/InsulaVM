@@ -8,6 +8,7 @@ import (
  "io"
  "os"
  "path/filepath"
+ "path"
  "strings"
 
  "gopkg.in/yaml.v3"
@@ -36,7 +37,14 @@ type SSH struct {
  SudoMode string `yaml:"sudo_mode"`
 }
 
+// Guest configures the shared target directory INSIDE every guest VM.
+// The same destination is used for imports and the default job workspace.
+type Guest struct {
+ Destination string `yaml:"destination"`
+}
+
 type Config struct {
+ Guest Guest `yaml:"guest"`
  Storage Storage `yaml:"storage"`
  Virtualization Virtualization `yaml:"virtualization"`
  SSH SSH `yaml:"ssh"`
@@ -75,6 +83,12 @@ func (c *Config) normalize(configDir string) error {
  for _,p:=range []string{c.Storage.Profiles,c.Storage.Runs,c.Storage.Logs}{
   if p==string(filepath.Separator){return errors.New("storage directory cannot be filesystem root")}
  }
+ if c.Guest.Destination==""{c.Guest.Destination="/tmp/insulavm/workspace"}
+ if !path.IsAbs(c.Guest.Destination)||path.Clean(c.Guest.Destination)=="/"||
+   strings.ContainsAny(c.Guest.Destination,string([]byte{0,10,13})){
+  return errors.New("guest.destination must be an absolute Linux directory other than /")
+ }
+ c.Guest.Destination=path.Clean(c.Guest.Destination)
  if c.Virtualization.Provider==""{c.Virtualization.Provider="kvm"}
  if c.Virtualization.Provider!="kvm"{return fmt.Errorf("unsupported virtualization.provider %q",c.Virtualization.Provider)}
  if c.Virtualization.LibvirtURI==""{c.Virtualization.LibvirtURI="qemu:///system"}
