@@ -5,6 +5,7 @@ import (
  "errors"
  "fmt"
  "io"
+ "os"
  "time"
 
  "github.com/ahhvahh/InsulaVM/pkg/executor"
@@ -86,7 +87,7 @@ func importWithClient(ctx context.Context,client *ssh.Client,source,destination 
  reporter.send("compressing","Compactando conteudo em TAR.GZ no hospedeiro",0,0,0)
  archive,err:=transfer.Compress(ctx,source)
  if err!=nil{return nil,err}
- defer func(){_ = removeImportArchive(archive.Path)}()
+ defer func(){_ = os.Remove(archive.Path)}()
  result=&ImportResult{
   SourcePath:archive.Source,DestinationPath:destination,
   Files:archive.Files,Directories:archive.Directories,
