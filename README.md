@@ -101,6 +101,8 @@ go run . vm import -config config.yaml -id UUIDv7 -source /srv/projeto
 go run . vm stop -config config.yaml -id UUIDv7
 ```
 
+**Caminhos exibidos no terminal:** os logs, o comando SSH, `vm show/status`, `config check` e a localização dos relatórios mostram caminhos **relativos ao diretório atual** (`data/profiles/...`, `data/runs/...`), sem repetir `/home/usuario/...`. O armazenamento, as chaves e os contratos da biblioteca Go continuam usando caminhos absolutos internamente. Copie e execute o comando SSH **a partir do mesmo diretório** em que executou `insula`; se mudar de diretório, obtenha um novo comando pelo `vm show` ou use os caminhos completos manualmente.
+
 Ao executar `vm start`, o InsulaVM mostra no terminal as etapas de validação do perfil, criação do overlay QCOW2, geração Cloud-Init, permissões, registro SQLite, inicialização Libvirt, obtenção do IP, SSH e validação de sudo. Uma falha inclui a etapa e o diagnóstico. Um segundo `vm start` **cria outra VM**: a CLI avisa quando já existe alguma instância ativa do mesmo perfil.
 
 **Estado real versus histórico:** `vm list` exibe duas colunas (`SQLite` e `Libvirt`). `vm show` e `vm status` consultam o domínio no Libvirt e avisam sobre registros `creating`/`running` sem VM correspondente. A consulta não altera o banco automaticamente. `vm exec`, `vm import` e `vm stop` também validam o estado real antes de interagir com a instância ou remover arquivos. Se não for possível consultar o Libvirt, o programa apresenta erro em vez de supor que a VM está desligada.
