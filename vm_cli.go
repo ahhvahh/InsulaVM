@@ -31,6 +31,13 @@ func vmCommand(args []string)error{
  switch command{
  case "start":
   if *profileName==""{return errors.New("vm start requires -profile")}
+  current,err:=engine.ListVMStatus(ctx)
+  if err!=nil{return fmt.Errorf("verificar instancias ja existentes no Libvirt: %w",err)}
+  for _,entry:=range current{
+   if entry.Record.Profile==*profileName&&entry.IsRunning(){
+    fmt.Fprintf(os.Stderr,"[InsulaVM][aviso] VM do mesmo perfil ja esta ativa: %s (IP %s). 'vm start' cria uma NOVA instancia descartavel.\n",entry.Record.ID,entry.Record.IP)
+   }
+  }
   instance,err:=engine.StartVMWithProgress(ctx,*profileName,func(p insulavm.VMProgress){
    fmt.Fprintf(os.Stderr,"[InsulaVM][vm:%s] %s\n",p.Stage,p.Message)
   })
