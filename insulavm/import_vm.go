@@ -14,7 +14,6 @@ import (
 type VMImportRequest struct {
  VMID string
  SourcePath string
- DestinationPath string
  Output io.Writer
  OnProgress func(ImportProgress)
 }
@@ -32,7 +31,6 @@ func(e *Engine)ImportToVM(ctx context.Context,request VMImportRequest)(*ImportRe
  }
  return e.ImportPath(ctx,ImportRequest{
   SourcePath:request.SourcePath,
-  DestinationPath:request.DestinationPath,
   Host:net.JoinHostPort(record.IP,strconv.Itoa(record.SSHPort)),
   User:record.SSHUser,
   PrivateKey:record.PrivateKeyPath,
