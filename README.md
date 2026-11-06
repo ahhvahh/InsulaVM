@@ -2,7 +2,7 @@
 
 CLI open-source em **Go** para executar jobs sequenciais por SSH dentro de máquinas virtuais Linux, com logs persistentes no hospedeiro.
 
-**Implementado:** `config.yaml` global, catálogo de `profile.yaml`, registro de imagens QCOW2 já instaladas, seleção por `insula.yaml`, overlay QCOW2 descartável com QEMU/Libvirt e executor SSH sequencial com logs `>>`/`<<`.
+**Implementado:** biblioteca Go importável em `github.com/ahhvahh/InsulaVM/insulavm`, CLI usando a mesma API, `config.yaml` global, catálogo de `profile.yaml`, registro de imagens QCOW2 já instaladas, seleção por `insula.yaml`, overlay QCOW2 descartável com QEMU/Libvirt e executor SSH sequencial com logs `>>`/`<<`.
 
 **Ainda não implementado:** instalação de Debian/Arch a partir de ISO, criação interativa de perfil por console, Cloud-Init automático por instância e transferência do repositório. A imagem registrada precisa iniciar com DHCP e SSH; o diretório `workspace` deve existir no convidado.
 
@@ -17,6 +17,35 @@ Exemplos de perfis (somente metadados; **sem discos instalados**):
 [Arch Linux](examples/profiles/arch-minimal/profile.yaml),
 [Alpine](examples/profiles/alpine-minimal/profile.yaml),
 [Void](examples/profiles/void-minimal/profile.yaml).
+
+## Usar como biblioteca Go
+
+O InsulaVM também funciona **dentro de outro processo Go**, sem iniciar binário auxiliar, API HTTP ou socket. A API pública está no pacote `insulavm`; o `package main` da raiz é somente a CLI.
+
+```bash
+# No projeto consumidor
+go get github.com/ahhvahh/InsulaVM/insulavm@main
+```
+
+```go
+import "github.com/ahhvahh/InsulaVM/insulavm"
+
+// O motor pode ser compartilhado por múltiplas chamadas no mesmo processo.
+engine, err := insulavm.New("/etc/insulavm/config.yaml")
+if err != nil { return err }
+result, err := engine.Run(ctx, insulavm.RunRequest{
+    ManifestPath: "/srv/projeto/insula.yaml",
+    Host: "192.0.2.10:22", // Exemplo: VM já inicializada
+    User: "insula",
+    PrivateKey: "/etc/insulavm/id_ed25519",
+    KnownHosts: "/etc/insulavm/known_hosts",
+    Output: os.Stdout,
+})
+if result != nil { fmt.Println(result.LogDirectory) }
+return err
+```
+
+**API experimental:** não há tag de versão estável. Use uma revisão controlada no projeto consumidor. Consulte [ARQ-004 — Biblioteca Go](docs/arquitetura/ARQ-004-biblioteca-go.md) e [exemplo de aplicação integrada](examples/go-library/main.go). O `Run` aceita manifesto em memória (`Manifest`) além de um caminho YAML.
 
 ## Uso
 
@@ -71,6 +100,7 @@ go vet ./...
 - [Índice](docs/README.md)
 - [ARQ-002 — Perfis e QCOW2](docs/arquitetura/ARQ-002-perfis-vm.md)
 - [ARQ-003 — Configuração e catálogo](docs/arquitetura/ARQ-003-configuracao-perfis.md)
+- [ARQ-004 — Biblioteca Go](docs/arquitetura/ARQ-004-biblioteca-go.md)
 - [FLUX-001 — Execução de Action](docs/fluxos/FLUX-001-execucao-manifesto.md)
 - [FLUX-003 — SSH sequencial e logs](docs/fluxos/FLUX-003-execucao-sequencial-logs.md)
 - [INTF-TERM-003 — Comandos de configuração e perfis](docs/interfaces/terminal/INTF-TERM-003-configuracao-perfis.md)
