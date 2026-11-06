@@ -86,7 +86,7 @@ func (c *Config) normalize(configDir string) error {
  if c.Virtualization.DefaultDiskGB<1 {return errors.New("virtualization.default_disk_gb must be positive")}
  if c.SSH.ConnectTimeoutSeconds==0{c.SSH.ConnectTimeoutSeconds=30}
  if c.SSH.User==""{c.SSH.User="insula"}
- if c.SSH.SudoMode==""{c.SSH.SudoMode="passwordless"}
+ if c.SSH.SudoMode==""{c.SSH.SudoMode="disabled"}
  if c.SSH.SudoMode!="passwordless"&&c.SSH.SudoMode!="disabled"{return fmt.Errorf("unsupported ssh.sudo_mode %q",c.SSH.SudoMode)}
  if c.SSH.ConnectTimeoutSeconds<1 || c.SSH.ConnectTimeoutSeconds>3600{
   return errors.New("ssh.connect_timeout_seconds must be 1..3600")
