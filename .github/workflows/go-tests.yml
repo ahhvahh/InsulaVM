@@ -23,6 +23,52 @@ jobs:
           go vet ./...
           go test -race ./...
 
+      - name: Validate Git repository TAR.GZ script
+        run: |
+          set -euo pipefail
+          bash -n scripts/repositorio-vm.sh
+          tmp="$(mktemp -d)"
+          trap 'rm -rf -- "$tmp"' EXIT
+          mkdir -p "$tmp/sample-repo" "$tmp/output"
+          git -C "$tmp/sample-repo" init -q
+          git -C "$tmp/sample-repo" config user.name "InsulaVM CI"
+          git -C "$tmp/sample-repo" config user.email "ci@example.invalid"
+          printf 'example\n' > "$tmp/sample-repo/hello.txt"
+          printf 'untracked.txt\n' > "$tmp/sample-repo/.gitignore"
+          git -C "$tmp/sample-repo" add hello.txt .gitignore
+          git -C "$tmp/sample-repo" commit -qm "test snapshot"
+          printf 'must-not-be-included\n' > "$tmp/sample-repo/untracked.txt"
+          bash scripts/repositorio-vm.sh empacotar "$tmp/sample-repo" "$tmp/output"
+          test -s "$tmp/output/sample-repo.tar.gz"
+          tar -tzf "$tmp/output/sample-repo.tar.gz" | grep -q '^sample-repo/hello.txt        run: |
+          consumer="$(mktemp -d)"
+          cd "$consumer"
+          go mod init example.com/insulavm-consumer
+          go mod edit -replace "github.com/ahhvahh/InsulaVM=$GITHUB_WORKSPACE"
+          cp "$GITHUB_WORKSPACE/examples/go-library/main.go" ./main.go
+          go mod tidy
+          go test ./...
+
+          if tar -tzf "$tmp/output/sample-repo.tar.gz" | grep -q 'untracked.txt        run: |
+          consumer="$(mktemp -d)"
+          cd "$consumer"
+          go mod init example.com/insulavm-consumer
+          go mod edit -replace "github.com/ahhvahh/InsulaVM=$GITHUB_WORKSPACE"
+          cp "$GITHUB_WORKSPACE/examples/go-library/main.go" ./main.go
+          go mod tidy
+          go test ./...
+; then
+            echo "untracked content was included" >&2
+            exit 1
+          fi
+          (
+            cd "$tmp/output"
+            bash "$GITHUB_WORKSPACE/scripts/repositorio-vm.sh" extrair sample-repo.tar.gz
+            test "$(cat sample-repo/hello.txt)" = "example"
+            test ! -e sample-repo/.git
+            test ! -e sample-repo/untracked.txt
+          )
+
       - name: Compile example from an independent Go module
         run: |
           consumer="$(mktemp -d)"
