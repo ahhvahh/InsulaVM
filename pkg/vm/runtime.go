@@ -45,13 +45,41 @@ type Instance struct {
  active bool
 }
 
-// Start generates a client and guest host key, writes a NoCloud seed ISO,
-// starts a transient VM and waits for verified SSH readiness before returning.
-// A separate per-instance QCOW2 overlay is always used.
-func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *Instance,runErr error){
+// Progress is a stage update for both the CLI and Go library consumers.
+type Progress struct {
+ Stage string
+ Message string
+ ID string
+ Name string
+ At time.Time
+}
+
+// Start preserves the original public Go signature.
+func Start(ctx context.Context,c *config.Config,p *profile.Profile)(*Instance,error){
+ return StartWithProgress(ctx,c,p,nil)
+}
+
+// StartWithProgress creates the VM, reports stages, and checks actual Libvirt
+// state during boot. A VM is returned only after SSH (and sudo, if enabled)
+// is ready and the SQLite record was updated.
+func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,onProgress func(Progress))(instance *Instance,runErr error){
+ emit:=func(stage,message string){
+  if onProgress==nil{return}
+  event:=Progress{Stage:stage,Message:message,At:time.Now()}
+  if p!=nil{event.Name=p.Name}
+  if instance!=nil{event.ID=instance.ID}
+  onProgress(event)
+ }
  if ctx==nil||c==nil||p==nil{return nil,errors.New("context, config and profile are required")}
+ emit("profile","Verificando imagem-base QCOW2 do perfil "+p.Name)
  image,err:=p.ImagePath()
- if err!=nil{return nil,fmt.Errorf("resolve profile image: %w",err)}
+ if err!=nil{
+  if errors.Is(err,os.ErrPermission){
+   return nil,fmt.Errorf("sem permissao para ler imagem-base do perfil %s: %w; verifique proprietario e ACL com stat/getfacl; pare VMs que utilizam a imagem antes de corrigir seu dono (chown)",p.Name,err)
+  }
+  return nil,fmt.Errorf("resolve profile image: %w",err)
+ }
+ emit("profile-ok","Imagem-base validada: "+image)
  for _,tool:=range []string{"qemu-img","virsh"}{
   if _,err:=exec.LookPath(tool);err!=nil{return nil,fmt.Errorf("missing VM host tool %s: %w",tool,err)}
  }
@@ -59,6 +87,7 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
  dir,err:=os.MkdirTemp(c.Storage.Runs,"insula-vm-")
  if err!=nil{return nil,err}
  instance=&Instance{Directory:dir,uri:c.Virtualization.LibvirtURI,registryPath:c.Storage.Database,Profile:p.Name,SudoMode:c.SSH.SudoMode}
+ emit("preparing","Preparando armazenamento temporario isolado e credenciais SSH")
  // Keep a separate reference for cleanup. Start returns (nil, error) on
  // failure, which sets the named result "instance" to nil before deferred
  // functions execute. Using that named result would panic and hide the real
@@ -68,6 +97,8 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
  success:=false
  defer func(){
   if success{return}
+  if runErr!=nil{emit("failed","Falha: "+runErr.Error())}
+  emit("cleaning","Limpando recursos da inicializacao malsucedida")
   cleanupCtx,cancel:=context.WithTimeout(context.Background(),25*time.Second)
   defer cancel()
   if cleanupErr:=created.Cleanup(cleanupCtx);cleanupErr!=nil{
@@ -101,11 +132,13 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
  instance.SSHHostFingerprint=identity.Fingerprint(hostKeys.Public)
  seed,err:=cloudinit.Prepare(ctx,dir,id,instance.SSHUser,instance.SudoMode,clientKeys.PublicAuthorized,hostKeys)
  if err!=nil{return nil,err}
+ emit("cloud-init","Chaves SSH e ISO NoCloud criadas; perfil de sudo: "+instance.SudoMode)
 
  overlay:=filepath.Join(dir,"overlay.qcow2")
  if out,err:=exec.CommandContext(ctx,"qemu-img","create","-f","qcow2","-F","qcow2","-b",image,overlay).CombinedOutput();err!=nil{
   return nil,fmt.Errorf("create overlay: %w: %s",err,strings.TrimSpace(string(out)))
  }
+ emit("disk","Overlay QCOW2 criado sem alterar o disco-base")
  xmlSpec:=domainXMLWithBacking(instance.LibvirtUUID,instance.Name,p.MemoryMiB,p.VCPUs,overlay,image,seed.ISO,c.Virtualization.Network,instance.MACAddress)
  xmlPath:=filepath.Join(dir,"domain.xml")
  if err:=os.WriteFile(xmlPath,[]byte(xmlSpec),0600);err!=nil{return nil,err}
@@ -117,6 +150,7 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
    return nil,fmt.Errorf("prepare QEMU disk permissions: %w",err)
   }
  }
+ emit("permissions","Permissoes do armazenamento preparadas para o QEMU")
 
  store,err:=registry.Open(instance.registryPath)
  if err!=nil{return nil,err}
@@ -129,21 +163,33 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
  _=store.Close()
  if insertErr!=nil{return nil,fmt.Errorf("register VM: %w",insertErr)}
  registered=true
+ emit("registered","Cadastro SQLite criado: "+id)
+ emit("booting","Criando dominio KVM/Libvirt: "+instance.Name)
 
  if out,err:=virsh(ctx,instance.uri,"create",xmlPath);err!=nil{
   return nil,fmt.Errorf("start disposable domain: %w: %s",err,strings.TrimSpace(string(out)))
  }
  instance.active=true
+ if state,err:=ActiveDomainState(ctx,instance.uri,instance.LibvirtUUID);err!=nil{
+  return nil,fmt.Errorf("VM created but did not enter running state: %w",err)
+ }else{
+  emit("running","Dominio ativo no Libvirt: "+state)
+ }
+ emit("dhcp","Aguardando endereco IP via DHCP da rede Libvirt")
  bootCtx,cancel:=context.WithTimeout(ctx,3*time.Minute)
  defer cancel()
  ticker:=time.NewTicker(2*time.Second)
  defer ticker.Stop()
  for {
+  if _,err:=ActiveDomainState(bootCtx,instance.uri,instance.LibvirtUUID);err!=nil{
+   return nil,fmt.Errorf("VM parou enquanto aguardava DHCP: %w",err)
+  }
   out,err:=virsh(bootCtx,instance.uri,"domifaddr",instance.Name,"--source","lease")
   if err==nil{
    if ip:=parseIPv4(string(out));ip!=""{
     instance.IPAddress=ip
     instance.Address=net.JoinHostPort(ip,"22")
+    emit("ip","IP obtido: "+ip)
     if err:=identity.SaveKnownHost(instance.SSHKnownHostsPath,ip,hostKeys.Public);err!=nil{return nil,err}
     break
    }
@@ -153,10 +199,14 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
   case <-ticker.C:
   }
  }
+ emit("ssh","Aguardando SSH autenticado e validando chave do servidor")
  // Verify the per-instance host key through known_hosts. The SSH login key
  // is generated for this VM, not shared with other instances.
  var lastErr error
  for {
+  if _,err:=ActiveDomainState(bootCtx,instance.uri,instance.LibvirtUUID);err!=nil{
+   return nil,fmt.Errorf("VM parou enquanto aguardava SSH: %w",err)
+  }
   if err:=bootCtx.Err();err!=nil{
    return nil,fmt.Errorf("waiting for guest SSH/Cloud-Init: %w; last check: %v",err,lastErr)
   }
@@ -167,6 +217,7 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
   })
   if err==nil{
    if instance.SudoMode=="passwordless"{
+    emit("sudo","Conexao SSH aceita; verificando sudo -n sem senha")
     session,sessionErr:=client.NewSession()
     if sessionErr==nil{
      sessionErr=session.Run("sudo -n true")
@@ -188,6 +239,7 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
  updateErr:=store.SetRunning(ctx,id,instance.IPAddress)
  _=store.Close()
  if updateErr!=nil{return nil,fmt.Errorf("persist started VM: %w",updateErr)}
+ emit("ready","VM pronta: SSH validado; IP "+instance.IPAddress)
  success=true
  return instance,nil
 }
