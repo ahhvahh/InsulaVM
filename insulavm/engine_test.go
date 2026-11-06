@@ -267,3 +267,27 @@ func TestRunFailureDoesNotExecuteFollowingCommands(t *testing.T) {
 		t.Fatalf("missing early output: %s", content)
 	}
 }
+
+
+func TestActionSSHUserSelection(t *testing.T) {
+ host,key,hosts:=runTestSSHServer(t)
+ engine:=testEngine(t,"")
+ for _,tc:=range []struct{actionUser,override,want string}{
+  {"","","insula"},
+  {"runner","","runner"},
+  {"runner","override","override"},
+ }{
+  m:=&Manifest{
+   Repository:Repository{Name:"demo"},
+   Action:"smoke",
+   Workspace:t.TempDir(),
+   SSH:SSHOptions{User:tc.actionUser},
+   Setup:[]string{"echo ready"},
+  }
+  result,err:=engine.Run(context.Background(),RunRequest{
+   Manifest:m,Host:host,PrivateKey:key,KnownHosts:hosts,User:tc.override,
+  })
+  if err!=nil{t.Fatalf("action user=%q override=%q: %v",tc.actionUser,tc.override,err)}
+  if result.SSHUser!=tc.want{t.Fatalf("SSH user got %q want %q",result.SSHUser,tc.want)}
+ }
+}
