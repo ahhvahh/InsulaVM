@@ -48,7 +48,7 @@ func TestVMShellQuotesGuestDirectory(t *testing.T){
  }
  args,err:=vmShellArgs(good,"/tmp/insulavm/work space","it'works")
  if err!=nil{t.Fatal(err)}
- if !strings.Contains(args[len(args)-1],"'it'\\''works'"){
+ if !strings.Contains(args[len(args)-1],"/it'\\''works'"){
   t.Fatalf("expected POSIX quoted directory in remote shell: %q",args[len(args)-1])
  }
 }
