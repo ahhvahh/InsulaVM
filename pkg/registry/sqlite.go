@@ -22,6 +22,8 @@ type Entry struct {
  Profile string
  IP string
  MAC string
+ HostFingerprint string
+ SudoMode string
  SSHUser string
  PrivateKeyPath string
  KnownHostsPath string
@@ -56,6 +58,8 @@ func Open(filename string)(*Store,error){
    profile TEXT NOT NULL,
    ip TEXT NOT NULL DEFAULT '',
    mac TEXT NOT NULL,
+   host_fingerprint TEXT NOT NULL,
+   sudo_mode TEXT NOT NULL,
    ssh_user TEXT NOT NULL,
    private_key_path TEXT NOT NULL,
    known_hosts_path TEXT NOT NULL,
@@ -77,10 +81,10 @@ func(s *Store)Insert(ctx context.Context,e Entry)error{
  if ctx==nil{return errors.New("context is required")}
  now:=time.Now().UTC().Format(time.RFC3339Nano)
  _,err:=s.db.ExecContext(ctx,`INSERT INTO vm_instances(
-  id,libvirt_uuid,name,profile,ip,mac,ssh_user,private_key_path,known_hosts_path,
+  id,libvirt_uuid,name,profile,ip,mac,host_fingerprint,sudo_mode,ssh_user,private_key_path,known_hosts_path,
   instance_dir,status,created_at,updated_at
- ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  e.ID,e.LibvirtUUID,e.Name,e.Profile,e.IP,e.MAC,e.SSHUser,e.PrivateKeyPath,e.KnownHostsPath,
+ ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  e.ID,e.LibvirtUUID,e.Name,e.Profile,e.IP,e.MAC,e.HostFingerprint,e.SudoMode,e.SSHUser,e.PrivateKeyPath,e.KnownHostsPath,
   e.InstanceDir,"creating",now,now)
  return err
 }
@@ -107,12 +111,12 @@ func(s *Store)update(ctx context.Context,id,status,ip string,finished bool)error
  if n!=1{return fmt.Errorf("VM %s not found",id)}
  return nil
 }
-const fields="id,libvirt_uuid,name,profile,ip,mac,ssh_user,private_key_path,known_hosts_path,instance_dir,status,created_at,updated_at,finished_at"
+const fields="id,libvirt_uuid,name,profile,ip,mac,host_fingerprint,sudo_mode,ssh_user,private_key_path,known_hosts_path,instance_dir,status,created_at,updated_at,finished_at"
 
 func scan(row interface{Scan(...any)error})(Entry,error){
  var e Entry
  err:=row.Scan(&e.ID,&e.LibvirtUUID,&e.Name,&e.Profile,&e.IP,&e.MAC,
-  &e.SSHUser,&e.PrivateKeyPath,&e.KnownHostsPath,&e.InstanceDir,&e.Status,
+  &e.HostFingerprint,&e.SudoMode,&e.SSHUser,&e.PrivateKeyPath,&e.KnownHostsPath,&e.InstanceDir,&e.Status,
   &e.CreatedAt,&e.UpdatedAt,&e.FinishedAt)
  return e,err
 }
