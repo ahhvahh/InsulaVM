@@ -58,6 +58,8 @@ func InspectRegistered(ctx context.Context, uri string, records []registry.Entry
     info.Warning="VM is active in Libvirt, but the saved SQLite status is "+record.Status
    case info.LibvirtState=="absent" && (record.Status=="running"||record.Status=="creating"):
     info.Warning="stale SQLite status: VM does not exist in Libvirt"
+   case info.LibvirtState!="absent" && (record.Status=="destroyed"||record.Status=="failed"):
+    info.Warning="VM still exists in Libvirt despite SQLite status "+record.Status
    case info.LibvirtState!="absent" && !info.IsRunning() && record.Status=="running":
     info.Warning="VM is not running in Libvirt despite SQLite status running"
    }
