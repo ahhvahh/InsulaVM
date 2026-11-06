@@ -18,3 +18,17 @@ func TestDomainXMLAttributesAreEscaped(t *testing.T){
  if !strings.Contains(result,"<memory unit='MiB'>512</memory>"){t.Fatal("RAM not present")}
  if !strings.Contains(result,"<vcpu>1</vcpu>"){t.Fatal("vCPU not present")}
 }
+
+func TestCloudInitSeedIsAttachedToDomain(t *testing.T){
+ spec:=domainXMLWithSeed("019a5d11-1234-7123-8123-123456789abc",
+  "insula-secure",1024,1,"/tmp/root-disk.qcow2","/tmp/seed.iso","default","52:54:00:ab:cd:ef")
+ for _,want:=range []string{
+  "<uuid>019a5d11-1234-7123-8123-123456789abc</uuid>",
+  "<disk type='file' device='cdrom'>",
+  "<source file='/tmp/seed.iso'/>",
+  "<readonly/>",
+  "52:54:00:ab:cd:ef",
+ }{
+  if !strings.Contains(spec,want){t.Fatalf("missing %s in XML: %s",want,spec)}
+ }
+}
