@@ -19,10 +19,9 @@ func vmCommand(args []string)error{
  profileName:=fs.String("profile","","installed cloud-init-ready QCOW2 profile")
  id:=fs.String("id","","VM UUIDv7")
  commandText:=fs.String("command","","shell command inside the VM")
- workspace:=fs.String("workspace","/tmp","guest working directory")
+ workspace:=fs.String("workspace","","guest working directory; default: config.yaml guest.destination")
  sudo:=fs.Bool("sudo",false,"execute as root via sudo -n (requires passwordless mode)")
  source:=fs.String("source","","host file/directory to import")
- destination:=fs.String("dest","","absolute directory inside VM")
  if err:=fs.Parse(args[1:]);err!=nil{return err}
  if fs.NArg()!=0{return errors.New("unexpected vm arguments")}
  engine,err:=insulavm.New(*cfgPath)
@@ -62,9 +61,9 @@ func vmCommand(args []string)error{
   if result!=nil{fmt.Println("Logs:",result.LogDirectory)}
   return err
  case "import":
-  if *id==""||*source==""||*destination==""{return errors.New("vm import requires -id, -source and -dest")}
+  if *id==""||*source==""{return errors.New("vm import requires -id and -source; destination comes from config.yaml")}
   result,err:=engine.ImportToVM(ctx,insulavm.VMImportRequest{
-   VMID:*id,SourcePath:*source,DestinationPath:*destination,Output:os.Stdout,
+   VMID:*id,SourcePath:*source,Output:os.Stdout,
   })
   if err!=nil{return err}
   fmt.Printf("Imported %d file(s) into VM %s at %s\n",result.Files,*id,result.DestinationPath)
