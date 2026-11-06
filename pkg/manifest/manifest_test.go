@@ -64,3 +64,40 @@ func TestImportsBeforeJobsSchema(t *testing.T) {
   if _,err:=Decode(strings.NewReader(bad));err==nil{t.Fatalf("accepted invalid import YAML: %s",bad)}
  }
 }
+
+
+func TestActionDefaultsAndOptionalSSHUser(t *testing.T) {
+ basic := `profile: debian-minimal
+repository:
+  name: project
+action: test
+imports:
+  - source: /srv/project
+pipelines:
+  - name: build
+    jobs:
+      - name: compile
+        commands:
+          - go test ./...
+`
+ m,err:=Decode(strings.NewReader(basic))
+ if err!=nil{t.Fatal(err)}
+ if m.Workspace!="" || m.Imports[0].Destination!="" || m.SSH.User!="" {
+  t.Fatalf("optional action settings not omitted: %+v",m)
+ }
+ explicit:=strings.Replace(basic,"action: test","action: test
+ssh:
+  user: buildagent",1)
+ m,err=Decode(strings.NewReader(explicit))
+ if err!=nil{t.Fatal(err)}
+ if m.SSH.User!="buildagent"{t.Fatalf("unexpected user: %q",m.SSH.User)}
+ for _,name:=range []string{"root","User","a;whoami","../escape"}{
+  candidate:=strings.Replace(explicit,"buildagent",name,1)
+  if _,err:=Decode(strings.NewReader(candidate));err==nil{t.Fatalf("accepted bad user %q",name)}
+ }
+ if _,err:=Decode(strings.NewReader(strings.Replace(explicit,"ssh:
+  user: buildagent","ssh:
+  key: secret",1)));err==nil{
+  t.Fatal("action SSH private key configuration must be rejected")
+ }
+}
