@@ -2,6 +2,7 @@ package storage
 
 import (
 	"os"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -78,7 +79,7 @@ func TestRejectTraversalAndLogClobber(t *testing.T) {
 	if err := log.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := run.OpenJob("job"); !os.IsExist(err) {
+	if _, err := run.OpenJob("job"); !errors.Is(err, os.ErrExist) {
 		t.Fatalf("expected file-exists error, got %v", err)
 	}
 }
