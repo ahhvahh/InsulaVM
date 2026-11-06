@@ -28,6 +28,7 @@ func vmCommand(args []string)error{
  if err!=nil{return err}
  ctx,cancel:=signal.NotifyContext(context.Background(),os.Interrupt)
  defer cancel()
+ root:=engine.Configuration().Storage.Root
  switch command{
  case "start":
   if *profileName==""{return errors.New("vm start requires -profile")}
@@ -39,13 +40,12 @@ func vmCommand(args []string)error{
    }
   }
   instance,err:=engine.StartVMWithProgress(ctx,*profileName,func(p insulavm.VMProgress){
-   fmt.Fprintf(os.Stderr,"[InsulaVM][vm:%s] %s\n",p.Stage,p.Message)
+   fmt.Fprintf(os.Stderr,"[InsulaVM][vm:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
   })
-  if err!=nil{return err}
+  if err!=nil{return presentCLIError(err,root)}
   fmt.Printf("VM pronta: id=%s profile=%s ip=%s mac=%s user=%s sudo=%s\n",
    instance.ID,instance.Profile,instance.IPAddress,instance.MACAddress,instance.SSHUser,instance.SudoMode)
-  fmt.Printf("SSH: ssh -i %q -o UserKnownHostsFile=%q %s@%s\n",
-   instance.SSHPrivateKeyPath,instance.SSHKnownHostsPath,instance.SSHUser,instance.IPAddress)
+  fmt.Println("SSH:",sshCommandForCLI(instance.SSHPrivateKeyPath,instance.SSHKnownHostsPath,instance.SSHUser,instance.IPAddress))
   fmt.Println("Para encerrar: insula vm stop -id",instance.ID)
  case "list":
   entries,err:=engine.ListVMStatus(ctx)
@@ -66,15 +66,16 @@ func vmCommand(args []string)error{
    e.ID,e.Name,e.Profile,e.LibvirtUUID,e.IP,e.MAC,e.SSHUser,e.SudoMode,e.SSHPort,e.Status,checked.LibvirtState,e.CreatedAt)
   if checked.Warning!=""{fmt.Fprintln(os.Stderr,"[aviso]",checked.Warning)}
   if checked.IsRunning(){
-   fmt.Printf("ssh_key=%s\nknown_hosts=%s\n",e.PrivateKeyPath,e.KnownHostsPath)
+   fmt.Printf("ssh_key=%s\nknown_hosts=%s\n",localPathForCLI(e.PrivateKeyPath),localPathForCLI(e.KnownHostsPath))
+   fmt.Println("SSH:",sshCommandForCLI(e.PrivateKeyPath,e.KnownHostsPath,e.SSHUser,e.IP))
   }
  case "exec":
   if *id==""||*commandText==""{return errors.New("vm exec requires -id and -command")}
   result,err:=engine.ExecVM(ctx,insulavm.ExecRequest{
    VMID:*id,Command:*commandText,Workspace:*workspace,Sudo:*sudo,Output:os.Stdout,
   })
-  if result!=nil{fmt.Println("Logs:",result.LogDirectory)}
-  return err
+  if result!=nil{fmt.Println("Logs:",localPathForCLI(result.LogDirectory))}
+  return presentCLIError(err,root)
  case "import":
   if *id==""||*source==""{return errors.New("vm import requires -id and -source; destination comes from config.yaml")}
   result,err:=engine.ImportToVM(ctx,insulavm.VMImportRequest{
