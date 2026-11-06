@@ -2,13 +2,13 @@
 
 CLI open-source em **Go** para executar jobs sequenciais por SSH dentro de máquinas virtuais Linux, com logs persistentes no hospedeiro.
 
-**Implementado:** biblioteca Go importável em `github.com/ahhvahh/InsulaVM/insulavm`, CLI usando a mesma API, `config.yaml` global, catálogo de `profile.yaml`, registro de imagens QCOW2 já instaladas, seleção por `insula.yaml`, overlay QCOW2 descartável com QEMU/Libvirt e executor SSH sequencial com logs `>>`/`<<`, além de importação TAR.GZ de arquivos e diretórios do hospedeiro para a VM, com progresso no console ou callback Go.
+**Implementado:** instâncias por UUIDv7 registradas em SQLite, SSH individual automatizado por Cloud-Init NoCloud, elevação controlada com sudo, biblioteca Go importável em `github.com/ahhvahh/InsulaVM/insulavm`, CLI usando a mesma API, `config.yaml` global, catálogo de `profile.yaml`, registro de imagens QCOW2 já instaladas, seleção por `insula.yaml`, overlay QCOW2 descartável com QEMU/Libvirt e executor SSH sequencial com logs `>>`/`<<`, além de importação TAR.GZ de arquivos e diretórios do hospedeiro para a VM, com progresso no console ou callback Go.
 
-**Ainda não implementado:** instalação de Debian/Arch a partir de ISO, criação interativa de perfil por console, Cloud-Init automático por instância e checkout automático de repositórios Git (a importação manual de arquivos locais já funciona). A imagem registrada precisa iniciar com DHCP e SSH; o diretório `workspace` deve existir no convidado.
+**Ainda não implementado:** instalação de Debian/Arch a partir de ISO instaladora, criação interativa de perfil por console e checkout automático de repositórios Git (a importação manual de arquivos locais já funciona). A imagem registrada precisa ter Cloud-Init, SSH e DHCP; o diretório `workspace` deve existir no convidado.
 
 ## Arquivos de configuração
 
-- [`config.yaml`](config.yaml): diretórios dos perfis, execução e logs, Libvirt e padrões SSH.
+- [`config.yaml`](config.yaml): diretórios dos perfis, execução, logs e banco SQLite; Libvirt, SSH e política sudo.
 - `data/profiles/<nome>/profile.yaml`: recursos da VM, versão e caminho para `versions/v001/base.qcow2`.
 - [`insula.yaml.example`](insula.yaml.example): escolhe `profile` e descreve `setup` e `pipelines`.
 
@@ -46,6 +46,23 @@ return err
 ```
 
 **API experimental:** não há tag de versão estável. Use uma revisão controlada no projeto consumidor. Consulte [ARQ-004 — Biblioteca Go](docs/arquitetura/ARQ-004-biblioteca-go.md) e [exemplo de aplicação integrada](examples/go-library/main.go). O `Run` aceita manifesto em memória (`Manifest`) além de um caminho YAML.
+
+## Criar instâncias com SSH automático e sudo
+
+Uma **imagem QCOW2 com Linux já instalado e preparado com Cloud-Init** é inicializada com uma ISO **NoCloud/CIDATA gerada pelo InsulaVM**, contendo um usuário `insula` e chaves Ed25519 individuais. A ISO de configuração não instala Linux; o instalador Debian/Arch por ISO é uma funcionalidade diferente e ainda pendente.
+
+```bash
+go run . vm start -config config.yaml -profile debian-minimal
+go run . vm list -config config.yaml
+go run . vm show -config config.yaml -id UUIDv7
+go run . vm exec -config config.yaml -id UUIDv7 -command "id -un"
+go run . vm exec -config config.yaml -id UUIDv7 -command "id -u" -sudo
+go run . vm stop -config config.yaml -id UUIDv7
+```
+
+O SQLite é compartilhado entre CLI e biblioteca no caminho `storage.database` (padrão: `<storage.root>/insula.db`). Armazena UUIDv7, UUID Libvirt, MAC, IP, usuário, impressão digital da chave do servidor, referências a chaves e estado da VM. A chave privada permanece protegida em arquivo exclusivo da instância e é removida junto com o overlay ao encerrar.
+
+O modo `ssh.sudo_mode: passwordless` no `config.yaml` habilita `sudo -n`, sem senha ou prompt. Use somente em VMs confiáveis; omitir a opção desabilita sudo por padrão. A biblioteca oferece `Engine.StartVM`, `GetVM`, `ListVMs`, `ExecVM` e `StopVM`. Veja [ARQ-006 — Identidade, SQLite e sudo](docs/arquitetura/ARQ-006-identidade-registro-sudo.md).
 
 ## Importar arquivos ou pastas para uma VM já iniciada
 
@@ -128,6 +145,7 @@ go vet ./...
 - [ARQ-003 — Configuração e catálogo](docs/arquitetura/ARQ-003-configuracao-perfis.md)
 - [ARQ-004 — Biblioteca Go](docs/arquitetura/ARQ-004-biblioteca-go.md)
 - [ARQ-005 — Importação de arquivos](docs/arquitetura/ARQ-005-importacao-arquivos.md)
+- [ARQ-006 — Identidade, SQLite e sudo](docs/arquitetura/ARQ-006-identidade-registro-sudo.md)
 - [FLUX-001 — Execução de Action](docs/fluxos/FLUX-001-execucao-manifesto.md)
 - [FLUX-003 — SSH sequencial e logs](docs/fluxos/FLUX-003-execucao-sequencial-logs.md)
 - [INTF-TERM-003 — Comandos de configuração e perfis](docs/interfaces/terminal/INTF-TERM-003-configuracao-perfis.md)
