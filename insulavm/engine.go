@@ -38,6 +38,10 @@ type SSHOptions = manifest.SSHOptions
 type Profile = profile.Profile
 // VMInfo is persisted in the shared SQLite registry.
 type VMInfo = registry.Entry
+// VMLiveInfo combines SQLite history and the current Libvirt domain state.
+type VMLiveInfo = vm.LiveInfo
+// VMProgress represents a synchronous stage update during startup.
+type VMProgress = vm.Progress
 
 // Engine holds immutable host configuration. Multiple Run calls may use the
 // same Engine concurrently; each run creates its own log directory and VM.
@@ -110,6 +114,35 @@ func (e *Engine) ListVMs(ctx context.Context)([]VMInfo,error){
  if err!=nil{return nil,err}
  defer store.Close()
  return store.List(ctx)
+}
+
+// ListVMStatus checks registered instances against the actual Libvirt domains.
+// It never silently rewrites SQLite and never treats a failed Libvirt query
+// as proof that a VM is powered off.
+func (e *Engine) ListVMStatus(ctx context.Context)([]VMLiveInfo,error){
+ if ctx==nil{return nil,errors.New("context is required")}
+ records,err:=e.ListVMs(ctx)
+ if err!=nil{return nil,err}
+ return vm.InspectRegistered(ctx,e.config.Virtualization.LibvirtURI,records)
+}
+
+// GetVMStatus obtains the persisted metadata and the actual Libvirt state.
+func (e *Engine) GetVMStatus(ctx context.Context,id string)(VMLiveInfo,error){
+ record,err:=e.GetVM(ctx,id)
+ if err!=nil{return VMLiveInfo{},err}
+ statuses,err:=vm.InspectRegistered(ctx,e.config.Virtualization.LibvirtURI,[]registry.Entry{record})
+ if err!=nil{return VMLiveInfo{},err}
+ return statuses[0],nil
+}
+
+// StartVMWithProgress uses the same engine as StartVM, reporting stages
+// synchronously to callers without requiring a special CLI implementation.
+func (e *Engine) StartVMWithProgress(ctx context.Context,name string,callback func(VMProgress))(*vm.Instance,error){
+ if ctx==nil{return nil,errors.New("context must not be nil")}
+ p,err:=e.GetProfile(name)
+ if err!=nil{return nil,err}
+ if err:=e.config.EnsureDirectories();err!=nil{return nil,err}
+ return vm.StartWithProgress(ctx,&e.config,p,callback)
 }
 
 // StopVM destroys a disposable instance (by UUIDv7) and marks its history.
