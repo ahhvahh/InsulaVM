@@ -28,6 +28,9 @@ storage:
   profiles: profiles
   runs: runs
   logs: logs
+  database: insula.db
+guest:
+  destination: /tmp/insulavm/workspace
 virtualization:
   provider: kvm
   libvirt_uri: qemu:///system
@@ -38,7 +41,7 @@ ssh:
   connect_timeout_seconds: 60
 ```
 
-Os caminhos SSH, `-key` e `-known-hosts`, devem ser configurados para que uma execução real seja autenticada. Chaves privadas não devem ser embutidas nos arquivos YAML; use apenas caminhos de arquivo.
+Em **VMs gerenciadas**, a aplicação gera e protege a chave SSH de cada instância; nenhuma chave ou destino precisa ser passado na CLI. O usuário padrão é `insula`. Para hosts SSH externos, configure `ssh.private_key` e `ssh.known_hosts` como caminhos de arquivos no `config.yaml`, nunca o conteúdo de uma chave privada.
 
 ## Seleção de perfil no manifesto
 
@@ -47,7 +50,10 @@ profile: debian-minimal
 repository:
   name: projeto-teste
 action: test
-workspace: /app/repo-workspace
+# ssh:
+#   user: buildagent
+imports:
+  - source: /srv/projeto
 pipelines:
   - name: checks
     jobs:
@@ -61,8 +67,8 @@ A CLI resolve `profile` a partir de `storage.profiles`, verifica `profile.yaml` 
 ## Limitações
 
 - Uma ISO de instalação não é um QCOW2 de perfil. A ferramenta **não instala** um SO automaticamente neste ciclo.
-- A imagem deve conter SO já instalado, DHCP, SSH e o `workspace` existente; a aplicação ainda não transfere o código do repositório.
-- Sem Cloud-Init por instância, preparação das chaves do host e da confiança SSH permanece tarefa do administrador.
+- A imagem deve conter SO já instalado, DHCP, SSH e Cloud-Init. O InsulaVM cria o diretório `guest.destination` pelo usuário SSH, importa arquivos locais e usa essa pasta para os jobs, mas não realiza checkout Git automaticamente.
+- Chaves SSH são geradas por instância via Cloud-Init NoCloud e verificadas com `known_hosts`. Isso exige que a imagem-base já venha preparada com Cloud-Init.
 - A VM precisa ser acessível pelo Libvirt e ter permissões sobre o arquivo de disco.
 - `profile show/list` não inicializam VM. `profile register` copia o disco uma vez; Actions futuras utilizam overlays sem copiar todo o disco.
 
