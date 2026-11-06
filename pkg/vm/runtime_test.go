@@ -1,6 +1,7 @@
 package vm
 
 import (
+ "encoding/xml"
  "github.com/ahhvahh/InsulaVM/pkg/registry"
  "github.com/ahhvahh/InsulaVM/pkg/profile"
  "github.com/ahhvahh/InsulaVM/pkg/config"
@@ -109,5 +110,34 @@ func TestStartEarlyFailureDoesNotPanic(t *testing.T){
  instance,err:=Start(context.Background(),cfg,template)
  if instance!=nil||err==nil||!strings.Contains(err.Error(),"invalid non-root SSH user"){
   t.Fatalf("expected informative early Cloud-Init error; instance=%+v err=%v",instance,err)
+ }
+}
+
+
+func TestDomainXMLProtectsImmutableBackingImage(t *testing.T){
+ const original="/srv/images/base's&copy.qcow2"
+ spec:=domainXMLWithBacking("019a5d11-1234-7123-8123-123456789abc",
+  "insula-debian",2048,2,"/tmp/overlay.qcow2",original,"/tmp/seed.iso",
+  "default","52:54:00:aa:bb:cc")
+ var parsed interface{}
+ if err:=xml.Unmarshal([]byte(spec),&parsed);err!=nil{
+  t.Fatalf("invalid Libvirt XML: %v: %s",err,spec)
+ }
+ for _,expected:=range []string{
+  "<backingStore type='file'><format type='qcow2'/>",
+  "<seclabel model='dac' relabel='no'/>",
+  "<backingStore/></backingStore>",
+  "<target dev='vda' bus='virtio'/>",
+  "<source file='/tmp/overlay.qcow2'/>",
+ }{
+  if !strings.Contains(spec,expected){t.Errorf("missing %q from XML: %s",expected,spec)}
+ }
+ if strings.Contains(spec,original){t.Errorf("QCOW2 base path is not XML escaped: %s",spec)}
+ if !strings.Contains(spec,"base&apos;s&amp;copy.qcow2") &&
+    !strings.Contains(spec,"base&#39;s&amp;copy.qcow2"){
+  t.Errorf("missing escaped QCOW2 base path: %s",spec)
+ }
+ if strings.Count(spec,"<seclabel model='dac' relabel='no'/>")!=1{
+  t.Fatal("only the immutable backing image should skip libvirt DAC relabel")
  }
 }
