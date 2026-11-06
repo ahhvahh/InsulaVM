@@ -15,7 +15,13 @@ jobs:
         with:
           go-version-file: go.mod
       - name: Resolve module dependencies
-        run: go mod tidy
+        run: |
+          go mod tidy
+          echo '--- GO_MOD_RESOLVED ---'
+          cat go.mod
+          echo '--- GO_SUM_RESOLVED ---'
+          cat go.sum
+          echo '--- END_GO_SUM ---'
       - name: Validate and test
         run: |
           go vet ./...
