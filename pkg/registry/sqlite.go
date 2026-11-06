@@ -75,7 +75,37 @@ func Open(filename string)(*Store,error){
  }{
   if _,err:=db.Exec(query);err!=nil{_ = db.Close();return nil,fmt.Errorf("initialize SQLite registry: %w",err)}
  }
+ if err:=migrateColumns(db);err!=nil{_ = db.Close();return nil,err}
  return s,nil
+}
+
+// migrateColumns updates SQLite registries created by an earlier InsulaVM
+// development revision, without deleting VM state or rewriting secrets.
+func migrateColumns(db *sql.DB)error{
+ rows,err:=db.Query("PRAGMA table_info(vm_instances)")
+ if err!=nil{return err}
+ existing:=make(map[string]bool)
+ for rows.Next(){
+  var cid,notnull,pk int
+  var name,kind string
+  var defaultValue sql.NullString
+  if err:=rows.Scan(&cid,&name,&kind,&notnull,&defaultValue,&pk);err!=nil{
+   _=rows.Close()
+   return err
+  }
+  existing[name]=true
+ }
+ if err:=rows.Err();err!=nil{_ = rows.Close();return err}
+ if err:=rows.Close();err!=nil{return err}
+ for _,field:=range []struct{name,statement string}{
+  {"host_fingerprint","ALTER TABLE vm_instances ADD COLUMN host_fingerprint TEXT NOT NULL DEFAULT ''"},
+  {"sudo_mode","ALTER TABLE vm_instances ADD COLUMN sudo_mode TEXT NOT NULL DEFAULT 'disabled'"},
+  {"ssh_port","ALTER TABLE vm_instances ADD COLUMN ssh_port INTEGER NOT NULL DEFAULT 22"},
+ }{
+  if existing[field.name]{continue}
+  if _,err:=db.Exec(field.statement);err!=nil{return fmt.Errorf("migrate vm registry column %s: %w",field.name,err)}
+ }
+ return nil
 }
 func(s *Store)Close()error{return s.db.Close()}
 
