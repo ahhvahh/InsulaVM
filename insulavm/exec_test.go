@@ -19,6 +19,7 @@ func TestExecVMByRegistryIDAndSudoPolicy(t *testing.T){
  if err!=nil{t.Fatal(err)}
  ctx:=context.Background()
  id:="019a5d11-1234-7123-8123-123456789abc"
+ fakeRunningLibvirt(t,id)
  _,portText,err:=net.SplitHostPort(host)
  if err!=nil{t.Fatal(err)}
  port,err:=strconv.Atoi(portText)
