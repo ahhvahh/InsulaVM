@@ -73,6 +73,7 @@ send_to_vm() {
   [[ -x "$insula_bin" ]] || die "Executavel ausente: $insula_bin (compile com go build -o insula .)"
   config_file="${config_arg:-$insula_root/config.yaml}"
   [[ -f "$config_file" ]] || die "Configuracao nao encontrada: $config_file"
+  config_file="$(cd -- "$(dirname -- "$config_file")" && pwd -P)/$(basename -- "$config_file")"
   tmp="$(mktemp -d)"
   cleanup_tmp_dir="$tmp"
   trap 'rm -rf -- "$cleanup_tmp_dir"' EXIT
