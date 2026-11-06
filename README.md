@@ -69,6 +69,23 @@ Execute `go build -o insula .` e tente novamente. O InsulaVM usa `setfacl` para 
 
 O valor é opcional e **não deve ser definido como UID 0/root**. Sem `qemu_uid`, o InsulaVM não modifica ACLs. Se o hipervisor usar outro UID, ajuste a configuração. Restrições AppArmor/SELinux são independentes das ACLs; veja [documentação oficial do Libvirt](https://www.libvirt.org/drvqemu.html).
 
+### Recuperar a imagem-base após alteração de proprietário pelo Libvirt
+
+O Libvirt pode alterar o proprietário de **imagens QCOW2 de base** (backing images) durante a execução. Em algumas situações não restaura a propriedade de imagens usadas somente para leitura quando uma VM é encerrada. O resultado é `resolve profile image: open ...base.qcow2: permission denied` em execuções seguintes.
+
+**Não execute uma correção de proprietário com VMs que estejam usando a imagem em execução.** Confirme com `sudo virsh -c qemu:///system list` e, com todas as VMs dependentes encerradas, recupere somente o arquivo afetado:
+
+```bash
+IMG="$PWD/data/profiles/debian13/versions/v001/base.qcow2"
+sudo stat -c '%U:%G %a %n' "$IMG"
+sudo chown "$(id -u):$(id -g)" "$IMG"
+sudo chmod 600 "$IMG"
+sudo setfacl -m u:64055:r-- "$IMG"  # ajuste o UID à configuração do host
+qemu-img info "$IMG"
+```
+
+A geração do XML agora declara a imagem-base explicitamente como backing store e adiciona `<seclabel model='dac' relabel='no'/>` **somente à imagem-base**. Com `virtualization.qemu_uid` e as ACLs de leitura correspondentes, o Libvirt não precisa modificar seu proprietário. O overlay continua gerenciado normalmente pelo Libvirt. O comportamento é documentado em [cadeias de backing images](https://libvirt.org/kbase/backing_chains.html) e [segurança do XML do domínio](https://libvirt.org/formatdomain.html#security-label).
+
 ## Criar instâncias com SSH automático e sudo
 
 Uma **imagem QCOW2 com Linux já instalado e preparado com Cloud-Init** é inicializada com uma ISO **NoCloud/CIDATA gerada pelo InsulaVM**, contendo um usuário `insula` e chaves Ed25519 individuais. A ISO de configuração não instala Linux; o instalador Debian/Arch por ISO é uma funcionalidade diferente e ainda pendente.
