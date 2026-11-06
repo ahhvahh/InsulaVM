@@ -93,12 +93,17 @@ Uma **imagem QCOW2 com Linux já instalado e preparado com Cloud-Init** é inici
 ```bash
 go run . vm start -config config.yaml -profile debian-minimal
 go run . vm list -config config.yaml
+go run . vm status -config config.yaml -id UUIDv7
 go run . vm show -config config.yaml -id UUIDv7
 go run . vm exec -config config.yaml -id UUIDv7 -command "id -un"
 go run . vm exec -config config.yaml -id UUIDv7 -command "id -u" -sudo
 go run . vm import -config config.yaml -id UUIDv7 -source /srv/projeto
 go run . vm stop -config config.yaml -id UUIDv7
 ```
+
+Ao executar `vm start`, o InsulaVM mostra no terminal as etapas de validação do perfil, criação do overlay QCOW2, geração Cloud-Init, permissões, registro SQLite, inicialização Libvirt, obtenção do IP, SSH e validação de sudo. Uma falha inclui a etapa e o diagnóstico. Um segundo `vm start` **cria outra VM**: a CLI avisa quando já existe alguma instância ativa do mesmo perfil.
+
+**Estado real versus histórico:** `vm list` exibe duas colunas (`SQLite` e `Libvirt`). `vm show` e `vm status` consultam o domínio no Libvirt e avisam sobre registros `creating`/`running` sem VM correspondente. A consulta não altera o banco automaticamente. `vm exec`, `vm import` e `vm stop` também validam o estado real antes de interagir com a instância ou remover arquivos. Se não for possível consultar o Libvirt, o programa apresenta erro em vez de supor que a VM está desligada.
 
 O SQLite é compartilhado entre CLI e biblioteca no caminho `storage.database` (padrão: `<storage.root>/insula.db`). Armazena UUIDv7, UUID Libvirt, MAC, IP, usuário, impressão digital da chave do servidor, referências a chaves e estado da VM. A chave privada permanece protegida em arquivo exclusivo da instância e é removida junto com o overlay ao encerrar.
 
