@@ -250,6 +250,9 @@ func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,o
 
 func virsh(ctx context.Context,uri string,args ...string)([]byte,error){
  cmd:=exec.CommandContext(ctx,"virsh",append([]string{"-c",uri},args...)...)
+ // Libvirt localizes domstate and error text. Stable machine-readable state
+ // comparisons require an English locale even when the operator uses pt_BR.
+ cmd.Env=append(os.Environ(),"LANG=C","LC_ALL=C")
  return cmd.CombinedOutput()
 }
 
