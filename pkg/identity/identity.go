@@ -11,6 +11,7 @@ import (
  "net"
  "os"
  "path/filepath"
+ "regexp"
  "strings"
  "time"
 
@@ -30,6 +31,11 @@ func UUIDv7()(string,error){
  h:=hex.EncodeToString(b[:])
  return fmt.Sprintf("%s-%s-%s-%s-%s",h[:8],h[8:12],h[12:16],h[16:20],h[20:]),nil
 }
+
+// ValidUser reports whether a non-root account name can safely be
+// provisioned through Cloud-Init and used for SSH commands.
+var userPattern=regexp.MustCompile("^[a-z_][a-z0-9_-]{0,31}$")
+func ValidUser(user string)bool{return user!="root"&&userPattern.MatchString(user)}
 
 type Keys struct{
  PrivatePEM []byte
