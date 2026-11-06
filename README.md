@@ -57,6 +57,7 @@ go run . vm list -config config.yaml
 go run . vm show -config config.yaml -id UUIDv7
 go run . vm exec -config config.yaml -id UUIDv7 -command "id -un"
 go run . vm exec -config config.yaml -id UUIDv7 -command "id -u" -sudo
+go run . vm import -config config.yaml -id UUIDv7 -source /srv/projeto -dest /tmp/projeto
 go run . vm stop -config config.yaml -id UUIDv7
 ```
 
