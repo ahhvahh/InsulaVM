@@ -75,7 +75,7 @@ func configCommand(args []string) error {
 	}
 	c := engine.Configuration()
 	fmt.Printf("Valid: profiles=%s runs=%s logs=%s provider=%s guest_destination=%s ssh_user=%s\n",
-		c.Storage.Profiles, c.Storage.Runs, c.Storage.Logs, c.Virtualization.Provider, c.Guest.Destination, c.SSH.User)
+		localPathForCLI(c.Storage.Profiles), localPathForCLI(c.Storage.Runs), localPathForCLI(c.Storage.Logs), c.Virtualization.Provider, c.Guest.Destination, c.SSH.User)
 	return nil
 }
 
@@ -141,7 +141,7 @@ func profileCommand(args []string) error {
 			return err
 		}
 		c := engine.Configuration()
-		fmt.Printf("Profile registered: %s\n", filepath.Join(c.Storage.Profiles, p.Name, "profile.yaml"))
+		fmt.Printf("Profile registered: %s\n", localPathForCLI(filepath.Join(c.Storage.Profiles, p.Name, "profile.yaml")))
 	default:
 		return errors.New("expected profile list, show or register")
 	}
@@ -173,6 +173,7 @@ func runAction(args []string) error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
+	storageRoot := engine.Configuration().Storage.Root
 	result, err := engine.Run(ctx, insulavm.RunRequest{
 		ManifestPath: *manifestPath,
 		LogRoot: *logsOverride,
@@ -183,14 +184,14 @@ func runAction(args []string) error {
 		CommandTimeout: *timeout,
 		Output: os.Stdout,
 		OnVMProgress: func(event insulavm.VMProgress){
-			fmt.Fprintf(os.Stderr,"[InsulaVM][vm:%s] %s\n",event.Stage,event.Message)
+			fmt.Fprintf(os.Stderr,"[InsulaVM][vm:%s] %s\n",event.Stage,localMessageForCLI(event.Message,storageRoot))
 		},
 	})
 	if result != nil && result.LogDirectory != "" {
-		fmt.Println("Logs:", result.LogDirectory)
+		fmt.Println("Logs:", localPathForCLI(result.LogDirectory))
 	}
 	if err != nil {
-		return err
+		return presentCLIError(err,storageRoot)
 	}
 	fmt.Println("InsulaVM: all jobs completed")
 	return nil
