@@ -43,6 +43,32 @@ return err
 
 **API experimental:** não há tag de versão estável. Use uma revisão controlada no projeto consumidor. Consulte [ARQ-004 — Biblioteca Go](docs/arquitetura/ARQ-004-biblioteca-go.md) e [exemplo de aplicação integrada](examples/go-library/main.go). O `Run` aceita manifesto em memória (`Manifest`) além de um caminho YAML.
 
+## Solução de problemas: Libvirt não consegue ler o disco
+
+Se `vm start` apresentar `Cannot access storage file ... overlay.qcow2 (as uid:NNNN): Permission denied`, o QEMU não tem permissão para acessar os discos/ISO gerados sob o diretório privado `storage.runs`. O libvirt executa as VMs como usuário Linux diferente do processo da CLI.
+
+Em Debian:
+
+```bash
+sudo apt install -y acl
+# Confirme o UID exato mostrado em "as uid:NNNN" no erro do seu host.
+```
+
+Informe o UID correspondente ao QEMU **do seu servidor** na seção `virtualization` de `config.yaml` (exemplo ilustrativo, substitua pelo UID real):
+
+```yaml
+virtualization:
+  provider: kvm
+  libvirt_uri: qemu:///system
+  qemu_uid: 64055
+  network: default
+  default_disk_gb: 8
+```
+
+Execute `go build -o insula .` e tente novamente. O InsulaVM usa `setfacl` para permitir **somente travessia** dos diretórios ancestrais (`--x`), leitura da imagem QCOW2-base e seed ISO (`r--`) e leitura/gravação do overlay (`rw-`). **Não** concede acesso à chave SSH privada do cliente ou ao conteúdo de `cloud-init/user-data`. Se um diretório ancestral não pertencer ao usuário atual e estiver fechado, a mensagem informa como criar a ACL com `sudo setfacl` uma única vez.
+
+O valor é opcional e **não deve ser definido como UID 0/root**. Sem `qemu_uid`, o InsulaVM não modifica ACLs. Se o hipervisor usar outro UID, ajuste a configuração. Restrições AppArmor/SELinux são independentes das ACLs; veja [documentação oficial do Libvirt](https://www.libvirt.org/drvqemu.html).
+
 ## Criar instâncias com SSH automático e sudo
 
 Uma **imagem QCOW2 com Linux já instalado e preparado com Cloud-Init** é inicializada com uma ISO **NoCloud/CIDATA gerada pelo InsulaVM**, contendo um usuário `insula` e chaves Ed25519 individuais. A ISO de configuração não instala Linux; o instalador Debian/Arch por ISO é uma funcionalidade diferente e ainda pendente.
