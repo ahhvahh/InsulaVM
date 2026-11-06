@@ -38,9 +38,15 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if req.VMID==""||strings.TrimSpace(req.Command)==""||strings.ContainsRune(req.Command,0){
   return nil,errors.New("VMID and non-empty command without NUL are required")
  }
- vm,err:=e.GetVM(ctx,req.VMID)
+ checked,err:=e.GetVMStatus(ctx,req.VMID)
  if err!=nil{return nil,err}
- if vm.Status!="running"{return nil,fmt.Errorf("VM %s is not running (state %s)",vm.ID,vm.Status)}
+ vm:=checked.Record
+ if !checked.IsRunning(){
+  return nil,fmt.Errorf("VM %s is not running in Libvirt (actual state: %s; SQLite state: %s)",vm.ID,checked.LibvirtState,vm.Status)
+ }
+ if vm.Status!="running"{
+  return nil,fmt.Errorf("VM %s is active in Libvirt but SQLite state is %s; inspect with 'insula vm status -id %s' before executing",vm.ID,vm.Status,vm.ID)
+ }
  if req.Sudo&&vm.SudoMode!="passwordless"{
   return nil,errors.New("sudo is not enabled for this VM; set ssh.sudo_mode=passwordless when creating the instance")
  }
