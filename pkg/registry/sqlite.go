@@ -24,6 +24,7 @@ type Entry struct {
  MAC string
  HostFingerprint string
  SudoMode string
+ SSHPort int
  SSHUser string
  PrivateKeyPath string
  KnownHostsPath string
@@ -61,6 +62,7 @@ func Open(filename string)(*Store,error){
    host_fingerprint TEXT NOT NULL,
    sudo_mode TEXT NOT NULL,
    ssh_user TEXT NOT NULL,
+   ssh_port INTEGER NOT NULL DEFAULT 22,
    private_key_path TEXT NOT NULL,
    known_hosts_path TEXT NOT NULL,
    instance_dir TEXT NOT NULL,
@@ -80,11 +82,12 @@ func(s *Store)Close()error{return s.db.Close()}
 func(s *Store)Insert(ctx context.Context,e Entry)error{
  if ctx==nil{return errors.New("context is required")}
  now:=time.Now().UTC().Format(time.RFC3339Nano)
+ if e.SSHPort==0{e.SSHPort=22}
  _,err:=s.db.ExecContext(ctx,`INSERT INTO vm_instances(
-  id,libvirt_uuid,name,profile,ip,mac,host_fingerprint,sudo_mode,ssh_user,private_key_path,known_hosts_path,
+  id,libvirt_uuid,name,profile,ip,mac,host_fingerprint,sudo_mode,ssh_user,ssh_port,private_key_path,known_hosts_path,
   instance_dir,status,created_at,updated_at
- ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  e.ID,e.LibvirtUUID,e.Name,e.Profile,e.IP,e.MAC,e.HostFingerprint,e.SudoMode,e.SSHUser,e.PrivateKeyPath,e.KnownHostsPath,
+ ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  e.ID,e.LibvirtUUID,e.Name,e.Profile,e.IP,e.MAC,e.HostFingerprint,e.SudoMode,e.SSHUser,e.SSHPort,e.PrivateKeyPath,e.KnownHostsPath,
   e.InstanceDir,"creating",now,now)
  return err
 }
@@ -116,7 +119,7 @@ const fields="id,libvirt_uuid,name,profile,ip,mac,host_fingerprint,sudo_mode,ssh
 func scan(row interface{Scan(...any)error})(Entry,error){
  var e Entry
  err:=row.Scan(&e.ID,&e.LibvirtUUID,&e.Name,&e.Profile,&e.IP,&e.MAC,
-  &e.HostFingerprint,&e.SudoMode,&e.SSHUser,&e.PrivateKeyPath,&e.KnownHostsPath,&e.InstanceDir,&e.Status,
+  &e.HostFingerprint,&e.SudoMode,&e.SSHUser,&e.SSHPort,&e.PrivateKeyPath,&e.KnownHostsPath,&e.InstanceDir,&e.Status,
   &e.CreatedAt,&e.UpdatedAt,&e.FinishedAt)
  return e,err
 }
