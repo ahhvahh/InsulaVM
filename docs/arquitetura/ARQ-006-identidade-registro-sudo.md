@@ -81,6 +81,18 @@ Para comandos privilegiados via SSH, use **`sudo -n`**, sem PTY e sem senha. A o
 
 **Segurança:** `NOPASSWD:ALL` equivale a superusuário dentro do guest. Não habilite para executar jobs de terceiros não confiáveis sem isolamento, políticas adicionais e validação. Este acesso não concede root do hospedeiro diretamente, mas KVM/Libvirt devem continuar isolados e atualizados.
 
+## Observabilidade e consistência do estado
+
+- `vm start` e `RunRequest.OnVMProgress` notificam as etapas `profile`, `profile-ok`, `preparing`, `cloud-init`, `disk`, `permissions`, `registered`, `booting`, `running`, `dhcp`, `ip`, `ssh`, `sudo`, `ready`, `cleaning` e `failed` quando aplicáveis.
+- `StartVMWithProgress(ctx, profile, callback)` permite à biblioteca acompanhar o fluxo; `StartVM` continua disponível sem callback. A CLI imprime eventos em `stderr`.
+- A verificação de estado usa `virsh list --all --uuid` e `virsh domstate` para diferenciar domínios `running`, `blocked`, `paused`, `shut off` e `absent`, sem considerar o registro SQLite como prova de que a VM está em execução.
+- `vm list` e `vm status -id UUID` mostram **estado registrado** e **estado real**. Divergências são sinalizadas sem alterar automaticamente o banco; indisponibilidade do Libvirt resulta em erro.
+- Durante a inicialização, se o domínio parar enquanto aguarda IP ou SSH, o processo falha imediatamente com o estado efetivo, em vez de aguardar todo o timeout.
+- `vm stop` consulta Libvirt antes de remover o overlay; se não puder confirmar a ausência/desligamento seguro do domínio, mantém o disco para análise.
+- Uma nova execução de `vm start` cria uma **nova VM descartável**; a CLI avisa quando encontra outra VM ativa do mesmo perfil.
+
+Estas verificações evitam confundir registros `creating` persistidos após um erro com máquinas efetivamente executando.
+
 ## CLI
 
 ```bash
@@ -89,6 +101,7 @@ go run . vm start -config config.yaml -profile debian-minimal
 
 # Exibe UUIDv7, IP, MAC e estado registrados.
 go run . vm list -config config.yaml
+go run . vm status -config config.yaml -id <UUIDv7>
 go run . vm show -config config.yaml -id <UUIDv7>
 
 # Executa comando como usuário insula.
