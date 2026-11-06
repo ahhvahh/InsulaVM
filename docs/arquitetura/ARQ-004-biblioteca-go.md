@@ -47,6 +47,7 @@ Usar `@main` traz a revisão da branch na resolução inicial; a versão efetiva
 | Iniciar VM | `Engine.StartVM(ctx, profileName)` | Cria overlay, inicia VM e retorna instância para cleanup explícito |
 | Executar Action | `Engine.Run(ctx, RunRequest)` | Perfil/host, imports locais, SSH, setup, jobs, logs e cleanup |
 | Importar arquivos | `Engine.ImportPath(ctx, ImportRequest)` | Compactar arquivo/pasta, enviar SSH, extrair na VM e acompanhar o progresso |
+| Importar por UUID | `Engine.ImportToVM(ctx, VMImportRequest)` | Resolve automaticamente IP, porta e credenciais SSH do registro SQLite |
 | Gerenciar VMs | `Engine.StartVM/GetVM/ListVMs/StopVM` | SQLite UUIDv7, MAC, IP e credenciais SSH da instância |
 | Executar por ID | `Engine.ExecVM(ctx, ExecRequest)` | Comando como usuário comum ou elevação explícita por `sudo -n` |
 
