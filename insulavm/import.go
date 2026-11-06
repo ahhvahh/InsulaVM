@@ -13,12 +13,10 @@ import (
  "golang.org/x/crypto/ssh"
 )
 
-// ImportRequest identifies a file or directory on the HOST and the absolute
-// destination directory INSIDE an already running Linux guest.
-// DestinationPath is optional; guest.destination in global config is used by default.
+// ImportRequest identifies a host file or directory and a running Linux VM.
+// The guest directory is configured ONCE in config.yaml guest.destination.
 type ImportRequest struct {
  SourcePath string
- DestinationPath string
  Host string
  User string
  PrivateKey string
@@ -56,10 +54,8 @@ type ImportResult struct {
 // path; the caller may cancel using ctx. When using Engine.StartVM, pass the
 // Instance.Address from that VM as request.Host, then Cleanup the instance.
 func(e *Engine)ImportPath(ctx context.Context,request ImportRequest)(result *ImportResult,runErr error){
- if request.DestinationPath=="" {
-  request.DestinationPath=e.config.Guest.Destination
- }
- reporter:=importReporter{out:request.Output,callback:request.OnProgress,source:request.SourcePath,destination:request.DestinationPath}
+ destination:=e.config.Guest.Destination
+ reporter:=importReporter{out:request.Output,callback:request.OnProgress,source:request.SourcePath,destination:destination}
  defer func(){
   if runErr!=nil{reporter.send("failed","Falha na importacao: "+runErr.Error(),0,0,0)}
  }()
@@ -80,7 +76,7 @@ func(e *Engine)ImportPath(ctx context.Context,request ImportRequest)(result *Imp
  },wait)
  if err!=nil{return nil,err}
  defer client.Close()
- return importWithClient(ctx,client,request.SourcePath,request.DestinationPath,reporter)
+ return importWithClient(ctx,client,request.SourcePath,destination,reporter)
 }
 
 // importWithClient reuses the authenticated SSH connection for standalone
