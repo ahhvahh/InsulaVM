@@ -3,7 +3,7 @@
 
 # FLUX-001 — Execução de Action com manifesto `insula.yaml`
 
-**Estado:** seleção de perfil, overlay QCOW2, início de VM via Libvirt, importação TAR.GZ opcional, SSH e logs implementados; Cloud-Init, checkout de repositório Git e instalação de SO ainda propostos. Ver [FLUX-003](FLUX-003-execucao-sequencial-logs.md) e [ARQ-003](../arquitetura/ARQ-003-configuracao-perfis.md).
+**Estado:** seleção de perfil, overlay QCOW2, início de VM via Libvirt, importação TAR.GZ opcional, SSH e logs implementados; checkout de repositório Git e instalação do SO por ISO instaladora ainda pendentes; Cloud-Init NoCloud por instância já implementado. Ver [FLUX-003](FLUX-003-execucao-sequencial-logs.md) e [ARQ-003](../arquitetura/ARQ-003-configuracao-perfis.md).
 **Versão aprovada:** nenhuma.
 **Ponto de entrada:** futura CLI com `insula.yaml` referenciando perfil de VM publicado.
 **Arquitetura do motor:** [ARQ-001](../arquitetura/ARQ-001-motor-insulavm.md).
@@ -12,7 +12,7 @@
 
 ## Limite atual da implementação
 
-O [FLUX-003](FLUX-003-execucao-sequencial-logs.md) implementa a execução sequencial SSH e os logs, e o [módulo de runtime](../../pkg/vm/runtime.go) já cria overlays QCOW2, inicia domínios Libvirt transitórios e tenta removê-los ao final. Uma imagem QCOW2 **previamente instalada**, com DHCP e SSH, deve estar registrada. Cloud-Init por instância, checkout automático do projeto a partir de Git e instalação inicial por ISO continuam pendentes. A importação de arquivos e diretórios do hospedeiro para a VM, antes dos jobs, está implementada em [ARQ-005](../arquitetura/ARQ-005-importacao-arquivos.md).
+O [FLUX-003](FLUX-003-execucao-sequencial-logs.md) implementa a execução sequencial SSH e os logs, e o [módulo de runtime](../../pkg/vm/runtime.go) já cria overlays QCOW2, inicia domínios Libvirt transitórios e tenta removê-los ao final. Uma imagem QCOW2 **previamente instalada**, com DHCP e SSH, deve estar registrada. Cloud-Init por instância já está implementado e usa uma ISO NoCloud gerada; checkout automático de Git e instalação inicial do SO pela ISO instaladora continuam pendentes. A importação de arquivos e diretórios do hospedeiro para a VM, antes dos jobs, está implementada em [ARQ-005](../arquitetura/ARQ-005-importacao-arquivos.md).
 
 ## Objetivo
 
@@ -82,7 +82,7 @@ O diagrama acima representa **sucesso**. Em caso de erro, timeout ou cancelament
 1. **Validar manifesto:** confirmar campos, referência do perfil, origem do projeto e jobs; rejeitar entradas inválidas antes de criar VM.
 2. **Resolver perfil:** localizar `profile.yaml`, imagem da versão selecionada, recursos de RAM e CPU; impedir remoção da versão em uso.
 3. **Criar disco de trabalho:** reservar `runs/<run-id>/` e criar overlay QCOW2 com backing file e formato explícitos, sem copiar completamente a imagem-base. Gerar nome da instância, MAC e identificadores próprios.
-4. **Provisionar instância:** preparar eventuais metadados Cloud-Init NoCloud para o convidado que efetivamente tenha Cloud-Init habilitado, com `instance-id` e credenciais efêmeras. Limpar identidades clonadas com método seguro conforme [ARQ-002](../arquitetura/ARQ-002-perfis-vm.md). Criar domínio Libvirt usando o disco overlay e iniciar pelo sistema já instalado, **sem boot pela ISO de instalação**.
+4. **Provisionar instância:** gerar automaticamente metadados Cloud-Init NoCloud para o convidado preparado, com UUIDv7, chaves SSH específicas e política sudo. Limpar identidades clonadas com método seguro conforme [ARQ-002](../arquitetura/ARQ-002-perfis-vm.md). Criar domínio Libvirt usando o disco overlay e iniciar pelo sistema já instalado, **sem boot pela ISO de instalação**.
 5. **Aguardar prontidão:** descobrir IP interno, validar host key SSH usando fonte confiável, conectar e aguardar a conclusão do bootstrap necessário com limite de tempo.
 6. **Obter repositório:** clonar revisão remota especificada ou receber projeto local por canal autenticado e preparar a pasta de trabalho proposta `/app/repo-workspace`. Repositórios privados não devem expor tokens em logs, ISO ou arquivos da VM.
 7. **Executar `setup`:** executar comandos sequenciais antes dos jobs; permissões, contexto do diretório e privilégios são decisões a registrar no futuro contrato.
