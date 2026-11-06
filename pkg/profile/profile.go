@@ -124,6 +124,7 @@ func Register(root string,p Profile,source string)error{
  if err:=storage.ValidateName(p.Name);err!=nil{return err}
  if p.Version==""{p.Version="v001"}
  if p.Image==""{p.Image="versions/"+p.Version+"/base.qcow2"}
+ p.Directory=filepath.Join(root,p.Name)
  if err:=p.Validate();err!=nil{return err}
  sourceAbs,err:=filepath.Abs(source);if err!=nil{return err}
  f,err:=os.Open(sourceAbs);if err!=nil{return err}
@@ -133,7 +134,7 @@ func Register(root string,p Profile,source string)error{
  if magic!=[4]byte{'Q','F','I',0xfb}{return errors.New("source is not QCOW2")}
  if _,err:=f.Seek(0,io.SeekStart);err!=nil{return err}
  if err:=os.MkdirAll(root,0700);err!=nil{return err}
- dir:=filepath.Join(root,p.Name)
+ dir:=p.Directory
  if err:=os.Mkdir(dir,0700);err!=nil{return fmt.Errorf("profile already exists or cannot be created: %w",err)}
  success:=false
  defer func(){if !success{_ = os.RemoveAll(dir)}}()
