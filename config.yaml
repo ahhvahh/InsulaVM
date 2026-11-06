@@ -8,13 +8,20 @@ storage:
   # SQLite shared by CLI and imported Go library; no credentials stored here.
   database: insula.db
 
+# Single destination directory INSIDE every VM, shared across all imports
+# and used as the default directory for commands and Actions.
+# This is a guest Linux path, not a path on the host.
+guest:
+  destination: /tmp/insulavm/workspace
+
 virtualization:
   provider: kvm
   libvirt_uri: qemu:///system
   network: default
   default_disk_gb: 8
 
-# Configure real SSH keys and known_hosts before running Actions.
+# SSH user defaults to insula; every managed VM receives its own keys.
+# Keys/known_hosts need separate configuration ONLY for unmanaged external hosts.
 # Passwords and private-key contents must NEVER be stored in YAML.
 # Fresh per-VM SSH keys are generated automatically by Cloud-Init provisioning.
 ssh:
