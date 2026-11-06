@@ -61,7 +61,9 @@ func Upload(ctx context.Context,client *ssh.Client,archive Archive,destination s
  if onStage!=nil{onStage("extracting")}
  output,err:=runCommand(ctx,client,script)
  if err!=nil{return fmt.Errorf("unpack archive inside guest: %w",err)}
- if strings.TrimSpace(output)!=confirmation{
+ // GNU tar may emit nonfatal timestamp warnings on stderr before the
+ // confirmation line. Require a successful exit and the FINAL marker.
+ if !strings.HasSuffix(strings.TrimSpace(output),confirmation){
   return fmt.Errorf("guest did not confirm import (response: %q)",output)
  }
  return nil
