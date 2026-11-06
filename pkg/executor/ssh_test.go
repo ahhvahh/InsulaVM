@@ -113,8 +113,9 @@ func TestSequentialCommandsStopAtFailedExit(t *testing.T) {
 	e := &Executor{Client: client, Workspace: t.TempDir(), Console: &console, CommandTimeout: 5 * time.Second}
 	err = e.Run(context.Background(), "commands",
 		[]string{"echo first", "exit 7", "echo should-not-run"}, false, log)
-	if err == nil || !strings.Contains(err.Error(), "exit status 7") {
-		t.Fatalf("expected exit status 7, got %v", err)
+	var exitErr *ssh.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitStatus() != 7 {
+		t.Fatalf("expected SSH exit status 7, got %v", err)
 	}
 	if err := log.Close(); err != nil {
 		t.Fatal(err)
