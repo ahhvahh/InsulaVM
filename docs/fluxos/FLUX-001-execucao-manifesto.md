@@ -3,7 +3,7 @@
 
 # FLUX-001 — Execução de Action com manifesto `insula.yaml`
 
-**Estado:** seleção de perfil, overlay QCOW2, início de VM via Libvirt, SSH e logs implementados; Cloud-Init, preparação de repositório e instalação de SO ainda propostos. Ver [FLUX-003](FLUX-003-execucao-sequencial-logs.md) e [ARQ-003](../arquitetura/ARQ-003-configuracao-perfis.md).
+**Estado:** seleção de perfil, overlay QCOW2, início de VM via Libvirt, importação TAR.GZ opcional, SSH e logs implementados; Cloud-Init, checkout de repositório Git e instalação de SO ainda propostos. Ver [FLUX-003](FLUX-003-execucao-sequencial-logs.md) e [ARQ-003](../arquitetura/ARQ-003-configuracao-perfis.md).
 **Versão aprovada:** nenhuma.
 **Ponto de entrada:** futura CLI com `insula.yaml` referenciando perfil de VM publicado.
 **Arquitetura do motor:** [ARQ-001](../arquitetura/ARQ-001-motor-insulavm.md).
@@ -12,7 +12,7 @@
 
 ## Limite atual da implementação
 
-O [FLUX-003](FLUX-003-execucao-sequencial-logs.md) implementa a execução sequencial SSH e os logs, e o [módulo de runtime](../../pkg/vm/runtime.go) já cria overlays QCOW2, inicia domínios Libvirt transitórios e tenta removê-los ao final. Uma imagem QCOW2 **previamente instalada**, com DHCP e SSH, deve estar registrada. Cloud-Init por instância, transferência do projeto e instalação inicial por ISO continuam pendentes.
+O [FLUX-003](FLUX-003-execucao-sequencial-logs.md) implementa a execução sequencial SSH e os logs, e o [módulo de runtime](../../pkg/vm/runtime.go) já cria overlays QCOW2, inicia domínios Libvirt transitórios e tenta removê-los ao final. Uma imagem QCOW2 **previamente instalada**, com DHCP e SSH, deve estar registrada. Cloud-Init por instância, checkout automático do projeto a partir de Git e instalação inicial por ISO continuam pendentes. A importação de arquivos e diretórios do hospedeiro para a VM, antes dos jobs, está implementada em [ARQ-005](../arquitetura/ARQ-005-importacao-arquivos.md).
 
 ## Objetivo
 
