@@ -53,9 +53,9 @@ Usar `@main` traz a revisão da branch na resolução inicial; a versão efetiva
 
 O `RunRequest` também oferece `OnImportProgress func(ImportProgress)` para informar estágios de transferência. O resultado `RunResult.Imports` contém as importações concluídas. Mais detalhes em [ARQ-005](ARQ-005-importacao-arquivos.md).
 
-O `RunRequest` oferece `ManifestPath` **ou** `Manifest *insulavm.Manifest` (exclusivos), `Host`, `User`, `PrivateKey`, `KnownHosts`, `LogRoot`, `CommandTimeout` e `Output io.Writer`.
+O `RunRequest` oferece `ManifestPath` **ou** `Manifest *insulavm.Manifest` (exclusivos), `LogRoot`, `CommandTimeout`, `Output io.Writer` e callbacks. Os campos `Host`, `User`, `PrivateKey` e `KnownHosts` são opcionais para conectar a **hosts externos**; não são necessários ao criar VMs gerenciadas por perfil, pois SSH é provisionado automaticamente.
 
-O `RunResult` retorna `Profile`, `Host`, `VMName`, `LogDirectory`, `CompletedJobs`, `StartedAt` e `FinishedAt`. Em caso de erro depois de iniciar a execução, `Run` devolve, quando disponível, **resultado parcial e erro**. O erro de cleanup não substitui o original.
+O `RunResult` retorna `SSHUser`, `Profile`, `Host`, `VMID`, `VMName`, `LogDirectory`, `CompletedJobs`, `StartedAt` e `FinishedAt`. Em caso de erro depois de iniciar a execução, `Run` devolve, quando disponível, **resultado parcial e erro**. O erro de cleanup não substitui o original.
 
 `Run` é **bloqueante** até a conclusão dos jobs. O orquestrador pode chamá-lo em goroutine se desejar concorrência e controlar cancelamento/timeouts com `context.Context`. Não há fila, banco de estados ou `GetStatus` dentro da biblioteca neste ciclo. Para streaming, o consumidor fornece um `io.Writer`; o motor continua salvando os logs físicos. O consumidor deve sincronizar um writer compartilhado por execuções concorrentes.
 
@@ -66,30 +66,34 @@ engine, err := insulavm.New("/etc/insulavm/config.yaml")
 if err != nil { return err }
 
 manifest := &insulavm.Manifest{
+    Profile: "debian-minimal",
     Repository: insulavm.Repository{Name: "meu-projeto"},
     Action: "build",
-    Workspace: "/app/repo-workspace",
-    Pipelines: []insulavm.Pipeline{
-        {Name: "build", Jobs: []insulavm.Job{
-            {Name: "compilar", Commands: []string{"go build ./..."}},
-        }},
+    // Opcional; omitido: utiliza ssh.user global (padrão insula).
+    // SSH: insulavm.SSHOptions{User: "buildagent"},
+    Imports: []insulavm.ImportSpec{
+        {Source: "/srv/meu-projeto"},
+        {Source: "/srv/extra.ini"},
     },
+    Pipelines: []insulavm.Pipeline{{
+        Name: "build",
+        Jobs: []insulavm.Job{{
+            Name: "compilar",
+            Commands: []string{"go build ./..."},
+        }},
+    }},
 }
 result, err := engine.Run(ctx, insulavm.RunRequest{
     Manifest: manifest,
-    Host: "192.0.2.10:22", // Máquina já inicializada
-    User: "insula",
-    PrivateKey: "/etc/insulavm/id_ed25519",
-    KnownHosts: "/etc/insulavm/known_hosts",
     Output: os.Stdout,
 })
-if result != nil {
-    fmt.Println("Logs:", result.LogDirectory)
-}
+if result != nil { fmt.Println("Logs:", result.LogDirectory) }
 return err
 ```
 
-Os valores de IP/chaves são ilustrativos. Para criar uma VM descartável a partir do perfil, o manifesto deve indicar `Profile: "nome"` e não receber Host existente.
+O destino físico **dentro do convidado** é sempre o `guest.destination` global do `config.yaml`, compartilhado entre todas as importações e utilizado por padrão para os jobs. O método `Engine.ImportToVM` recebe apenas `VMID` e `SourcePath`, recuperando IP, chave e usuário do SQLite. O manifesto não contém `destination`, senha ou chave SSH.
+
+A biblioteca permite executar `Engine.Run` com `SSH.User` por Action ou, se omitido, o usuário global `insula`. Para perfil gerenciado, o Cloud-Init cria o usuário escolhido e configura as credenciais específicas da instância. Consulte [ARQ-005](ARQ-005-importacao-arquivos.md).
 
 ## Arquitetura interna
 
