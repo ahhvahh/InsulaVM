@@ -1,64 +1,79 @@
 <!-- A-BIOMA-DOC-STANDARD -->
 <!-- A-BIOMA-DOC-REVISADO -->
 
-# INTF-TERM-002 — Executar manifesto via SSH
+# INTF-TERM-002 — Executar manifesto com SSH gerenciado
 
-**Estado:** implementado para SSH em VM existente e início automático de instância a partir de QCOW2 registrado; instalação pela ISO e transferência do repositório ainda não implementadas.
-**Fluxo efetivo:** [FLUX-003 — Execução sequencial e logs](../../fluxos/FLUX-003-execucao-sequencial-logs.md).
-**Fluxo futuro de Action completa:** [FLUX-001](../../fluxos/FLUX-001-execucao-manifesto.md).
+**Estado:** implementado para execução em VM QCOW2 previamente preparada com Cloud-Init, ou VM SSH externa. Instalação do SO a partir de ISO instaladora permanece pendente.
 
-## Objetivo
+**Fluxo:** [FLUX-001](../../fluxos/FLUX-001-execucao-manifesto.md). **Biblioteca:** [ARQ-004](../../arquitetura/ARQ-004-biblioteca-go.md).
 
-Ler `config.yaml` e `insula.yaml`, carregar o perfil selecionado para iniciar VM descartável em Libvirt **ou** conectar a uma VM existente via `-host`, executar `setup` e jobs em ordem e registrar os logs no hospedeiro.
-
-## Comando implementado
+## Execução direta
 
 ```bash
-go run . run \
-  -config config.yaml \
-  -manifest insula.yaml \
-  -logs-root /var/lib/insulavm/logs \
-  -host 192.0.2.10:22 \
-  -user insula \
-  -key /home/usuario/.ssh/id_ed25519 \
-  -known-hosts /home/usuario/.ssh/known_hosts \
-  -command-timeout 30m
+go run . run -config config.yaml -manifest insula.yaml
 ```
 
-O endereço IP acima é ilustrativo. `INSULA_LOG_ROOT` também define o caminho de logs na ausência de `-logs-root`.
+Quando `insula.yaml` indica um `profile`, a CLI inicia a VM descartável, provisiona SSH e elimina a necessidade de informar chave, usuário ou endereço remoto. A conexão valida a chave de host da instância.
 
-| Opção | Obrigatória? | Significado |
+## Arquivos de configuração
+
+**`config.yaml`** informa um único destino compartilhado por todas as VMs e transferências:
+
+```yaml
+guest:
+  destination: /tmp/insulavm/workspace
+ssh:
+  user: insula
+```
+
+**`insula.yaml`** possui a Action, fontes locais e usuário opcional:
+
+```yaml
+profile: debian-minimal
+repository:
+  name: projeto
+action: build
+# ssh:
+#   user: buildagent
+imports:
+  - source: /srv/projeto
+  - source: /srv/extra.ini
+pipelines:
+  - name: build
+    jobs:
+      - name: listar
+        commands:
+          - pwd
+          - ls -la
+```
+
+`workspace`, quando omitido, resolve para `guest.destination`. A pasta é criada pelo usuário SSH antes dos comandos. A Action não aceita `destination`, `key`, `known_hosts` ou senha. O `ssh.user` da Action, quando presente, é provisionado na VM criada; se ausente, usa o usuário do perfil ou o padrão global `insula`.
+
+## CLI e parâmetros
+
+| Opção | Obrigatória | Comportamento |
 | --- | --- | --- |
-| `-config` | Não; padrão `config.yaml` | Parâmetros globais, caminhos e Libvirt |
-| `-manifest` | Não; padrão `insula.yaml` | Arquivo de manifesto YAML |
-| `-logs-root` | Sim, ou `INSULA_LOG_ROOT` | Pasta raiz dos logs no hospedeiro |
-| `-host` | Opcional | Endereço de VM existente; evita criar VM automática do perfil |
-| `-user` | Se não houver em configuração | Usuário SSH da VM |
-| `-key` | Se não houver em configuração | Chave privada SSH não criptografada usada pela CLI |
-| `-known-hosts` | Se não houver em configuração | Lista confiável de chaves públicas de hosts SSH |
-| `-command-timeout` | Não; padrão `30m` | Tempo máximo por comando remoto |
+| `-config` | Não | Arquivo global, padrão `config.yaml` |
+| `-manifest` | Não | Action YAML, padrão `insula.yaml` |
+| `-logs-root` | Não | Sobrescreve `storage.logs` |
+| `-command-timeout` | Não | Padrão 30 minutos por comando |
+| `-host` | Somente modo externo | Executa em VM já existente, sem iniciar perfil |
+| `-user` | Não | Override legado; prefira `ssh.user` na Action |
+| `-key` / `-known-hosts` | Não para VMs gerenciadas | Somente para host externo, quando não configurados globalmente |
 
-## Manifesto suportado
+Hosts externos **não gerenciados** exigem credenciais SSH previamente preparadas; informe seus caminhos no `config.yaml`:
 
-O arquivo [insula.yaml.example](../../../insula.yaml.example) apresenta um exemplo completo. Os campos suportados são `profile` (nome do perfil registrado), `repository.name`, `action` (opcional quando há uma única pipeline), `workspace` (caminho absoluto dentro da VM), `setup` (lista de comandos) e `pipelines[].name/jobs[].name/commands/allow_failure`. Campos não reconhecidos são rejeitados.
-
-## Entradas, saídas e códigos
-
-- **stdin:** não solicita perguntas na CLI; scripts seguem pelo `StdinPipe` da sessão remota, não pelo terminal local.
-- **stdout:** diretório de logs, mensagens de jobs, linhas recebidas e conclusão, com `[nome-do-job]`.
-- **stderr:** erros da CLI (manifesto, SSH, log, falha de job); mensagens `stderr` remotas aparecem identificadas no fluxo do terminal.
-- **Código de saída da CLI:** `0` se todos os jobs terminarem segundo a política `allow_failure`; `1` em erro fatal.
-- **Cancelamento:** `Ctrl+C` cancela o contexto, fecha sessão remota em curso e encerra a CLI com erro.
-- **Limitações:** pode criar instância a partir de imagem QCOW2 previamente registrada, mas não instala SO por ISO, não transfere o projeto e não modifica a imagem-base; `workspace` precisa existir.
-
-## Exemplo de arquivo de log
-
-```text
->> cd '/app/repo-workspace' && python3 -m pytest
-<< ========================= test session starts =========================
-<< collected 3 items
-<< tests/test_main.py ... [100%]
-<< 3 passed
+```yaml
+ssh:
+  user: insula
+  private_key: /etc/insulavm/external_id_ed25519
+  known_hosts: /etc/insulavm/known_hosts
 ```
 
-Os dados de exemplo não foram obtidos de uma VM real.
+Não armazene conteúdo de chave privada em YAML. Para importações posteriores em uma VM registrada, use `go run . vm import -id UUIDv7 -source /srv/arquivo`; o banco SQLite fornece a identidade SSH e o destino sempre vem de `guest.destination`.
+
+## Resultado e limitações
+
+O terminal apresenta as linhas de cada job e o diretório com os logs persistentes. Código de saída `0` significa sucesso; falhas fatais retornam `1`. `Ctrl+C` cancela a operação e inicia limpeza da instância transitória.
+
+Requer Linux com KVM/Libvirt e imagem QCOW2 **já instalada com Cloud-Init e SSH** para provisionamento automático. Ainda não instala SO da ISO instaladora nem clona automaticamente repositórios Git; pode importar arquivos locais via `imports`.
