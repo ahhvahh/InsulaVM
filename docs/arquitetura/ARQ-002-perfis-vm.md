@@ -3,7 +3,7 @@
 
 # ARQ-002 — Perfis persistentes e discos descartáveis de VM
 
-**Estado:** perfil por YAML, registro de QCOW2 e instâncias descartáveis por Libvirt implementados; instalação pela ISO e Cloud-Init por instância ainda propostos.
+**Estado:** perfil por YAML, registro de QCOW2, instâncias descartáveis e Cloud-Init NoCloud automático implementados; instalação do SO pela ISO instaladora ainda pendente.
 **Escopo:** armazenamento de perfis Debian, criação a partir de ISO e reutilização em Actions.
 **Fluxo de criação:** [FLUX-002](../fluxos/FLUX-002-criacao-perfil-vm.md).
 **Fluxo de execução:** [FLUX-001](../fluxos/FLUX-001-execucao-manifesto.md).
@@ -49,7 +49,7 @@ A implementação não deve escrever sobre `base.qcow2` enquanto houver Actions 
 └── runs/
     └── <run-id>/
         ├── overlay.qcow2            # alterações de uma Action
-        └── seed.iso                 # se Cloud-Init for usado nesta instância
+        └── seed.iso                 # gerado automaticamente para VM com Cloud-Init
 ```
 
 A ISO do usuário pode continuar em caminho local externo informado por ele; salvar no manifesto **referência e checksum**, sem mover/apagar o original. A pasta do perfil usa o nome validado solicitado na criação. Nomes devem rejeitar `..`, separadores de caminho, links simbólicos perigosos e colisões. Imagem e metadados persistem; runtime e staging são temporários.
@@ -100,7 +100,7 @@ Para **editar um perfil já salvo**, criar overlay de manutenção, nunca escrev
 2. Validar imagem, recursos, compatibilidade e permissões; manter referência da versão durante todo o job.
 3. Criar `runs/<run-id>/overlay.qcow2` com backing file explícito `base.qcow2` e formato `qcow2`; gerar identidade de VM, MAC, hostname e credenciais efêmeras específicas da instância.
 4. Criar domínio Libvirt com recursos padrão do perfil, rede isolada e disco overlay; **não** montar a ISO de instalação.
-5. Inicializar VM e confirmar prontidão/SSH. Se Cloud-Init estiver presente, providenciar `instance-id` novo e limpar estado persistente de máquina-clonada de maneira controlada no perfil; tratar `machine-id`, host keys, leases, tokens e credenciais de forma segura.
+5. Inicializar VM e confirmar prontidão/SSH. Para imagem Cloud-Init, providenciar `instance-id` UUIDv7 novo, chaves SSH únicas e metadados NoCloud via seed.iso, conforme [ARQ-006](ARQ-006-identidade-registro-sudo.md); tratar `machine-id`, host keys, leases, tokens e credenciais de forma segura.
 6. Executar [FLUX-001](../fluxos/FLUX-001-execucao-manifesto.md): preparar repositório e rodar setup/jobs, logs e resultados.
 7. Ao terminar, parar e indefinir domínio, remover overlay, ISO efêmera e dados de execução conforme política. A imagem-base não se altera.
 
