@@ -12,7 +12,7 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|list|show|stop|exec|import")}
+ if len(args)==0{return errors.New("usage: insula vm start|list|show|status|stop|exec|import")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -31,7 +31,9 @@ func vmCommand(args []string)error{
  switch command{
  case "start":
   if *profileName==""{return errors.New("vm start requires -profile")}
-  instance,err:=engine.StartVM(ctx,*profileName)
+  instance,err:=engine.StartVMWithProgress(ctx,*profileName,func(p insulavm.VMProgress){
+   fmt.Fprintf(os.Stderr,"[InsulaVM][vm:%s] %s\n",p.Stage,p.Message)
+  })
   if err!=nil{return err}
   fmt.Printf("VM pronta: id=%s profile=%s ip=%s mac=%s user=%s sudo=%s\n",
    instance.ID,instance.Profile,instance.IPAddress,instance.MACAddress,instance.SSHUser,instance.SudoMode)
@@ -39,18 +41,24 @@ func vmCommand(args []string)error{
    instance.SSHPrivateKeyPath,instance.SSHKnownHostsPath,instance.SSHUser,instance.IPAddress)
   fmt.Println("Para encerrar: insula vm stop -id",instance.ID)
  case "list":
-  entries,err:=engine.ListVMs(ctx)
+  entries,err:=engine.ListVMStatus(ctx)
   if err!=nil{return err}
-  for _,e:=range entries{
-   fmt.Printf("%s %-12s %-18s %-20s %s\n",e.ID,e.Status,e.IP,e.Profile,e.Name)
+  if len(entries)==0{fmt.Println("Nenhuma VM cadastrada pelo InsulaVM");return nil}
+  fmt.Printf("%-36s %-12s %-12s %-18s %-15s %s\n","UUID","SQLite","Libvirt","IP","Perfil","Nome")
+  for _,entry:=range entries{
+   e:=entry.Record
+   fmt.Printf("%-36s %-12s %-12s %-18s %-15s %s\n",e.ID,e.Status,entry.LibvirtState,e.IP,e.Profile,e.Name)
+   if entry.Warning!=""{fmt.Fprintln(os.Stderr,"  [aviso]",entry.Warning)}
   }
- case "show":
-  if *id==""{return errors.New("vm show requires -id")}
-  e,err:=engine.GetVM(ctx,*id)
+ case "show","status":
+  if *id==""{return errors.New("vm show/status requires -id")}
+  checked,err:=engine.GetVMStatus(ctx,*id)
   if err!=nil{return err}
-  fmt.Printf("id=%s\nname=%s\nprofile=%s\nlibvirt_uuid=%s\nip=%s\nmac=%s\nuser=%s\nsudo_mode=%s\nhost_fingerprint=%s\nstatus=%s\ncreated_at=%s\n",
-   e.ID,e.Name,e.Profile,e.LibvirtUUID,e.IP,e.MAC,e.SSHUser,e.SudoMode,e.HostFingerprint,e.Status,e.CreatedAt)
-  if e.Status=="running"{
+  e:=checked.Record
+  fmt.Printf("id=%s\nname=%s\nprofile=%s\nlibvirt_uuid=%s\nip=%s\nmac=%s\nuser=%s\nsudo_mode=%s\nssh_port=%d\nstatus_sqlite=%s\nstatus_libvirt=%s\ncreated_at=%s\n",
+   e.ID,e.Name,e.Profile,e.LibvirtUUID,e.IP,e.MAC,e.SSHUser,e.SudoMode,e.SSHPort,e.Status,checked.LibvirtState,e.CreatedAt)
+  if checked.Warning!=""{fmt.Fprintln(os.Stderr,"[aviso]",checked.Warning)}
+  if checked.IsRunning(){
    fmt.Printf("ssh_key=%s\nknown_hosts=%s\n",e.PrivateKeyPath,e.KnownHostsPath)
   }
  case "exec":
@@ -72,7 +80,7 @@ func vmCommand(args []string)error{
   if *id==""{return errors.New("vm stop requires -id")}
   if err:=engine.StopVM(ctx,*id);err!=nil{return err}
   fmt.Println("VM encerrada:",*id)
- default:return errors.New("usage: insula vm start|list|show|stop")
+ default:return errors.New("usage: insula vm start|list|show|status|stop|exec|import")
  }
  return nil
 }
