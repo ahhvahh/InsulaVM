@@ -30,6 +30,7 @@ type Pipeline struct {
 }
 
 type Manifest struct {
+	Profile    string     `yaml:"profile"`
 	Repository Repository `yaml:"repository"`
 	Action     string     `yaml:"action"`
 	Workspace  string     `yaml:"workspace"`
@@ -79,6 +80,11 @@ func (m *Manifest) GroupName() string {
 }
 
 func (m *Manifest) Validate() error {
+	if m.Profile != "" {
+		if err := storage.ValidateName(m.Profile); err != nil {
+			return fmt.Errorf("profile: %w", err)
+		}
+	}
 	if err := storage.ValidateName(m.Repository.Name); err != nil {
 		return fmt.Errorf("repository: %w", err)
 	}
