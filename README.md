@@ -4,13 +4,13 @@ CLI open-source em **Go** para executar jobs sequenciais por SSH dentro de máqu
 
 **Implementado:** instâncias por UUIDv7 registradas em SQLite, SSH individual automatizado por Cloud-Init NoCloud, elevação controlada com sudo, biblioteca Go importável em `github.com/ahhvahh/InsulaVM/insulavm`, CLI usando a mesma API, `config.yaml` global, catálogo de `profile.yaml`, registro de imagens QCOW2 já instaladas, seleção por `insula.yaml`, overlay QCOW2 descartável com QEMU/Libvirt e executor SSH sequencial com logs `>>`/`<<`, além de importação TAR.GZ de arquivos e diretórios do hospedeiro para a VM, com progresso no console ou callback Go.
 
-**Ainda não implementado:** instalação de Debian/Arch a partir de ISO instaladora, criação interativa de perfil por console e checkout automático de repositórios Git (a importação manual de arquivos locais já funciona). A imagem registrada precisa ter Cloud-Init, SSH e DHCP; o diretório `workspace` deve existir no convidado.
+**Ainda não implementado:** instalação de Debian/Arch a partir de ISO instaladora, criação interativa de perfil por console e checkout automático de repositórios Git (a importação manual de arquivos locais já funciona). A imagem registrada precisa ter Cloud-Init, SSH e DHCP. O destino configurado para imports/jobs é criado automaticamente pelo usuário SSH, desde que tenha permissão.
 
 ## Arquivos de configuração
 
-- [`config.yaml`](config.yaml): diretórios dos perfis, execução, logs e banco SQLite; Libvirt, SSH e política sudo.
+- [`config.yaml`](config.yaml): diretórios dos perfis, execução, logs e banco SQLite; Libvirt, política SSH/sudo e **um destino único em `guest.destination`**.
 - `data/profiles/<nome>/profile.yaml`: recursos da VM, versão e caminho para `versions/v001/base.qcow2`.
-- [`insula.yaml.example`](insula.yaml.example): escolhe `profile` e descreve `setup` e `pipelines`.
+- [`insula.yaml.example`](insula.yaml.example): escolhe `profile`, usuário SSH opcional (`ssh.user`), fontes `imports`, `setup` e `pipelines`.
 
 Exemplos de perfis (somente metadados; **sem discos instalados**):
 [Debian](examples/profiles/debian-minimal/profile.yaml),
@@ -30,15 +30,11 @@ go get github.com/ahhvahh/InsulaVM/insulavm@main
 ```go
 import "github.com/ahhvahh/InsulaVM/insulavm"
 
-// O motor pode ser compartilhado por múltiplas chamadas no mesmo processo.
+// A CLI e a biblioteca utilizam exatamente as mesmas configurações.
 engine, err := insulavm.New("/etc/insulavm/config.yaml")
 if err != nil { return err }
 result, err := engine.Run(ctx, insulavm.RunRequest{
     ManifestPath: "/srv/projeto/insula.yaml",
-    Host: "192.0.2.10:22", // Exemplo: VM já inicializada
-    User: "insula",
-    PrivateKey: "/etc/insulavm/id_ed25519",
-    KnownHosts: "/etc/insulavm/known_hosts",
     Output: os.Stdout,
 })
 if result != nil { fmt.Println(result.LogDirectory) }
@@ -57,7 +53,7 @@ go run . vm list -config config.yaml
 go run . vm show -config config.yaml -id UUIDv7
 go run . vm exec -config config.yaml -id UUIDv7 -command "id -un"
 go run . vm exec -config config.yaml -id UUIDv7 -command "id -u" -sudo
-go run . vm import -config config.yaml -id UUIDv7 -source /srv/projeto -dest /tmp/projeto
+go run . vm import -config config.yaml -id UUIDv7 -source /srv/projeto
 go run . vm stop -config config.yaml -id UUIDv7
 ```
 
@@ -65,35 +61,57 @@ O SQLite é compartilhado entre CLI e biblioteca no caminho `storage.database` (
 
 O modo `ssh.sudo_mode: passwordless` no `config.yaml` habilita `sudo -n`, sem senha ou prompt. Use somente em VMs confiáveis; omitir a opção desabilita sudo por padrão. A biblioteca oferece `Engine.StartVM`, `GetVM`, `ListVMs`, `ExecVM` e `StopVM`. Veja [ARQ-006 — Identidade, SQLite e sudo](docs/arquitetura/ARQ-006-identidade-registro-sudo.md).
 
-## Importar arquivos ou pastas para uma VM já iniciada
+## Destino compartilhado e usuário da Action
 
-O comando recebe **um arquivo ou uma pasta** no hospedeiro, compacta o conteúdo em TAR.GZ, envia pelo SSH e extrai no diretório informado dentro da VM. Uma pasta transfere seu conteúdo; um arquivo transfere seu nome e conteúdo. A confirmação é emitida após o `tar` remoto concluir com sucesso.
-
-```bash
-go run . import -config config.yaml \
-  -host 192.168.122.10:22 \
-  -source /home/usuario/meu-projeto \
-  -dest /tmp/meu-projeto \
-  -user insula \
-  -key /home/usuario/.ssh/id_ed25519 \
-  -known-hosts /home/usuario/.ssh/known_hosts
-```
-
-**Biblioteca:** `engine.ImportPath(ctx, insulavm.ImportRequest{...})` aceita `OnProgress func(insulavm.ImportProgress)` e `Output io.Writer`. Cada estágio (`connecting`, `validating`, `compressing`, `uploading`, `verifying`, `extracting`, `completed` ou `failed`) pode ser exibido pela aplicação consumidora em tempo real.
-
-Também pode usar `imports:` no `insula.yaml` para transferir arquivos **antes dos jobs**, inclusive quando o InsulaVM cria uma VM temporária a partir do perfil:
+Defina **uma única pasta Linux dentro da VM** em [`config.yaml`](config.yaml). Todas as importações locais e os jobs sem `workspace` explícito usarão esse caminho em cada nova VM:
 
 ```yaml
-imports:
-  - source: /home/usuario/meu-projeto
-    destination: /tmp/meu-projeto
+guest:
+  destination: /tmp/insulavm/workspace
+ssh:
+  user: insula
 ```
 
-Em `Engine.Run`, os eventos são recebidos por `RunRequest.OnImportProgress` e os resultados por `RunResult.Imports`. Consulte [ARQ-005 — Importação de arquivos](docs/arquitetura/ARQ-005-importacao-arquivos.md) para detalhes e limitações.
+O destino é criado no convidado pelo usuário SSH; não é uma pasta do hospedeiro. Se escolher um local protegido como `/opt`, prepare as permissões no perfil QCOW2 antes de executar.
+
+O usuário é opcional na Action (`insula.yaml`). Se não for informado, prevalece `ssh.user` do `config.yaml`, cujo padrão é `insula`:
+
+```yaml
+profile: debian-minimal
+repository:
+  name: meu-projeto
+action: testar
+# ssh:
+#   user: buildagent
+imports:
+  - source: /srv/meu-projeto
+  - source: /srv/configuracoes.ini
+pipelines:
+  - name: build
+    jobs:
+      - name: listar
+        commands:
+          - ls -la
+```
+
+Não existe `destination`, `key` ou senha nesse manifesto. Em VMs gerenciadas, o Cloud-Init cria o usuário escolhido e o InsulaVM gera, guarda e verifica as chaves automaticamente.
+
+Para uma VM já criada e registrada:
+
+```bash
+go run . vm import -config config.yaml -id UUIDv7 -source /srv/meu-projeto
+go run . vm import -config config.yaml -id UUIDv7 -source /srv/extra.ini
+```
+
+**Ambos os uploads usam a mesma pasta.** A biblioteca expõe `Engine.ImportToVM(ctx, VMImportRequest{VMID: ..., SourcePath: ...})`, sem destino nem chave na chamada. Os estágios podem ser acompanhados por `OnProgress`; uma Action usa `RunRequest.OnImportProgress`.
+
+Para hosts SSH externos não administrados pelo InsulaVM, o comando `insula import -host ... -source ...` utiliza `ssh.private_key` e `ssh.known_hosts` definidos no arquivo global. Nesse cenário não é possível criar automaticamente credenciais em uma máquina preexistente sem acesso de provisionamento.
+
+Veja [ARQ-005 — Importação de arquivos](docs/arquitetura/ARQ-005-importacao-arquivos.md).
 
 ## Uso
 
-Requisitos de desenvolvimento: Go 1.23+. Para criar VMs: Linux com KVM/QEMU, `virsh`, `qemu-img`, rede Libvirt com DHCP, acesso ao hipervisor e permissões apropriadas para as imagens. Para jobs SSH: conta remota, chave privada e arquivo `known_hosts` confiável.
+Requisitos de desenvolvimento: Go 1.23+. Para criar VMs: Linux com KVM/QEMU, `virsh`, `qemu-img`, rede Libvirt com DHCP, acesso ao hipervisor e permissões apropriadas para as imagens. Para VMs gerenciadas: Cloud-Init e OpenSSH já instalados no convidado. Chaves são geradas automaticamente; em hosts SSH externos, é necessário cadastrar chave privada e `known_hosts` na configuração global.
 
 ```bash
 # Validar config.yaml
@@ -111,20 +129,12 @@ go run . profile show -config config.yaml -name debian-minimal
 # Configurar os comandos do manifesto, sem esquecer "profile: debian-minimal"
 cp insula.yaml.example insula.yaml
 
-# Execução a partir de perfil: inicia VM temporária e remove o overlay ao final
-go run . run -config config.yaml -manifest insula.yaml \
-  -user insula \
-  -key /home/usuario/.ssh/id_ed25519 \
-  -known-hosts /home/usuario/.ssh/known_hosts
-
-# Teste contra VM já iniciada (não cria VM/overlay):
-go run . run -config config.yaml -manifest insula.yaml \
-  -host 192.0.2.10:22 -user insula \
-  -key /home/usuario/.ssh/id_ed25519 \
-  -known-hosts /home/usuario/.ssh/known_hosts
+# A imagem já precisa possuir Linux + Cloud-Init + SSH.
+# Não precisa informar usuário, chave SSH ou pasta de destino.
+go run . run -config config.yaml -manifest insula.yaml
 ```
 
-Os caminhos SSH e IP são ilustrativos e precisam ser substituídos. No modo de VM automática, a imagem precisa ter SSH configurado e o host deve verificar a identidade do servidor por `known_hosts`. O processo Libvirt deve conseguir acessar os diretórios QCOW2; ACLs/grupos são responsabilidade da instalação.
+No modo de VM automática, o InsulaVM gerencia as chaves SSH e verifica a identidade do servidor por `known_hosts` específico da instância. O processo Libvirt deve conseguir acessar os diretórios QCOW2; ACLs/grupos são responsabilidade da instalação.
 
 ## Logs e testes
 
