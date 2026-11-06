@@ -268,9 +268,12 @@ func(i *Instance)Cleanup(ctx context.Context)error{
  if ctx==nil{return errors.New("context is required")}
  if i.active{
   if out,err:=virsh(ctx,i.uri,"destroy",i.Name);err!=nil{
-   output,checkErr:=virsh(ctx,i.uri,"dominfo",i.Name)
-   if checkErr==nil||!strings.Contains(strings.ToLower(string(output)),"not found"){
-    return fmt.Errorf("cannot confirm VM stopped; refusing to remove disk: %w: %s",err,strings.TrimSpace(string(out)))
+   // A transient VM may have already vanished before cleanup. Check its
+   // Libvirt UUID rather than relying on localized error text.
+   infos,checkErr:=InspectRegistered(ctx,i.uri,[]registry.Entry{{LibvirtUUID:i.LibvirtUUID,Status:"running"}})
+   if checkErr!=nil{return fmt.Errorf("cannot verify domain stopped; refusing to remove disk: %w; destroy: %v: %s",checkErr,err,strings.TrimSpace(string(out)))}
+   if len(infos)!=1||infos[0].LibvirtState!="absent"{
+    return fmt.Errorf("cannot confirm domain stopped; refusing to remove disk: destroy: %w: %s; actual Libvirt state: %s",err,strings.TrimSpace(string(out)),infos[0].LibvirtState)
    }
   }
   i.active=false
@@ -295,7 +298,18 @@ func StopByID(ctx context.Context,c *config.Config,id string)error{
  entry,err:=store.Get(ctx,id)
  _=store.Close()
  if err!=nil{return err}
- if entry.Status=="destroyed"{return nil}
+ // Query the actual hypervisor state before deleting anything. A stale
+ // SQLite record is NOT evidence of a running VM; a Libvirt failure is NOT
+ // evidence of an absent VM.
+ live,err:=InspectRegistered(ctx,c.Virtualization.LibvirtURI,[]registry.Entry{entry})
+ if err!=nil{return err}
+ if live[0].LibvirtState=="unknown"{
+  return fmt.Errorf("cannot safely stop VM %s: Libvirt state unknown: %s",id,live[0].Warning)
+ }
+ if entry.Status=="destroyed"{
+  if live[0].LibvirtState=="absent"{return nil}
+  return fmt.Errorf("VM %s is marked destroyed in SQLite but still exists in Libvirt (%s); refusing to silently ignore it",id,live[0].LibvirtState)
+ }
  if entry.Status!="running"&&entry.Status!="creating"&&entry.Status!="failed"{
   return fmt.Errorf("unsupported VM status %q",entry.Status)
  }
@@ -308,8 +322,8 @@ func StopByID(ctx context.Context,c *config.Config,id string)error{
   return errors.New("unsafe registered VM directory")
  }
  instance:=&Instance{
-  ID:id,Name:entry.Name,Directory:path,uri:c.Virtualization.LibvirtURI,
-  registryPath:c.Storage.Database,active:true,
+  ID:id,LibvirtUUID:entry.LibvirtUUID,Name:entry.Name,Directory:path,uri:c.Virtualization.LibvirtURI,
+  registryPath:c.Storage.Database,active:live[0].LibvirtState!="absent",
  }
  return instance.Cleanup(ctx)
 }
