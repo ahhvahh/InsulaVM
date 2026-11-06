@@ -1,7 +1,6 @@
 package main
 
 import (
- "errors"
  "os"
  "path/filepath"
  "strings"
@@ -60,6 +59,3 @@ func sshCommandForCLI(key,knownHosts,user,host string)string{
   " "+shellQuote(user+"@"+host)
 }
 
-var _ error = localErrorForCLI{}
-var _ interface{Unwrap()error} = localErrorForCLI{}
-var _ = errors.Is
