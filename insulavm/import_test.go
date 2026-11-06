@@ -126,6 +126,7 @@ func TestImportToVMByID(t *testing.T){
  store,err:=registry.Open(engine.config.Storage.Database)
  if err!=nil{t.Fatal(err)}
  id:="019a5d11-1234-7123-8123-123456789abc"
+ fakeRunningLibvirt(t,id)
  entry:=registry.Entry{
   ID:id,LibvirtUUID:id,Name:"insula-importer",Profile:"test",IP:addr,
   MAC:"52:54:00:ff:00:00",SSHPort:port,SSHUser:"test",
