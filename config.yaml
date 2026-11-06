@@ -1,0 +1,19 @@
+# Global InsulaVM settings. Paths are resolved relative to this file.
+# Created on demand: ./data/profiles, ./data/runs and ./data/logs
+storage:
+  root: ./data
+  profiles: profiles
+  runs: runs
+  logs: logs
+
+virtualization:
+  provider: kvm
+  libvirt_uri: qemu:///system
+  network: default
+  default_disk_gb: 8
+
+# Configure real SSH keys and known_hosts before running Actions.
+# Passwords and private-key contents must NEVER be stored in YAML.
+ssh:
+  user: insula
+  connect_timeout_seconds: 60
