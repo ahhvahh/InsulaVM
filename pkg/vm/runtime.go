@@ -110,7 +110,7 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
  insertErr:=store.Insert(ctx,registry.Entry{
   ID:id,LibvirtUUID:id,Name:instance.Name,Profile:p.Name,MAC:instance.MACAddress,
   HostFingerprint:instance.SSHHostFingerprint,SudoMode:instance.SudoMode,
-  SSHUser:instance.SSHUser,PrivateKeyPath:instance.SSHPrivateKeyPath,
+  SSHUser:instance.SSHUser,SSHPort:22,PrivateKeyPath:instance.SSHPrivateKeyPath,
   KnownHostsPath:instance.SSHKnownHostsPath,InstanceDir:dir,
  })
  _=store.Close()
