@@ -63,13 +63,17 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(*Instance,er
 // state during boot. A VM is returned only after SSH (and sudo, if enabled)
 // is ready and the SQLite record was updated.
 func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,onProgress func(Progress))(instance *Instance,runErr error){
+ var progressID string
  emit:=func(stage,message string){
   if onProgress==nil{return}
-  event:=Progress{Stage:stage,Message:message,At:time.Now()}
+  event:=Progress{Stage:stage,Message:message,ID:progressID,At:time.Now()}
   if p!=nil{event.Name=p.Name}
   if instance!=nil{event.ID=instance.ID}
   onProgress(event)
  }
+ defer func(){
+  if runErr!=nil{emit("failed","Falha na inicializacao: "+runErr.Error())}
+ }()
  if ctx==nil||c==nil||p==nil{return nil,errors.New("context, config and profile are required")}
  emit("profile","Verificando imagem-base QCOW2 do perfil "+p.Name)
  image,err:=p.ImagePath()
@@ -97,7 +101,6 @@ func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,o
  success:=false
  defer func(){
   if success{return}
-  if runErr!=nil{emit("failed","Falha: "+runErr.Error())}
   emit("cleaning","Limpando recursos da inicializacao malsucedida")
   cleanupCtx,cancel:=context.WithTimeout(context.Background(),25*time.Second)
   defer cancel()
@@ -114,6 +117,7 @@ func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,o
  id,err:=identity.UUIDv7()
  if err!=nil{return nil,err}
  instance.ID=id
+ progressID=id
  instance.LibvirtUUID=id
  instance.SSHUser=c.SSH.User
  if p.SSH.User!=""{instance.SSHUser=p.SSH.User}
