@@ -27,6 +27,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n scripts/repositorio-vm.sh
+          bash scripts/tests/test-enviar-executar-vm.sh
           tmp="$(mktemp -d)"
           trap 'rm -rf -- "$tmp"' EXIT
           mkdir -p "$tmp/sample-repo" "$tmp/output"
