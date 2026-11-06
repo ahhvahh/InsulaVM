@@ -1,0 +1,11 @@
+# Example metadata only. This profile cannot run until an installed
+# QCOW2 image is registered under the configured profiles directory.
+name: debian-minimal
+os: debian
+memory_mib: 1024
+vcpus: 1
+disk_gb: 8
+version: v001
+image: versions/v001/base.qcow2
+ssh:
+  user: insula
