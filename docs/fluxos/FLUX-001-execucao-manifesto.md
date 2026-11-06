@@ -63,7 +63,7 @@ sequenceDiagram
         S-->>C: Status de saída
     end
     loop Cada job da pipeline em ordem
-        C->>S: Executa em /app/repo-workspace
+        C->>S: Executa em guest.destination (config global)
         S->>D: Inicia processo
         D-->>S: stdout e stderr em stream
         S-->>O: Linha prefixada
@@ -84,9 +84,9 @@ O diagrama acima representa **sucesso**. Em caso de erro, timeout ou cancelament
 3. **Criar disco de trabalho:** reservar `runs/<run-id>/` e criar overlay QCOW2 com backing file e formato explícitos, sem copiar completamente a imagem-base. Gerar nome da instância, MAC e identificadores próprios.
 4. **Provisionar instância:** gerar automaticamente metadados Cloud-Init NoCloud para o convidado preparado, com UUIDv7, chaves SSH específicas e política sudo. Limpar identidades clonadas com método seguro conforme [ARQ-002](../arquitetura/ARQ-002-perfis-vm.md). Criar domínio Libvirt usando o disco overlay e iniciar pelo sistema já instalado, **sem boot pela ISO de instalação**.
 5. **Aguardar prontidão:** descobrir IP interno, validar host key SSH usando fonte confiável, conectar e aguardar a conclusão do bootstrap necessário com limite de tempo.
-6. **Obter repositório:** clonar revisão remota especificada ou receber projeto local por canal autenticado e preparar a pasta de trabalho proposta `/app/repo-workspace`. Repositórios privados não devem expor tokens em logs, ISO ou arquivos da VM.
+6. **Preparar destino:** criar `guest.destination` da configuração global via SSH, como usuário comum; importar fontes `imports[].source` do hospedeiro via TAR.GZ se configuradas. Checkout Git remoto ainda é proposto. Repositórios privados não devem expor tokens em logs, ISO ou arquivos da VM.
 7. **Executar `setup`:** executar comandos sequenciais antes dos jobs; permissões, contexto do diretório e privilégios são decisões a registrar no futuro contrato.
-8. **Executar pipelines:** uma sessão SSH por comando/job, com diretório contextualizado como `cd /app/repo-workspace && <comando>`; usar `StdoutPipe()` e `StderrPipe()` antes de `Start()`, leitores concorrentes com buffer ajustável, streaming de linhas prefixadas (`[run-tests]`) enquanto processo executa e `Wait()` para obter retorno. Proteger concatenação do caminho.
+8. **Executar pipelines:** uma sessão SSH por comando/job, com diretório contextualizado como `cd <guest.destination> && <comando>` (salvo `workspace` legado explicitamente definido); usar `StdoutPipe()` e `StderrPipe()` antes de `Start()`, leitores concorrentes com buffer ajustável, streaming de linhas prefixadas (`[run-tests]`) enquanto processo executa e `Wait()` para obter retorno. Proteger concatenação do caminho.
 9. **Consolidar resultado:** informar etapa/job, status do processo e causa da falha. Conteúdo em stderr isoladamente não caracteriza falha; não há ordem total garantida entre stdout e stderr.
 10. **Finalizar sempre:** fechar sessões/SSH, encerrar VM, remover domínio, disco overlay e ISO de bootstrap temporária; **nunca apagar nem alterar a imagem-base ou os metadados do perfil**. Reportar falhas de limpeza sem suprimir o erro principal.
 
