@@ -4,6 +4,9 @@ import (
  "bytes"
  "context"
  "os"
+ "net"
+ "strconv"
+ "github.com/ahhvahh/InsulaVM/pkg/registry"
  "path/filepath"
  "strings"
  "testing"
@@ -108,4 +111,39 @@ func TestImportPathReportsFailure(t *testing.T){
  if len(events)==0||events[len(events)-1].Stage!="failed"{
   t.Fatalf("expected failed callback, got: %v",events)
  }
+}
+
+func TestImportToVMByID(t *testing.T){
+ host,key,hosts:=runTestSSHServer(t)
+ engine:=testEngine(t,"")
+ ctx:=context.Background()
+ addr,portText,err:=net.SplitHostPort(host)
+ if err!=nil{t.Fatal(err)}
+ port,err:=strconv.Atoi(portText)
+ if err!=nil{t.Fatal(err)}
+ store,err:=registry.Open(engine.config.Storage.Database)
+ if err!=nil{t.Fatal(err)}
+ id:="019a5d11-1234-7123-8123-123456789abc"
+ entry:=registry.Entry{
+  ID:id,LibvirtUUID:id,Name:"insula-importer",Profile:"test",IP:addr,
+  MAC:"52:54:00:ff:00:00",SSHPort:port,SSHUser:"test",
+  PrivateKeyPath:key,KnownHostsPath:hosts,InstanceDir:t.TempDir(),
+ }
+ if err:=store.Insert(ctx,entry);err!=nil{t.Fatal(err)}
+ if err:=store.SetRunning(ctx,id,addr);err!=nil{t.Fatal(err)}
+ _=store.Close()
+ source:=filepath.Join(t.TempDir(),"uploaded.txt")
+ if err:=os.WriteFile(source,[]byte("transferred by VM ID"),0600);err!=nil{t.Fatal(err)}
+ dest:=filepath.Join(t.TempDir(),"guest")
+ var stages []string
+ result,err:=engine.ImportToVM(ctx,VMImportRequest{
+  VMID:id,SourcePath:source,DestinationPath:dest,
+  OnProgress:func(p ImportProgress){stages=append(stages,p.Stage)},
+ })
+ if err!=nil{t.Fatal(err)}
+ if !result.Imported||len(stages)==0||stages[len(stages)-1]!="completed"{
+  t.Fatalf("missing VM import completion: %+v %v",result,stages)
+ }
+ data,err:=os.ReadFile(filepath.Join(dest,"uploaded.txt"))
+ if err!=nil||string(data)!="transferred by VM ID"{t.Fatalf("bad remote contents %q, %v",data,err)}
 }
