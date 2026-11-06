@@ -15,6 +15,7 @@ import (
 
 // ImportRequest identifies a file or directory on the HOST and the absolute
 // destination directory INSIDE an already running Linux guest.
+// DestinationPath is optional; guest.destination in global config is used by default.
 type ImportRequest struct {
  SourcePath string
  DestinationPath string
@@ -55,6 +56,9 @@ type ImportResult struct {
 // path; the caller may cancel using ctx. When using Engine.StartVM, pass the
 // Instance.Address from that VM as request.Host, then Cleanup the instance.
 func(e *Engine)ImportPath(ctx context.Context,request ImportRequest)(result *ImportResult,runErr error){
+ if request.DestinationPath=="" {
+  request.DestinationPath=e.config.Guest.Destination
+ }
  reporter:=importReporter{out:request.Output,callback:request.OnProgress,source:request.SourcePath,destination:request.DestinationPath}
  defer func(){
   if runErr!=nil{reporter.send("failed","Falha na importacao: "+runErr.Error(),0,0,0)}
