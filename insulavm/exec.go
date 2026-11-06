@@ -46,7 +46,7 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  }
  if vm.IP==""{return nil,errors.New("VM has no registered IP")}
  workspace:=req.Workspace
- if workspace==""{workspace="/tmp"}
+ if workspace==""{workspace=e.config.Guest.Destination}
  if !strings.HasPrefix(workspace,"/")||strings.ContainsAny(workspace,"\x00\r\n"){
   return nil,errors.New("workspace must be an absolute guest path")
  }
