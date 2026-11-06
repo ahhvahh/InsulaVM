@@ -31,3 +31,9 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Generated InsulaVM disks, runtime state and logs
+/data/
+*.qcow2
+*.iso
+*.img
