@@ -34,7 +34,6 @@ type Pipeline struct {
 // Source may be absolute or relative to the host process working directory.
 type ImportSpec struct {
  Source string `yaml:"source"`
- Destination string `yaml:"destination"`
 }
 
 // SSHOptions chooses a provisioned, non-root account for this Action.
@@ -126,10 +125,6 @@ func (m *Manifest) Validate() error {
 	for i, item := range m.Imports {
 		if strings.TrimSpace(item.Source)=="" || strings.ContainsAny(item.Source,string([]byte{0,10,13})){
 			return fmt.Errorf("imports[%d].source must be a local file or directory path",i)
-		}
-		if item.Destination!="" && (!path.IsAbs(item.Destination) || item.Destination=="/" ||
-			strings.ContainsAny(item.Destination,string([]byte{0,10,13}))) {
-			return fmt.Errorf("imports[%d].destination must be an absolute guest directory other than /",i)
 		}
 	}
 	used := make(map[string]bool)
