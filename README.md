@@ -1,67 +1,76 @@
 # InsulaVM
 
-O **InsulaVM** é uma ferramenta open-source de automação CLI em **Go** para executar scripts e pipelines em VMs **Debian Linux** isoladas.
+CLI open-source em **Go** para executar jobs sequenciais por SSH dentro de máquinas virtuais Linux, com logs persistentes no hospedeiro.
 
-**Estado atual:** o executor SSH sequencial, a leitura de `insula.yaml` e a persistência física de logs por job estão implementados. **Ainda não estão implementados** o provisionamento KVM/Libvirt, criação de perfis QCOW2 e transferência/clonagem do repositório. Nesta etapa, a VM já deve estar ligada e conter o diretório de trabalho.
+**Implementado:** `config.yaml` global, catálogo de `profile.yaml`, registro de imagens QCOW2 já instaladas, seleção por `insula.yaml`, overlay QCOW2 descartável com QEMU/Libvirt e executor SSH sequencial com logs `>>`/`<<`.
 
-## Funcionalidades disponíveis
+**Ainda não implementado:** instalação de Debian/Arch a partir de ISO, criação interativa de perfil por console, Cloud-Init automático por instância e transferência do repositório. A imagem registrada precisa iniciar com DHCP e SSH; o diretório `workspace` deve existir no convidado.
 
-- Interpretação de `repository.name`, `action`, `workspace`, `setup` e `pipelines[].jobs[]` em `insula.yaml`.
-- Conexão SSH autenticada por chave privada e verificação obrigatória de `known_hosts`.
-- Execução estritamente sequencial: só inicia o comando seguinte após o término e verificação do código de saída do anterior.
-- Streaming simultâneo de stdout/stderr para terminal hospedeiro e arquivo físico.
-- Um arquivo por job, com `>> ` para comandos e `<< ` para linhas recebidas.
-- Controle de `allow_failure`, timeout por comando, limpeza de sessões e logs persistidos com escrita buffered.
+## Arquivos de configuração
 
-Os logs ficam em:
+- [`config.yaml`](config.yaml): diretórios dos perfis, execução e logs, Libvirt e padrões SSH.
+- `data/profiles/<nome>/profile.yaml`: recursos da VM, versão e caminho para `versions/v001/base.qcow2`.
+- [`insula.yaml.example`](insula.yaml.example): escolhe `profile` e descreve `setup` e `pipelines`.
 
-```text
-<logs-root>/<repositorio>/<action-ou-pipeline>/<YYYYMMDD_HHMMSS>/<job>.log
-```
+Exemplos de perfis (somente metadados; **sem discos instalados**):
+[Debian](examples/profiles/debian-minimal/profile.yaml),
+[Arch Linux](examples/profiles/arch-minimal/profile.yaml),
+[Alpine](examples/profiles/alpine-minimal/profile.yaml),
+[Void](examples/profiles/void-minimal/profile.yaml).
 
-## Executar contra VM Debian existente
+## Uso
 
-Pré-requisitos: Go 1.23+, VM acessível por SSH com chave válida em `known_hosts`, shell POSIX e projeto já existente dentro do `workspace` especificado no manifesto.
+Requisitos de desenvolvimento: Go 1.23+. Para criar VMs: Linux com KVM/QEMU, `virsh`, `qemu-img`, rede Libvirt com DHCP, acesso ao hipervisor e permissões apropriadas para as imagens. Para jobs SSH: conta remota, chave privada e arquivo `known_hosts` confiável.
 
 ```bash
+# Validar config.yaml
+go run . config check -config config.yaml
+
+# Uma vez, após instalar o Debian em um QCOW2 por outro procedimento:
+go run . profile register -config config.yaml \
+  -name debian-minimal \
+  -image /tmp/debian-instalado.qcow2 \
+  -memory-mib 1024 -vcpus 1 -disk-gb 8 -os debian
+
+go run . profile list -config config.yaml
+go run . profile show -config config.yaml -name debian-minimal
+
+# Configurar os comandos do manifesto, sem esquecer "profile: debian-minimal"
 cp insula.yaml.example insula.yaml
-# Ajuste os comandos no manifesto para a aplicação presente na VM.
-go mod download
-go run . \
-  -manifest insula.yaml \
-  -logs-root /var/lib/insulavm/logs \
-  -host 192.0.2.10:22 \
+
+# Execução a partir de perfil: inicia VM temporária e remove o overlay ao final
+go run . run -config config.yaml -manifest insula.yaml \
   -user insula \
-  -key ~/.ssh/id_ed25519 \
-  -known-hosts ~/.ssh/known_hosts \
-  -command-timeout 30m
+  -key /home/usuario/.ssh/id_ed25519 \
+  -known-hosts /home/usuario/.ssh/known_hosts
+
+# Teste contra VM já iniciada (não cria VM/overlay):
+go run . run -config config.yaml -manifest insula.yaml \
+  -host 192.0.2.10:22 -user insula \
+  -key /home/usuario/.ssh/id_ed25519 \
+  -known-hosts /home/usuario/.ssh/known_hosts
 ```
 
-`192.0.2.10` é endereço fictício. `INSULA_LOG_ROOT` também pode fornecer a raiz dos logs.
+Os caminhos SSH e IP são ilustrativos e precisam ser substituídos. No modo de VM automática, a imagem precisa ter SSH configurado e o host deve verificar a identidade do servidor por `known_hosts`. O processo Libvirt deve conseguir acessar os diretórios QCOW2; ACLs/grupos são responsabilidade da instalação.
 
-**Segurança:** os comandos e saídas são armazenados literalmente nos arquivos; nunca envie senhas/tokens embutidos nos comandos de um manifesto. Não há mascaramento automático nem rotação de logs neste ciclo.
+## Logs e testes
 
-## Testes
+```text
+data/logs/<repositorio>/<action-ou-pipeline>/<YYYYMMDD_HHMMSS>/<job>.log
+```
+
+Cada comando enviado é registrado com `>>`; stdout e stderr do convidado são salvos por linha com `<<`. O próximo comando só executa após a conclusão real do anterior. Os logs permanecem mesmo quando a instância temporária é descartada.
 
 ```bash
 go test -race ./...
 go vet ./...
 ```
 
-## Arquitetura planejada
-
-1. Criar perfil: informar nome, RAM (MiB), vCPUs e ISO Debian local; instalar e ajustar o sistema.
-2. Salvar perfil: guardar imagem QCOW2 imutável no diretório configurado.
-3. Iniciar Action: gerar overlay QCOW2 descartável a partir do perfil e iniciar VM via KVM/QEMU e Libvirt.
-4. Materializar projeto local/remoto e executar `setup` e pipelines usando o executor SSH já existente.
-5. Preservar logs e descartar instância temporária sem modificar o perfil.
-
 ## Documentação
 
-- [Índice geral](docs/README.md)
-- [ARQ-001 — Arquitetura do motor](docs/arquitetura/ARQ-001-motor-insulavm.md)
-- [ARQ-002 — Perfis QCOW2](docs/arquitetura/ARQ-002-perfis-vm.md)
-- [FLUX-001 — Action completa, proposta](docs/fluxos/FLUX-001-execucao-manifesto.md)
-- [FLUX-002 — Criação de perfil, proposta](docs/fluxos/FLUX-002-criacao-perfil-vm.md)
-- [FLUX-003 — Execução sequencial e logs, implementado](docs/fluxos/FLUX-003-execucao-sequencial-logs.md)
-- [INTF-TERM-002 — Execução pelo terminal](docs/interfaces/terminal/INTF-TERM-002-executar-manifesto.md)
+- [Índice](docs/README.md)
+- [ARQ-002 — Perfis e QCOW2](docs/arquitetura/ARQ-002-perfis-vm.md)
+- [ARQ-003 — Configuração e catálogo](docs/arquitetura/ARQ-003-configuracao-perfis.md)
+- [FLUX-001 — Execução de Action](docs/fluxos/FLUX-001-execucao-manifesto.md)
+- [FLUX-003 — SSH sequencial e logs](docs/fluxos/FLUX-003-execucao-sequencial-logs.md)
+- [INTF-TERM-003 — Comandos de configuração e perfis](docs/interfaces/terminal/INTF-TERM-003-configuracao-perfis.md)
