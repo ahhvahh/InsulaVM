@@ -17,22 +17,18 @@ func importCommand(args []string)error{
  configPath:=fs.String("config","config.yaml","global InsulaVM config")
  host:=fs.String("host","","already running guest SSH address (host:port)")
  source:=fs.String("source","","host file or directory to archive and transfer")
- destination:=fs.String("dest","","absolute directory inside guest to receive contents")
  user:=fs.String("user","","SSH account override")
- key:=fs.String("key","","SSH private key path override")
- knownHosts:=fs.String("known-hosts","","SSH known_hosts override")
  if err:=fs.Parse(args);err!=nil{return err}
  if fs.NArg()!=0{return errors.New("unexpected import arguments")}
- if *host==""||*source==""||*destination==""{
-  return errors.New("import requires -host, -source and -dest")
+ if *host==""||*source==""{
+  return errors.New("import requires -host and -source; destination comes from config.yaml guest.destination")
  }
  engine,err:=insulavm.New(*configPath)
  if err!=nil{return err}
  ctx,cancel:=signal.NotifyContext(context.Background(),os.Interrupt)
  defer cancel()
  result,err:=engine.ImportPath(ctx,insulavm.ImportRequest{
-  Host:*host,SourcePath:*source,DestinationPath:*destination,
-  User:*user,PrivateKey:*key,KnownHosts:*knownHosts,
+  Host:*host,SourcePath:*source,User:*user,
   Output:os.Stdout,
  })
  if err!=nil{return err}
