@@ -1,92 +1,103 @@
 <!-- A-BIOMA-DOC-STANDARD -->
 <!-- A-BIOMA-DOC-REVISADO -->
 
-# FLUX-001 — Execução de manifesto `insula.yaml`
+# FLUX-001 — Execução de Action com manifesto `insula.yaml`
 
 **Estado:** Proposto — não implementado.
 **Versão aprovada:** nenhuma.
-**Ponto de entrada:** invocação da futura CLI InsulaVM com um arquivo `insula.yaml`.
-**Detalhes de componentes:** [ARQ-001 — Arquitetura do motor](../arquitetura/ARQ-001-motor-insulavm.md).
+**Ponto de entrada:** futura CLI com `insula.yaml` referenciando perfil de VM publicado.
+**Arquitetura do motor:** [ARQ-001](../arquitetura/ARQ-001-motor-insulavm.md).
+**Perfis e overlays:** [ARQ-002](../arquitetura/ARQ-002-perfis-vm.md).
+**Criação de perfil:** [FLUX-002](FLUX-002-criacao-perfil-vm.md).
 
 ## Objetivo
 
-Executar etapas de preparação do Debian e pipelines sequenciais sobre uma cópia de um projeto, em VM isolada, com logs exibidos em tempo real no terminal hospedeiro. Cada execução deve finalizar com resultado explícito e limpeza de recursos efêmeros.
+Executar `setup` e pipelines/jobs em instância descartável derivada de um **perfil Debian previamente instalado e salvo**, com logs enviados continuamente ao hospedeiro. Conservar a imagem-base, remover o disco de escrita da Action ao final e apresentar sucesso, erro ou cancelamento.
 
-## Entrada e pré-condições
+## Pré-condições
 
-- Um manifesto YAML legível, contendo conceitualmente a origem do projeto (local ou remota), configuração da VM, comandos de `setup` e sequência de pipelines/jobs. **Os nomes e tipos finais dos campos ainda não são contrato aprovado.**
-- Hospedeiro Linux com capacidade KVM/QEMU/Libvirt e imagem Debian preparada para Cloud-Init.
-- Permissões para provisionar VM e rede; armazenamento suficiente; conectividade para obter origem remota quando necessário.
-- A VM deve ser provisionada a partir de uma imagem limpa, não reaproveitando alterações da execução anterior.
+- Manifesto YAML legível que seleciona perfil e, conceitualmente, origem local/remota do projeto, `setup` e jobs. **Nomes e tipos finais do YAML ainda não foram definidos**.
+- Perfil publicado e validado conforme [FLUX-002](FLUX-002-criacao-perfil-vm.md), com versão de imagem QCOW2 imutável.
+- Capacidade do host KVM/QEMU/Libvirt, permissões de rede e disco para overlay; recursos conforme perfil.
+- O perfil precisa oferecer **bootstrap remoto confiável** (preferencialmente Cloud-Init instalado e preparado no sistema convidado) para identidade, rede e autenticação SSH. Apenas ter sido instalado pela ISO Debian não garante isso.
+- Nenhuma execução anterior deve ter modificado a imagem-base; cada Action recebe overlay novo.
 
-## Diagrama de sequência
+## Sequência de execução
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor O as Operador
     participant C as InsulaVM CLI
+    participant P as Armazenamento de perfis
     participant V as Libvirt / QEMU
-    participant D as Debian / Cloud-Init
+    participant D as Debian convidado
     participant S as Executor SSH
-    O->>C: Solicita execução com insula.yaml
-    C->>C: Valida manifesto e prepara recursos efêmeros
-    C->>V: Define VM (XML, disco e ISO NoCloud)
-    V->>D: Primeiro boot
-    D->>D: Configura rede, usuário e SSH
-    C->>V: Obtém IP da VM
+    O->>C: Executa Action com insula.yaml
+    C->>C: Valida manifesto e perfil
+    C->>P: Obtém versão imutável base.qcow2
+    C->>P: Cria overlay QCOW2 da Action
+    C->>V: Define VM com overlay e rede
+    V->>D: Inicializa Debian já instalado
+    opt Cloud-Init instalado e configurado
+        C->>D: Fornece identidade e chave pública únicas
+        D->>D: Configura instância
+    end
+    C->>V: Descobre IP interno
     C->>S: Aguarda SSH e valida host key
-    S->>D: Conecta com chave efêmera
+    S->>D: Autentica com credencial efêmera
     alt Origem remota
-        C->>S: Solicita checkout da revisão selecionada
+        C->>S: Obtém revisão do repositório
     else Origem local
-        C->>S: Transfere projeto e extrai no workspace
+        C->>S: Transfere e extrai pacote do projeto
     end
-    loop Cada comando do setup
-        C->>S: Executa etapa de preparação
-        S->>D: Inicia comando
-        D-->>S: stdout e stderr (stream)
-        S-->>O: Linhas prefixadas
-        S-->>C: Código de saída
+    loop Cada etapa de setup em ordem
+        C->>S: Executa comando
+        S->>D: Inicia processo
+        D-->>S: stdout e stderr em stream
+        S-->>O: Linha prefixada
+        S-->>C: Status de saída
     end
-    loop Cada job, na ordem da pipeline
+    loop Cada job da pipeline em ordem
         C->>S: Executa em /app/repo-workspace
-        S->>D: Inicia comando
-        D-->>S: stdout e stderr (stream)
-        S-->>O: Linhas prefixadas
-        S-->>C: Código de saída
+        S->>D: Inicia processo
+        D-->>S: stdout e stderr em stream
+        S-->>O: Linha prefixada
+        S-->>C: Status de saída
     end
-    C->>S: Encerra sessão
-    C->>V: Para/remove domínio e arquivos efêmeros
-    C-->>O: Resultado consolidado da execução
+    C->>S: Encerra conexão
+    C->>V: Desliga e remove domínio temporário
+    C->>P: Remove overlay e arquivos transitórios
+    C-->>O: Resultado da Action
 ```
 
-**Nota:** o diagrama mostra o caminho de sucesso. Falhas e cancelamentos saltam para a fase de finalização e limpeza, conforme abaixo.
+O diagrama acima representa **sucesso**. Em caso de erro, timeout ou cancelamento, os jobs seguintes não executam por padrão e o controle salta para a finalização.
 
-## Passos do fluxo
+## Etapas
 
-1. **Ler e validar:** analisar YAML, exigir origem compatível e verificar condições de VM e jobs. Rejeitar parâmetros inválidos antes de criar recursos.
-2. **Preparar execução:** identificar a execução; reservar diretório temporário; obter imagem-base; criar disco de trabalho limpo; gerar par de chaves SSH e ISO NoCloud contendo `user-data`, `meta-data` e opcional `network-config`.
-3. **Provisionar e iniciar:** gerar XML de domínio Libvirt, anexar disco e ISO como CD-ROM, conectar rede e iniciar VM Debian.
-4. **Aguardar prontidão:** descobrir IP interno, confirmar rede, SSH e conclusão da preparação necessária do Cloud-Init; aplicar tentativas e tempo limite.
-5. **Materializar projeto:** para origem remota, clonar/baixar revisão especificada; para origem local, transferir pacote do hospedeiro e extrair. Preparar diretório-base proposto `/app/repo-workspace`. Confirmar que há conteúdo acessível.
-6. **Executar `setup`:** processar comandos em ordem, antes de qualquer pipeline; cada comando retorna um status e emite stdout/stderr em fluxo. Permissões e diretório do setup serão definidos no contrato do manifesto.
-7. **Executar pipelines:** para cada job em ordem declarada, iniciar sessão SSH própria, aplicar diretório de trabalho na raiz do projeto (`cd /app/repo-workspace && <comando>`), ler stdout/stderr concorrentemente e aguardar status de término. Um job dependente só inicia após êxito do anterior, salvo política futura explícita.
-8. **Informar resultado:** exibir conclusão, job/etapa de falha, código de saída conhecido e resumo. Uma linha de log não equivale ao resultado do processo.
-9. **Finalizar sempre:** cancelar/fechar comandos e conexões ainda abertos, tentar encerramento gracioso da VM e, se necessário, destruição; remover domínio, discos efêmeros, ISO e chaves temporárias. Falhas na limpeza devem aparecer no resumo, sem ocultar a falha original.
+1. **Validar manifesto:** confirmar campos, referência do perfil, origem do projeto e jobs; rejeitar entradas inválidas antes de criar VM.
+2. **Resolver perfil:** localizar `profile.yaml`, imagem da versão selecionada, recursos de RAM e CPU; impedir remoção da versão em uso.
+3. **Criar disco de trabalho:** reservar `runs/<run-id>/` e criar overlay QCOW2 com backing file e formato explícitos, sem copiar completamente a imagem-base. Gerar nome da instância, MAC e identificadores próprios.
+4. **Provisionar instância:** preparar eventuais metadados Cloud-Init NoCloud para o convidado que efetivamente tenha Cloud-Init habilitado, com `instance-id` e credenciais efêmeras. Limpar identidades clonadas com método seguro conforme [ARQ-002](../arquitetura/ARQ-002-perfis-vm.md). Criar domínio Libvirt usando o disco overlay e iniciar pelo sistema já instalado, **sem boot pela ISO de instalação**.
+5. **Aguardar prontidão:** descobrir IP interno, validar host key SSH usando fonte confiável, conectar e aguardar a conclusão do bootstrap necessário com limite de tempo.
+6. **Obter repositório:** clonar revisão remota especificada ou receber projeto local por canal autenticado e preparar a pasta de trabalho proposta `/app/repo-workspace`. Repositórios privados não devem expor tokens em logs, ISO ou arquivos da VM.
+7. **Executar `setup`:** executar comandos sequenciais antes dos jobs; permissões, contexto do diretório e privilégios são decisões a registrar no futuro contrato.
+8. **Executar pipelines:** uma sessão SSH por comando/job, com diretório contextualizado como `cd /app/repo-workspace && <comando>`; usar `StdoutPipe()` e `StderrPipe()` antes de `Start()`, leitores concorrentes com buffer ajustável, streaming de linhas prefixadas (`[run-tests]`) enquanto processo executa e `Wait()` para obter retorno. Proteger concatenação do caminho.
+9. **Consolidar resultado:** informar etapa/job, status do processo e causa da falha. Conteúdo em stderr isoladamente não caracteriza falha; não há ordem total garantida entre stdout e stderr.
+10. **Finalizar sempre:** fechar sessões/SSH, encerrar VM, remover domínio, disco overlay e ISO de bootstrap temporária; **nunca apagar nem alterar a imagem-base ou os metadados do perfil**. Reportar falhas de limpeza sem suprimir o erro principal.
 
-## Eventos e saída observável
+## Resultados observáveis
 
-| Evento | Resultado observável proposto |
+| Evento | Saída planejada |
 | --- | --- |
-| Início de etapa/job | Identificador da etapa e execução em andamento |
-| Linha em stdout | Linha publicada imediatamente, com prefixo do job |
-| Linha em stderr | Linha publicada imediatamente, com prefixo do job e origem stderr distinguível no coletor |
-| Término de comando | Código/status de execução, independente de mensagens stderr |
-| Falha/cancelamento | Interromper jobs dependentes, registrar motivo e iniciar limpeza |
-| Término da execução | Resultado final e eventual falha de limpeza |
+| Início de uma etapa/job | Identificador e início da execução |
+| Linha em stdout | Linha emitida imediatamente com prefixo do job |
+| Linha em stderr | Linha emitida imediatamente com prefixo e identificação da origem no coletor |
+| Fim do comando | Código de retorno e status de sucesso/falha |
+| Erro ou cancelamento | Motivo, último job/etapa e início da limpeza |
+| Encerramento da Action | Resultado consolidado, incluindo eventual erro secundário de limpeza |
 
-Exemplo **ilustrativo**, não validado por implementação:
+Exemplo **apenas ilustrativo**:
 
 ```text
 [setup] Atualizando índices de pacotes...
@@ -94,30 +105,31 @@ Exemplo **ilustrativo**, não validado por implementação:
 [run-tests] 25 testes executados.
 ```
 
-Para streaming, a futura implementação deverá configurar `StdoutPipe()` e `StderrPipe()` antes de `Start()`, drenar ambos em paralelo com `Scanner` (buffer ajustável para linhas longas), publicar linhas enquanto o processo roda e consultar `Wait()` ao fim. `Output()` e `CombinedOutput()` não atendem ao requisito de streaming contínuo. A ordem relativa entre stdout e stderr não é garantida.
+Métodos como `Output()` e `CombinedOutput()` não cumprem o requisito de streaming durante a execução. Os leitores de stdout/stderr devem drenar os pipes de forma concorrente antes de `Wait()`, com limite de tamanho/tempo e política de cancelamento.
 
-## Exceções e tratamento
+## Falhas e exceções
 
-| Situação | Comportamento planejado |
+| Situação | Ação planejada |
 | --- | --- |
-| YAML inválido ou origem inacessível | Falhar com motivo claro; não iniciar jobs |
-| Host sem KVM/Libvirt ou imagem inválida | Abortar provisionamento e remover recursos já criados |
-| Falha Cloud-Init/IP/SSH/host key | Não executar comandos; encerrar VM e registrar etapa/causa |
-| Falha em clone/transferência | Não executar setup nem jobs |
-| `setup` retorna erro | Interromper pipelines dependentes e finalizar |
-| Job retorna status não zero | Interromper próximos jobs por padrão; política alternativa fica pendente |
-| Saída extensa, travamento ou timeout | Drenar ambos os fluxos sem bloquear; aplicar política de limite/cancelamento |
-| Interrupção pelo operador | Sinalizar cancelamento, interromper trabalho remoto e limpar recursos |
-| Falha na limpeza | Reportar erro secundário sem substituir o resultado principal |
+| YAML inválido ou perfil inexistente | Rejeitar sem subir VM |
+| Perfil corrompido/versão indisponível ou host sem recursos | Bloquear provisionamento |
+| Falha ao criar overlay ou domínio | Remover recursos parciais, preservar perfil |
+| Sem método seguro de bootstrap/SSH | Falhar antes de executar scripts |
+| Erro de Cloud-Init, IP ou host key | Bloquear jobs e encerrar instância |
+| Falha de clone ou transferência | Não executar `setup` nem pipeline |
+| `setup` retorna código não zero | Interromper jobs dependentes |
+| Job falha | Por padrão, interromper os próximos jobs |
+| Timeout, saída extensa ou cancelamento | Interromper trabalho remoto, drenar ou encerrar leitores e limpar |
+| Falha na limpeza | Registrar erro secundário, sem alterar perfil original |
 
-## Resultado e critérios para implementação futura
+## Critérios de aceite futuro
 
-- Uma execução produz resultado final com informação sobre o estágio e o job responsável.
-- Cada job usa a raiz do projeto; nenhum pipeline modifica a imagem-base compartilhada.
-- Linhas são exibidas antes do encerramento do comando, com stdout/stderr tratados separadamente.
-- Recursos transitórios não ficam órfãos após saída normal, erro ou cancelamento, salvo retenção explicitamente configurada.
-- Testar ao menos: origem local, origem remota, falha em setup, falha em job, saída longa, stderr, timeout, SSH indisponível e cancelamento.
+- Instância é iniciada de perfil previamente salvo, sem iniciar instalador Debian.
+- A imagem-base não recebe escritas; múltiplas Actions podem trabalhar com overlays independentes segundo limites de recursos do hospedeiro.
+- Jobs executam na raiz do projeto, em ordem, e publicam logs antes de terminar o comando.
+- Erro, interrupção ou cancelamento remove os dados temporários, sem remover o perfil.
+- Testes devem cobrir origem local/remota, setup e job com falha, stdout/stderr, timeout, SSH indisponível, cancelamento, concorrência e cleanup.
 
-## Pendências de contrato
+## Pendências
 
-O formato detalhado de `insula.yaml`, nomes dos subcomandos/flags CLI, códigos de saída da CLI, regras de concorrência e preservação de artefatos **não foram definidos neste ciclo**. Criar documentação de contratos e interface de terminal apenas quando essas decisões estiverem validadas.
+O schema oficial de `insula.yaml`, seleção/versão de perfil, nome e flags da CLI, códigos de saída e política de paralelismo ainda dependem de contrato. Também é necessário validar provisionamento de identidades únicas em perfis clonados, rede, host keys e políticas para retenção de artefatos.
