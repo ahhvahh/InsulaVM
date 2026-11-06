@@ -1,0 +1,305 @@
+// Package insulavm exposes the InsulaVM execution engine as a Go library.
+//
+// Import github.com/ahhvahh/InsulaVM/insulavm from another Go module.
+// The CLI is a separate consumer of this package. This API is experimental:
+// no stable v1 tag or backwards-compatibility promise has been published.
+//
+// An existing Linux guest must have SSH and the workspace configured.
+// Automatic VM creation requires a previously installed QCOW2 profile and
+// QEMU/Libvirt on the host. OS installation, Cloud-Init provisioning and
+// repository transfer are not implemented yet.
+package insulavm
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"time"
+
+	"github.com/ahhvahh/InsulaVM/pkg/config"
+	"github.com/ahhvahh/InsulaVM/pkg/executor"
+	"github.com/ahhvahh/InsulaVM/pkg/manifest"
+	"github.com/ahhvahh/InsulaVM/pkg/profile"
+	"github.com/ahhvahh/InsulaVM/pkg/storage"
+	"github.com/ahhvahh/InsulaVM/pkg/vm"
+	"golang.org/x/crypto/ssh"
+)
+
+// Public aliases let consumers construct manifests without importing the
+// lower-level parser package. The underlying structures are shared.
+type Manifest = manifest.Manifest
+type Repository = manifest.Repository
+type Pipeline = manifest.Pipeline
+type Job = manifest.Job
+type Profile = profile.Profile
+
+// Engine holds immutable host configuration. Multiple Run calls may use the
+// same Engine concurrently; each run creates its own log directory and VM.
+type Engine struct {
+	config config.Config
+}
+
+// New reads a global config.yaml file without creating any VM or directory.
+func New(configPath string) (*Engine, error) {
+	cfg, err := config.ReadFile(configPath)
+	if err != nil {
+		return nil, err
+	}
+	return &Engine{config: *cfg}, nil
+}
+
+// Configuration returns a copy of the loaded global settings.
+func (e *Engine) Configuration() config.Config {
+	return e.config
+}
+
+// ListProfiles lists recognized profile directory names.
+func (e *Engine) ListProfiles() ([]string, error) {
+	return profile.List(e.config.Storage.Profiles)
+}
+
+// GetProfile loads metadata for a named profile without starting a VM.
+func (e *Engine) GetProfile(name string) (*Profile, error) {
+	return profile.Read(e.config.Storage.Profiles, name)
+}
+
+// RegisterProfile copies a fully installed QCOW2 image to the profile store.
+// It does not install an OS. Existing profile names are never overwritten.
+func (e *Engine) RegisterProfile(p Profile, sourceQCOW2 string) error {
+	if p.DiskGB == 0 {
+		p.DiskGB = e.config.Virtualization.DefaultDiskGB
+	}
+	return profile.Register(e.config.Storage.Profiles, p, sourceQCOW2)
+}
+
+// StartVM creates a disposable Libvirt domain from the named QCOW2 profile.
+// The caller MUST invoke instance.Cleanup(ctx) once finished, even on error.
+func (e *Engine) StartVM(ctx context.Context, name string) (*vm.Instance, error) {
+	if ctx == nil {
+		return nil, errors.New("context must not be nil")
+	}
+	p, err := e.GetProfile(name)
+	if err != nil {
+		return nil, err
+	}
+	if err := e.config.EnsureDirectories(); err != nil {
+		return nil, err
+	}
+	return vm.Start(ctx, &e.config, p)
+}
+
+// RunRequest selects the action to run and optionally overrides SSH settings.
+// Either ManifestPath or Manifest must be supplied, never both.
+type RunRequest struct {
+	ManifestPath string
+	Manifest     *Manifest
+	// Host connects to an existing VM and bypasses Libvirt startup.
+	Host string
+	User string
+	PrivateKey string
+	KnownHosts string
+	LogRoot string
+	CommandTimeout time.Duration
+	// Output receives streamed job lines; nil means no console output.
+	// Regardless of Output, jobs always write persistent files.
+	Output io.Writer
+}
+
+// RunResult records progress even if a job fails and Run returns an error.
+type RunResult struct {
+	Profile string
+	Host string
+	VMName string
+	LogDirectory string
+	CompletedJobs []string
+	StartedAt time.Time
+	FinishedAt time.Time
+}
+
+// Run executes setup and jobs sequentially. The configured profile is not
+// modified. Returning an error never implies that the log files are removed.
+// Cleanup errors are joined with the original error.
+func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult, runErr error) {
+	if ctx == nil {
+		return nil, errors.New("context must not be nil")
+	}
+	if (request.Manifest == nil) == (request.ManifestPath == "") {
+		return nil, errors.New("supply exactly one of Manifest or ManifestPath")
+	}
+	if request.CommandTimeout < 0 {
+		return nil, errors.New("command timeout cannot be negative")
+	}
+	var m *manifest.Manifest
+	if request.Manifest != nil {
+		m = request.Manifest
+		if err := m.Validate(); err != nil {
+			return nil, err
+		}
+	} else {
+		var err error
+		m, err = manifest.ReadFile(request.ManifestPath)
+		if err != nil {
+			return nil, err
+		}
+	}
+	result = &RunResult{
+		Profile: m.Profile,
+		StartedAt: time.Now(),
+		CompletedJobs: []string{},
+	}
+	defer func() {
+		result.FinishedAt = time.Now()
+	}()
+	if err := ctx.Err(); err != nil {
+		return result, err
+	}
+	if err := e.config.EnsureDirectories(); err != nil {
+		return result, err
+	}
+
+	var p *profile.Profile
+	if m.Profile != "" {
+		var err error
+		p, err = e.GetProfile(m.Profile)
+		if err != nil {
+			return result, fmt.Errorf("resolve profile %s: %w", m.Profile, err)
+		}
+	}
+	if p == nil && request.Host == "" {
+		return result, errors.New("no profile selected and no existing guest Host provided")
+	}
+	user, key, hosts := e.config.SSH.User, e.config.SSH.PrivateKey, e.config.SSH.KnownHosts
+	host := request.Host
+	if p != nil {
+		if host == "" {
+			host = p.SSH.Address
+		}
+		if p.SSH.User != "" {
+			user = p.SSH.User
+		}
+		if p.SSH.PrivateKey != "" {
+			key = p.SSH.PrivateKey
+		}
+		if p.SSH.KnownHosts != "" {
+			hosts = p.SSH.KnownHosts
+		}
+	}
+	if request.User != "" {
+		user = request.User
+	}
+	if request.PrivateKey != "" {
+		key = request.PrivateKey
+	}
+	if request.KnownHosts != "" {
+		hosts = request.KnownHosts
+	}
+	if user == "" || key == "" || hosts == "" {
+		return result, errors.New("SSH user, private key and known_hosts are required")
+	}
+	logRoot := e.config.Storage.Logs
+	if request.LogRoot != "" {
+		logRoot = request.LogRoot
+	}
+	logRun, err := storage.NewRun(logRoot, m.Repository.Name, m.GroupName(), time.Now())
+	if err != nil {
+		return result, err
+	}
+	result.LogDirectory = logRun.Directory
+
+	if host == "" {
+		// The VM overlay is private to this invocation. Other concurrent
+		// runs using the same read-only backing image get their own overlay.
+		instance, err := vm.Start(ctx, &e.config, p)
+		if err != nil {
+			return result, err
+		}
+		result.VMName = instance.Name
+		host = instance.Address
+		defer func() {
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			runErr = errors.Join(runErr, instance.Cleanup(cleanupCtx))
+		}()
+	}
+	result.Host = host
+	connectTimeout := time.Duration(e.config.SSH.ConnectTimeoutSeconds) * time.Second
+	client, err := dialWithRetry(ctx, executor.DialConfig{
+		Address: host,
+		User: user,
+		PrivateKeyPath: key,
+		KnownHostsPath: hosts,
+		Timeout: connectTimeout,
+	}, connectTimeout)
+	if err != nil {
+		return result, err
+	}
+	defer client.Close()
+
+	timeout := request.CommandTimeout
+	if timeout == 0 {
+		timeout = 30 * time.Minute
+	}
+	runner := &executor.Executor{
+		Client: client,
+		Workspace: m.Workspace,
+		Console: request.Output,
+		CommandTimeout: timeout,
+	}
+	runJob := func(name string, commands []string, allowFailure bool) error {
+		log, err := logRun.OpenJob(name)
+		if err != nil {
+			return err
+		}
+		jobErr := runner.Run(ctx, name, commands, allowFailure, log)
+		closeErr := log.Close()
+		if err := errors.Join(jobErr, closeErr); err != nil {
+			return err
+		}
+		result.CompletedJobs = append(result.CompletedJobs, name)
+		return nil
+	}
+	if len(m.Setup) > 0 {
+		if err := runJob("setup", m.Setup, false); err != nil {
+			return result, fmt.Errorf("setup: %w", err)
+		}
+	}
+	for _, pipeline := range m.Pipelines {
+		for _, job := range pipeline.Jobs {
+			if err := runJob(job.Name, job.Commands, job.AllowFailure); err != nil {
+				return result, fmt.Errorf("pipeline %s, job %s: %w", pipeline.Name, job.Name, err)
+			}
+		}
+	}
+	return result, nil
+}
+
+// dialWithRetry waits for sshd after a freshly created VM has obtained DHCP.
+// This connection step uses the existing SSH package; the caller's context
+// governs retries and the entire run, including cancellation.
+func dialWithRetry(ctx context.Context, c executor.DialConfig, wait time.Duration) (*ssh.Client, error) {
+	if wait <= 0 {
+		wait = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(ctx, wait)
+	defer cancel()
+	var last error
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("SSH unavailable: %w; last attempt: %v", err, last)
+		}
+		client, err := executor.Dial(c)
+		if err == nil {
+			return client, nil
+		}
+		last = err
+		timer := time.NewTimer(2 * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, fmt.Errorf("SSH unavailable: %w; last attempt: %v", ctx.Err(), last)
+		case <-timer.C:
+		}
+	}
+}
