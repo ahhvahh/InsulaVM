@@ -31,6 +31,8 @@ func run(args []string) error {
 			return configCommand(args[1:])
 		case "profile":
 			return profileCommand(args[1:])
+		case "vm":
+			return vmCommand(args[1:])
 		case "run":
 			return runAction(args[1:])
 		case "import":
@@ -39,6 +41,10 @@ func run(args []string) error {
 			fmt.Println("Usage: insula [run] -config config.yaml -manifest insula.yaml")
 			fmt.Println("       insula import -config config.yaml -host 192.0.2.10:22 -source /host/project -dest /tmp/project")
 			fmt.Println("       insula config check -config config.yaml")
+			fmt.Println("       insula vm start -config config.yaml -profile debian-minimal")
+			fmt.Println("       insula vm list -config config.yaml")
+			fmt.Println("       insula vm show -config config.yaml -id UUIDv7")
+			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7")
 			fmt.Println("       insula profile list -config config.yaml")
 			fmt.Println("       insula profile show -config config.yaml -name debian-go")
 			fmt.Println("       insula profile register -config config.yaml -name debian-go -image installed.qcow2 -memory-mib 1024 -vcpus 1 -disk-gb 8")
