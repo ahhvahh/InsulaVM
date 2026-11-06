@@ -5,6 +5,8 @@ storage:
   profiles: profiles
   runs: runs
   logs: logs
+  # SQLite shared by CLI and imported Go library; no credentials stored here.
+  database: insula.db
 
 virtualization:
   provider: kvm
@@ -14,6 +16,10 @@ virtualization:
 
 # Configure real SSH keys and known_hosts before running Actions.
 # Passwords and private-key contents must NEVER be stored in YAML.
+# Fresh per-VM SSH keys are generated automatically by Cloud-Init provisioning.
 ssh:
   user: insula
   connect_timeout_seconds: 60
+  # For trusted disposable VMs: sudo -n without a password.
+  # Set disabled to disallow sudo (preferred when executing untrusted code).
+  sudo_mode: passwordless
