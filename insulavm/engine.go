@@ -282,6 +282,10 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 		return result, err
 	}
 	defer client.Close()
+	// Every run prepares one shared destination even if no import was declared.
+	if err:=ensureGuestWorkspace(ctx,client,e.config.Guest.Destination);err!=nil{
+		return result,err
+	}
 
 	for _, item := range m.Imports {
 		destination := e.config.Guest.Destination
