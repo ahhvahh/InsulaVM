@@ -52,19 +52,21 @@ func TestRejectsUnsafePathAndBadCommands(t *testing.T) {
 }
 
 func TestImportsBeforeJobsSchema(t *testing.T) {
- src := "repository:\n  name: demo\naction: import\nworkspace: /tmp/work\nimports:\n  - source: ./project\n    destination: /tmp/work\n"
+ src:="repository:\n  name: demo\naction: import\nimports:\n  - source: ./project\n"
  m,err:=Decode(strings.NewReader(src))
  if err!=nil{t.Fatal(err)}
- if len(m.Imports)!=1||m.Imports[0].Destination!="/tmp/work"{t.Fatalf("imports: %+v",m.Imports)}
+ if len(m.Imports)!=1||m.Imports[0].Source!="./project"{
+  t.Fatalf("imports: %+v",m.Imports)
+ }
  for _,bad:=range []string{
-  strings.Replace(src,"/tmp/work\n","../relative\n",1),
-  strings.Replace(src,"destination: /tmp/work","destination: /",1),
   strings.Replace(src,"source: ./project","source: ''",1),
+  strings.Replace(src,"source: ./project","source: ./project\n    destination: /tmp/legacy",1),
  }{
-  if _,err:=Decode(strings.NewReader(bad));err==nil{t.Fatalf("accepted invalid import YAML: %s",bad)}
+  if _,err:=Decode(strings.NewReader(bad));err==nil{
+   t.Fatalf("accepted redundant or invalid import YAML: %s",bad)
+  }
  }
 }
-
 
 func TestActionDefaultsAndOptionalSSHUser(t *testing.T) {
  basic := `profile: debian-minimal
@@ -82,7 +84,7 @@ pipelines:
 `
  m,err:=Decode(strings.NewReader(basic))
  if err!=nil{t.Fatal(err)}
- if m.Workspace!="" || m.Imports[0].Destination!="" || m.SSH.User!="" {
+ if m.Workspace!="" || m.Imports[0].Source!="/srv/project" || m.SSH.User!="" {
   t.Fatalf("optional action settings not omitted: %+v",m)
  }
  explicit:=strings.Replace(basic,"action: test","action: test\nssh:\n  user: buildagent",1)
