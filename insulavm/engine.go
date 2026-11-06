@@ -138,6 +138,7 @@ type RunRequest struct {
 
 // RunResult records progress even if a job fails and Run returns an error.
 type RunResult struct {
+	SSHUser string
 	VMID string
 	MACAddress string
 	Profile string
@@ -265,6 +266,7 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 		}()
 	}
 	result.Host = host
+	result.SSHUser = user
 	if user == "" || key == "" || hosts == "" {
 		return result, errors.New("SSH user, private key and known_hosts are required")
 	}
