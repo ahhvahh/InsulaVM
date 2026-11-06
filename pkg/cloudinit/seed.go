@@ -10,14 +10,11 @@ import (
  "os"
  "os/exec"
  "path/filepath"
- "regexp"
  "strconv"
  "strings"
 
  "github.com/ahhvahh/InsulaVM/pkg/identity"
 )
-
-var validUser=regexp.MustCompile("^[a-z_][a-z0-9_-]{0,31}$")
 
 type Seed struct{
  ISO string
@@ -32,7 +29,7 @@ type Seed struct{
 func Prepare(ctx context.Context,dir,id,user,sudoMode,clientPublic string,host identity.Keys)(Seed,error){
  var result Seed
  if ctx==nil{return result,errors.New("context is required")}
- if !validUser.MatchString(user)||user=="root"{return result,fmt.Errorf("invalid non-root SSH user %q",user)}
+ if !identity.ValidUser(user){return result,fmt.Errorf("invalid non-root SSH user %q",user)}
  if sudoMode!="passwordless" && sudoMode!="disabled"{
   return result,fmt.Errorf("invalid sudo mode %q",sudoMode)
  }
