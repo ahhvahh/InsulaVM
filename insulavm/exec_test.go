@@ -4,6 +4,8 @@ import (
  "bytes"
  "context"
  "os"
+ "net"
+ "strconv"
  "strings"
  "testing"
 
@@ -17,9 +19,13 @@ func TestExecVMByRegistryIDAndSudoPolicy(t *testing.T){
  if err!=nil{t.Fatal(err)}
  ctx:=context.Background()
  id:="019a5d11-1234-7123-8123-123456789abc"
+ _,portText,err:=net.SplitHostPort(host)
+ if err!=nil{t.Fatal(err)}
+ port,err:=strconv.Atoi(portText)
+ if err!=nil{t.Fatal(err)}
  vm:=registry.Entry{
   ID:id,LibvirtUUID:id,Name:"insula-test",Profile:"test",MAC:"52:54:00:00:00:01",
-  SSHUser:"test",PrivateKeyPath:key,KnownHostsPath:hosts,InstanceDir:t.TempDir(),SudoMode:"disabled",
+  SSHUser:"test",SSHPort:port,PrivateKeyPath:key,KnownHostsPath:hosts,InstanceDir:t.TempDir(),SudoMode:"disabled",
  }
  if err:=store.Insert(ctx,vm);err!=nil{t.Fatal(err)}
  if err:=store.SetRunning(ctx,id,strings.Split(host,":")[0]);err!=nil{t.Fatal(err)}
