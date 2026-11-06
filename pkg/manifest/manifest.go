@@ -29,12 +29,20 @@ type Pipeline struct {
 	Jobs []Job  `yaml:"jobs"`
 }
 
+// ImportSpec copies one host file or directory into the VM before setup/jobs.
+// Source may be absolute or relative to the host process working directory.
+type ImportSpec struct {
+ Source string `yaml:"source"`
+ Destination string `yaml:"destination"`
+}
+
 type Manifest struct {
 	Profile    string     `yaml:"profile"`
 	Repository Repository `yaml:"repository"`
 	Action     string     `yaml:"action"`
 	Workspace  string     `yaml:"workspace"`
 	Setup      []string   `yaml:"setup"`
+	Imports    []ImportSpec `yaml:"imports"`
 	Pipelines  []Pipeline `yaml:"pipelines"`
 }
 
@@ -97,11 +105,20 @@ func (m *Manifest) Validate() error {
 		strings.ContainsAny(m.Workspace, string([]byte{13, 10, 0})) {
 		return errors.New("workspace must be an absolute Linux path")
 	}
-	if len(m.Pipelines) == 0 && len(m.Setup) == 0 {
+	if len(m.Pipelines) == 0 && len(m.Setup) == 0 && len(m.Imports) == 0 {
 		return errors.New("at least one setup command or pipeline is required")
 	}
 	if m.GroupName() == "" {
 		return errors.New("action is required when multiple or zero pipelines are specified")
+	}
+	for i, item := range m.Imports {
+		if strings.TrimSpace(item.Source)=="" || strings.ContainsAny(item.Source,string([]byte{0,10,13})){
+			return fmt.Errorf("imports[%d].source must be a local file or directory path",i)
+		}
+		if !path.IsAbs(item.Destination) || item.Destination=="/" ||
+			strings.ContainsAny(item.Destination,string([]byte{0,10,13})){
+			return fmt.Errorf("imports[%d].destination must be an absolute guest directory other than /",i)
+		}
 	}
 	used := make(map[string]bool)
 	if len(m.Setup) != 0 {
