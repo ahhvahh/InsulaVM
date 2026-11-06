@@ -57,9 +57,9 @@ extract_archive() {
       "$name/"|"$name/"*) ;;
       *) die "Caminho fora do repositorio no pacote: $member" ;;
     esac
-  done < <(tar -tzf -- "$archive")
+  done < <(tar -tzf "$archive")
   log "Extraindo $archive para ./$name/"
-  tar -xzf -- "$archive" -C .
+  tar -xzf "$archive" -C .
   log "Arquivos disponiveis em ./$name/"
 }
 
@@ -74,7 +74,8 @@ send_to_vm() {
   config_file="${config_arg:-$insula_root/config.yaml}"
   [[ -f "$config_file" ]] || die "Configuracao nao encontrada: $config_file"
   tmp="$(mktemp -d)"
-  trap 'rm -rf -- "$tmp"' EXIT
+  cleanup_tmp_dir="$tmp"
+  trap 'rm -rf -- "$cleanup_tmp_dir"' EXIT
   archive="$tmp/$repo_name.tar.gz"
   create_archive "$tmp" "$archive"
   cd -- "$insula_root"
