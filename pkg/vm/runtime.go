@@ -109,6 +109,7 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
  if err!=nil{return nil,err}
  insertErr:=store.Insert(ctx,registry.Entry{
   ID:id,LibvirtUUID:id,Name:instance.Name,Profile:p.Name,MAC:instance.MACAddress,
+  HostFingerprint:instance.SSHHostFingerprint,SudoMode:instance.SudoMode,
   SSHUser:instance.SSHUser,PrivateKeyPath:instance.SSHPrivateKeyPath,
   KnownHostsPath:instance.SSHKnownHostsPath,InstanceDir:dir,
  })
