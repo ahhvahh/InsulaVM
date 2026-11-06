@@ -61,9 +61,9 @@ func Upload(ctx context.Context,client *ssh.Client,archive Archive,destination s
  if onStage!=nil{onStage("extracting")}
  output,err:=runCommand(ctx,client,script)
  if err!=nil{return fmt.Errorf("unpack archive inside guest: %w",err)}
- // GNU tar may emit nonfatal timestamp warnings on stderr before the
- // confirmation line. Require a successful exit and the FINAL marker.
- if !strings.HasSuffix(strings.TrimSpace(output),confirmation){
+ // stdout is kept separate from stderr. Nonfatal tar warnings must not
+ // invalidate a successful, explicit confirmation.
+ if strings.TrimSpace(output)!=confirmation{
   return fmt.Errorf("guest did not confirm import (response: %q)",output)
  }
  return nil
@@ -105,10 +105,15 @@ func runCommand(ctx context.Context,client *ssh.Client,script string)(string,err
  defer session.Close()
  stop:=context.AfterFunc(ctx,func(){_ = session.Close()})
  defer stop()
- out,err:=session.CombinedOutput(script)
+ stdout:=&limitedOutput{remaining:16*1024}
+ stderr:=&limitedOutput{remaining:16*1024}
+ session.Stdout=stdout
+ session.Stderr=stderr
+ err=session.Run(script)
  if ctx.Err()!=nil{return "",ctx.Err()}
- if err!=nil{return "",fmt.Errorf("%w: %s",err,strings.TrimSpace(string(out)))}
- return string(out),nil
+ if err!=nil{return "",fmt.Errorf("%w: %s",err,strings.TrimSpace(stderr.String()))}
+ if stdout.truncated{return "",errors.New("unexpectedly large guest command output")}
+ return stdout.String(),nil
 }
 
 func shellQuote(v string)string{
@@ -128,11 +133,12 @@ func (r *countingReader)Read(p []byte)(int,error){
 type limitedOutput struct{
  data strings.Builder
  remaining int
+ truncated bool
 }
 func (w *limitedOutput)Write(p []byte)(int,error){
  original:=len(p)
  n:=len(p)
- if n>w.remaining{n=w.remaining}
+ if n>w.remaining{n=w.remaining;w.truncated=true}
  if n>0{_,_ = w.data.Write(p[:n]);w.remaining-=n}
  return original,nil
 }
