@@ -1,96 +1,101 @@
 <!-- A-BIOMA-DOC-STANDARD -->
 <!-- A-BIOMA-DOC-REVISADO -->
 
-# ARQ-005 — Importação TAR.GZ do hospedeiro para VM via SSH
+# ARQ-005 — Importação TAR.GZ com destino global
 
-**Estado:** implementado na biblioteca, no comando CLI `import` e na etapa `imports` de um manifesto. Testes com servidor SSH simulado; não há teste de ponta a ponta em VM real.
+**Estado:** implementado em CLI, biblioteca Go e `insula.yaml`. Testado com servidor SSH simulado; teste real em KVM/Libvirt permanece pendente.
 
-**Código:** [pkg/transfer/archive.go](../../pkg/transfer/archive.go), [pkg/transfer/remote.go](../../pkg/transfer/remote.go), [insulavm/import.go](../../insulavm/import.go) e [import_cli.go](../../import_cli.go).
+**Código:** [archive.go](../../pkg/transfer/archive.go), [remote.go](../../pkg/transfer/remote.go), [import.go](../../insulavm/import.go), [import_vm.go](../../insulavm/import_vm.go), [import_cli.go](../../import_cli.go).
 
-## Objetivo e comportamento
+## Contrato de diretório único
 
-Receber um caminho local que aponte para **um arquivo ou diretório**, compactar em **TAR.GZ** no hospedeiro, enviar o arquivo pelo SSH já autenticado, verificar o tamanho recebido, descompactar no diretório de destino da VM e confirmar o resultado **somente após o `tar` remoto terminar com código zero**.
+Um único destino é escolhido no arquivo global `config.yaml`, dentro da VM, e reutilizado por **todas as execuções e importações posteriores**.
 
-- **Origem arquivo:** `/home/user/build.tar` gera o item `build.tar` dentro do diretório remoto.
-- **Origem diretório:** `/home/user/projeto` gera o **conteúdo** de `projeto` diretamente no diretório remoto (sem acrescentar uma subpasta `projeto`).
-- Subdiretórios vazios são preservados; links simbólicos, sockets, dispositivos e arquivos especiais são **recusados**, para não incluir conteúdo inesperado nem criar atalhos para locais externos.
-- A origem não é apagada nem movida. A compactação é escrita em arquivo temporário local e removida ao final.
-- O destino é um **diretório absoluto no Linux convidado**, que não pode ser `/`. O diretório é criado caso não exista, pelo usuário SSH.
-- A transferência utiliza o próprio canal SSH, executando `cat` para gravar um arquivo temporário de acesso restrito no convidado. **Não exige SFTP nem abre uma porta adicional.** Ao finalizar, remove o temporário remoto.
-- A verificação de integridade inclui tamanho do arquivo recebido e a validação GZIP/TAR do comando de extração. A confirmação é lida exclusivamente de stdout; avisos não fatais do `tar` em stderr não são considerados confirmação. Ainda **não** há checksum SHA-256 ponta a ponta.
-- Se houver falha de SSH, compressão, tamanho ou extração, a biblioteca retorna um erro e emite `failed`; não retorna `Imported: true`. O conteúdo de uma extração interrompida **pode permanecer parcialmente aplicado** ao destino; não há publicação atômica nesse ciclo.
+```yaml
+guest:
+  destination: /tmp/insulavm/workspace
+```
 
-## Etapas visíveis
+- `guest.destination` deve ser um caminho Linux absoluto e diferente de `/`. Se omitido, usa `/tmp/insulavm/workspace`.
+- Não existe mais `destination` em `imports` do manifesto, `-dest` nos comandos CLI, nem `DestinationPath` nas estruturas públicas `ImportRequest` e `VMImportRequest`.
+- O InsulaVM cria o diretório dentro do convidado com o usuário SSH normal. Se o local exigir escrita privilegiada, o perfil QCOW2 precisa ter as permissões preparadas. Nenhuma elevação implícita é feita.
+- O executor de Action utiliza esse mesmo destino como `workspace` quando a opção legada `workspace` não foi definida no manifesto; `ExecVM` também o usa por padrão.
+- Uma pasta local transfere **seu conteúdo**, sem criar uma subpasta adicional; um arquivo transfere o arquivo pelo próprio nome. Importações sucessivas caem na mesma pasta e preservam os arquivos anteriores quando seus nomes não colidem.
+
+## Fluxo implementado
+
+1. Validar origem no hospedeiro (arquivo ou diretório). Recusar symlinks, dispositivos e entradas especiais.
+2. Compactar arquivo(s) em TAR.GZ temporário no hospedeiro.
+3. Autenticar por SSH com host key validada. Para VMs gerenciadas, usar as credenciais individuais recuperadas pelo UUIDv7 no SQLite; nenhuma chave é passada pelo consumidor.
+4. Transferir o TAR.GZ pelo canal SSH. O convidado guarda em diretório temporário de staging.
+5. Conferir tamanho recebido, extrair com `tar -xzf` no `guest.destination` e exigir confirmação explícita após o comando retornar sucesso.
+6. Excluir arquivos temporários e retornar `ImportResult{Imported:true}`. Erros retornam `Imported:false` e evento `failed`.
+
+**Limitações atuais:** não existe SHA-256 remoto adicional, extração atômica, retomada ou proteção completa contra symlinks preexistentes na pasta de destino. Conteúdo parcialmente extraído pode permanecer após falha. Use diretório controlado pelo próprio usuário da VM.
+
+## Eventos de progresso
+
+A CLI imprime textos e a biblioteca recebe os mesmos estágios por `OnProgress func(ImportProgress)`:
 
 ```text
-[InsulaVM][import:connecting] Conectando via SSH a VM ...
+[InsulaVM][import:connecting] Conectando via SSH ...
 [InsulaVM][import:validating] Verificando arquivo ou diretorio de origem
-[InsulaVM][import:compressing] Compactando conteudo em TAR.GZ no hospedeiro
-[InsulaVM][import:compressed] Compactacao concluida: 5 arquivo(s), 20480 bytes compactados
-[InsulaVM][import:uploading] Enviando pacote de 20480 bytes para a VM
+[InsulaVM][import:compressing] Compactando conteudo em TAR.GZ
+[InsulaVM][import:compressed] Compactacao concluida
 [InsulaVM][import:uploading] Enviando: 20480/20480 bytes
-[InsulaVM][import:verifying] Verificando integridade do tamanho recebido na VM
-[InsulaVM][import:extracting] Descompactando TAR.GZ dentro da VM em /tmp/projeto
-[InsulaVM][import:completed] Arquivo importado com sucesso na VM: /tmp/projeto (5 arquivo(s))
+[InsulaVM][import:verifying] Verificando integridade do tamanho recebido
+[InsulaVM][import:extracting] Descompactando TAR.GZ dentro da VM
+[InsulaVM][import:completed] Arquivo importado com sucesso
 ```
 
-Os números são **ilustrativos**, não resultados de uma execução real. Cada etapa também é enviada ao callback `OnProgress func(ImportProgress)` no mesmo processo. O objeto `ImportProgress` inclui `Stage`, `Message`, `SourcePath`, `DestinationPath`, `BytesSent`, `TotalBytes`, `Files`, `At`.
+São exemplos ilustrativos; os textos reais incluem números e caminhos. `ImportProgress` inclui `Stage`, `Message`, `SourcePath`, `DestinationPath` (somente retorno informativo), `BytesSent`, `TotalBytes`, `Files` e `At`. Callbacks são síncronos; não faça operações bloqueantes dentro deles.
 
-Os callbacks são síncronos durante a transferência; um callback bloqueante reduz o throughput. O chamador deve serializar acesso caso várias execuções escrevam no mesmo `io.Writer`.
-
-## CLI
-
-Para uma VM que já esteja em execução:
+## CLI: importação por UUIDv7
 
 ```bash
-go run . import \
-  -config config.yaml \
-  -host 192.168.122.10:22 \
-  -source /home/usuario/projeto \
-  -dest /tmp/projeto \
-  -user insula \
-  -key /home/usuario/.ssh/id_ed25519 \
-  -known-hosts /home/usuario/.ssh/known_hosts
+go run . vm import -config config.yaml -id UUIDv7 -source /srv/projeto
+go run . vm import -config config.yaml -id UUIDv7 -source /srv/config.ini
 ```
 
-Também é possível enviar apenas `/home/usuario/arquivo.tar.gz`, que será transportado como **um arquivo dentro de um TAR.GZ temporário**. A operação não descompacta o próprio arquivo `arquivo.tar.gz` por segunda vez.
+O comando resolve IP, porta, usuário, chave privada e `known_hosts` a partir do cadastro SQLite, sem solicitá-los novamente.
+
+Para uma VM **não administrada** pelo InsulaVM:
+
+```bash
+go run . import -config config.yaml -host 192.168.122.10:22 -source /srv/projeto
+```
+
+Nesse modo externo, o host/conta/identidade devem ser provisionados pelo administrador; `ssh.private_key` e `ssh.known_hosts` ficam na configuração global.
 
 ## Biblioteca Go
 
 ```go
-engine, err := insulavm.New("/etc/insulavm/config.yaml")
-if err != nil { return err }
-result, err := engine.ImportPath(ctx, insulavm.ImportRequest{
-    Host: "192.168.122.10:22", // endereço de uma VM já iniciada
+result, err := engine.ImportToVM(ctx, insulavm.VMImportRequest{
+    VMID: vmID,
     SourcePath: "/srv/projeto",
-    DestinationPath: "/tmp/projeto",
-    User: "insula",
-    PrivateKey: "/etc/insulavm/id_ed25519",
-    KnownHosts: "/etc/insulavm/known_hosts",
     Output: os.Stdout,
     OnProgress: func(p insulavm.ImportProgress) {
-        fmt.Println("etapa:", p.Stage, "texto:", p.Message)
+        fmt.Println(p.Stage, p.Message)
     },
 })
 if err != nil { return err }
-if !result.Imported { return errors.New("importacao nao confirmada") }
+if !result.Imported { return errors.New("importação não confirmada") }
 ```
 
-Um projeto orquestrador que inicia a VM usando `engine.StartVM(ctx, profileName)` deve passar o endereço `instance.Address` como `Host` para `ImportPath` e chamar `instance.Cleanup` quando terminar. `ImportPath` não cria uma nova VM.
+O motor obtém o destino de `guest.destination`, sem opção de alterá-lo por chamada. `Engine.ImportPath` tem o mesmo destino global, mas é reservado a SSH existente que já possui endereço e autenticação configurados.
 
-## Importação automática antes de jobs
-
-O manifesto aceita `imports` com `source` no hospedeiro e `destination` dentro do convidado. As importações são feitas **antes de setup e jobs**, reutilizando a mesma conexão SSH; se a importação falhar, nenhum job começa.
+## YAML de Action
 
 ```yaml
 profile: debian-minimal
 repository:
   name: meu-projeto
 action: test
-workspace: /tmp/projeto
+# ssh:
+#   user: buildagent
 imports:
   - source: /home/usuario/projeto
-    destination: /tmp/projeto
+  - source: /home/usuario/config.ini
 pipelines:
   - name: smoke
     jobs:
@@ -99,19 +104,11 @@ pipelines:
           - ls -la
 ```
 
-No modo de biblioteca, `RunRequest.OnImportProgress` disponibiliza o mesmo acompanhamento estruturado; `RunResult.Imports` contém os resultados das importações. Em CLI, `Output: os.Stdout` imprime os textos. Origem relativa é resolvida a partir do diretório corrente do processo, não da pasta da VM.
-
-## Pré-requisitos e segurança
-
-- SSH confiável por chave, com host key validada em `known_hosts`; o guest deve ter `sh`, `tar` (com `-xzf`), `mktemp`, `mkdir`, `cat`, `wc` e `rm`.
-- O usuário SSH necessita permissão de escrita em `/tmp` para staging e no diretório `destination` para os arquivos finais.
-- **Use usuário SSH não privilegiado.** A extração atual **não impede** que um diretório remoto preexistente contenha links simbólicos; não importe para áreas controladas por usuários não confiáveis.
-- Manifestos e caminhos de entrada são considerados fornecidos por um orquestrador confiável. Não exponha a operação como importação arbitrária para usuários externos sem aplicar autorização, quotas de espaço e validação dos destinos.
-- A importação ainda não implementa checkpoint de retomada, SHA-256 remoto ou troca atômica da árvore de destino. Evite importar artefatos com arquivos em modificação.
-- Sem socket/HTTP nesta operação: a aplicação Go pode usar a API diretamente, e a CLI tem uma operação específica.
+As importações são executadas antes dos jobs e sempre utilizam o destino global. `RunRequest.OnImportProgress` emite o acompanhamento para o consumidor Go, `RunResult.Imports` contém os resultados. Se o username opcional da Action for definido, ele será provisionado no novo convidado com a chave individual de SSH do InsulaVM. Para um host externo, a conta indicada precisa existir e estar autorizada a conectar com a chave configurada.
 
 ## Referências
 
 - [Go archive/tar](https://pkg.go.dev/archive/tar)
 - [Go compress/gzip](https://pkg.go.dev/compress/gzip)
 - [Go SSH Session](https://pkg.go.dev/golang.org/x/crypto/ssh#Session)
+- [ARQ-006 — Identidade e acesso SSH](ARQ-006-identidade-registro-sudo.md)
