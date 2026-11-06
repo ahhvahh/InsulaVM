@@ -149,4 +149,15 @@ func TestImportToVMByID(t *testing.T){
  }
  data,err:=os.ReadFile(filepath.Join(dest,"uploaded.txt"))
  if err!=nil||string(data)!="transferred by VM ID"{t.Fatalf("bad remote contents %q, %v",data,err)}
+ // A second upload uses the exact same global destination without any
+ // destination parameter; it must preserve already-imported files.
+ next:=filepath.Join(t.TempDir(),"additional.txt")
+ if err:=os.WriteFile(next,[]byte("additional"),0600);err!=nil{t.Fatal(err)}
+ second,err:=engine.ImportToVM(ctx,VMImportRequest{VMID:id,SourcePath:next})
+ if err!=nil{t.Fatal(err)}
+ if second.DestinationPath!=dest{t.Fatalf("unexpected second import destination %q",second.DestinationPath)}
+ for name,want:=range map[string]string{"uploaded.txt":"transferred by VM ID","additional.txt":"additional"}{
+  content,err:=os.ReadFile(filepath.Join(dest,name))
+  if err!=nil||string(content)!=want{t.Fatalf("file %s = %q, error %v",name,content,err)}
+ }
 }
