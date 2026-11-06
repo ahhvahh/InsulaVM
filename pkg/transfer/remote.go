@@ -19,7 +19,7 @@ const confirmation="INSULAVM_IMPORT_OK"
 // length, extracts into an absolute target directory and requires an explicit
 // confirmation after tar exits successfully. GNU tar is not required: POSIX
 // sh, mktemp, cat, wc, mkdir, tar, and rm are used.
-func Upload(ctx context.Context,client *ssh.Client,archive Archive,destination string,onSent func(sent,total int64))(runErr error){
+func Upload(ctx context.Context,client *ssh.Client,archive Archive,destination string,onSent func(sent,total int64),onStage func(stage string))(runErr error){
  if ctx==nil{return errors.New("context is required")}
  if client==nil{return errors.New("SSH client is required")}
  if !strings.HasPrefix(destination,"/") || destination=="/" ||
@@ -45,9 +45,11 @@ func Upload(ctx context.Context,client *ssh.Client,archive Archive,destination s
   if cleanupErr!=nil{runErr=errors.Join(runErr,fmt.Errorf("cleanup guest staging: %w",cleanupErr))}
  }()
  remoteArchive:=remoteDir+"/payload.tar.gz"
+ if onStage!=nil{onStage("uploading")}
  if err:=uploadArchive(ctx,client,archive,remoteArchive,onSent);err!=nil{
   return fmt.Errorf("transfer compressed content: %w",err)
  }
+ if onStage!=nil{onStage("verifying")}
  sizeText,err:=runCommand(ctx,client,"wc -c < "+shellQuote(remoteArchive))
  if err!=nil{return fmt.Errorf("verify guest archive length: %w",err)}
  size,err:=strconv.ParseInt(strings.TrimSpace(sizeText),10,64)
@@ -56,6 +58,7 @@ func Upload(ctx context.Context,client *ssh.Client,archive Archive,destination s
   return fmt.Errorf("guest archive size mismatch: got %d, expected %d",size,archive.CompressedBytes)
  }
  script:="mkdir -p -- "+shellQuote(destination)+" && tar -xzf "+shellQuote(remoteArchive)+" -C "+shellQuote(destination)+" && printf '"+confirmation+"\\n'"
+ if onStage!=nil{onStage("extracting")}
  output,err:=runCommand(ctx,client,script)
  if err!=nil{return fmt.Errorf("unpack archive inside guest: %w",err)}
  if strings.TrimSpace(output)!=confirmation{
