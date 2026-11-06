@@ -119,7 +119,7 @@ func TestDomainXMLProtectsImmutableBackingImage(t *testing.T){
  spec:=domainXMLWithBacking("019a5d11-1234-7123-8123-123456789abc",
   "insula-debian",2048,2,"/tmp/overlay.qcow2",original,"/tmp/seed.iso",
   "default","52:54:00:aa:bb:cc")
- var parsed interface{}
+ var parsed struct{ XMLName xml.Name }
  if err:=xml.Unmarshal([]byte(spec),&parsed);err!=nil{
   t.Fatalf("invalid Libvirt XML: %v: %s",err,spec)
  }
