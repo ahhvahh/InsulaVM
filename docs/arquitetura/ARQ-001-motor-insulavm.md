@@ -5,11 +5,12 @@
 
 **Estado:** Proposto — não implementado.
 **Escopo:** motor local em Go, hospedeiro Linux e VM convidada Debian.
-**Fonte canônica do comportamento:** [FLUX-001 — Execução de manifesto](../fluxos/FLUX-001-execucao-manifesto.md).
+**Fluxos:** [FLUX-001 — Executar Action](../fluxos/FLUX-001-execucao-manifesto.md) e [FLUX-002 — Criar perfil](../fluxos/FLUX-002-criacao-perfil-vm.md).
+**Persistência das VMs:** [ARQ-002 — Perfis e overlays](ARQ-002-perfis-vm.md).
 
 ## Objetivo e limites
 
-O InsulaVM é uma ferramenta CLI open-source que lê `insula.yaml` e executa `setup` e pipelines em uma VM Debian descartável. O hospedeiro controla virtualização, transferência do projeto, comunicação SSH, logs e encerramento; o convidado não recebe agente próprio do InsulaVM.
+O InsulaVM é uma ferramenta CLI open-source que permite preparar perfis persistentes de VM Debian e, depois, lê `insula.yaml` para executar `setup` e pipelines em instâncias descartáveis derivadas desses perfis. O hospedeiro controla virtualização, transferência do projeto, comunicação SSH, logs e encerramento; o convidado não recebe agente próprio do InsulaVM.
 
 Esta é uma arquitetura **planejada**, não um inventário de funcionalidades disponíveis. Na revisão inicial da branch `main` existiam apenas `README.md`, `.gitignore` e `LICENSE`.
 
@@ -31,9 +32,10 @@ flowchart LR
 
 | Componente planejado | Responsabilidade | Tecnologia |
 | --- | --- | --- |
-| CLI/orquestrador | Validar manifesto, coordenar etapas, cancelamento e resultado | Go |
+| CLI/orquestrador | Criar perfis interativamente, validar manifesto, coordenar etapas, cancelamento e resultado | Go |
+| Gerenciador de perfis | Salvar imagem-base QCOW2 imutável, metadados e overlays por Action | Libvirt/QEMU; [ARQ-002](ARQ-002-perfis-vm.md) |
 | Gerenciador de VM | Criar disco temporário, gerar XML, ISO Cloud-Init, iniciar/parar/remover domínio | `pkg/vm/kvm.go`; KVM, QEMU e Libvirt |
-| Preparação do primeiro boot | Criar usuário, configurar rede e injetar chave pública SSH | Cloud-Init / NoCloud |
+| Preparação da instância | Configurar identidade, usuário, rede e chave pública SSH quando o sistema instalado tiver Cloud-Init operacional | Cloud-Init / NoCloud |
 | Executor remoto | Conectar, executar comandos sequenciais no contexto correto e capturar saída | `pkg/executor/ssh.go`; `golang.org/x/crypto/ssh` |
 | Preparador de repositório | Obter referência remota ou empacotar projeto local; disponibilizar checkout | Git + transporte autenticado |
 | Saída de execução | Exibir stdout/stderr por job, falhas e resultado final | Terminal da máquina hospedeira |
@@ -41,11 +43,11 @@ flowchart LR
 ## Virtualização e ciclo de vida
 
 - **Hospedeiro:** Linux com KVM disponível, QEMU, Libvirt e permissões restritas para criar domínios e discos.
-- **Imagem base:** imagem Debian apta a primeiro boot via Cloud-Init. Cada execução usa disco de trabalho descartável derivado de imagem-base limpa; não modificar a imagem-base compartilhada.
-- **Libvirt:** construir XML do domínio com CPU, memória, disco, interface de rede isolada/NAT e unidade de CD-ROM somente leitura apontando para a ISO temporária de Cloud-Init. Criar/definir domínio, iniciar, consultar estado, encerrar e remover, incluindo falhas parciais.
-- **Cloud-Init:** preparar ISO NoCloud com rótulo `CIDATA`, arquivos `user-data` e `meta-data` e, se necessário, `network-config`. Provisionar usuário de execução, chave pública autorizada, hostname e configuração de rede. Gerar `instance-id` exclusivo para cada instância.
+- **Imagem base:** um perfil Debian já instalado é salvo como QCOW2 imutável; cada Action usa overlay QCOW2 descartável e preserva a imagem compartilhada. A criação inicial do perfil usa ISO local, console de instalação e posterior terminal de manutenção, conforme [ARQ-002](ARQ-002-perfis-vm.md).
+- **Libvirt:** construir XML do domínio com CPU, memória, disco, rede isolada/NAT e mídia de boot adequada à fase: ISO de instalação para criar perfil; imagem instalada com overlay para Actions, mais eventual ISO Cloud-Init. Criar/definir domínio, iniciar, consultar estado, encerrar e remover, incluindo falhas parciais.
+- **Cloud-Init:** para convidados que tenham Cloud-Init habilitado, preparar ISO NoCloud com rótulo `CIDATA`, `user-data`, `meta-data` e eventual `network-config`, criando identidade/credenciais próprias por instância. **A ISO convencional do instalador Debian não é uma imagem Cloud-Init e precisa de instalação do SO**, manual ou automatizada por Preseed; isso não pode ser substituído por anexar somente a ISO NoCloud.
 - **Conectividade:** obter IP interno associado à instância (ex.: leases DHCP do Libvirt) e aguardar inicialização do SSH com prazo e tentativas limitados. IP atribuído não garante prontidão de Cloud-Init; confirmar inicialização antes dos jobs.
-- **Remoção:** após êxito, erro ou cancelamento, fechar SSH, desligar/destruir a VM quando necessário, indefinir domínio e remover ISO, disco temporário e credenciais efêmeras. Prever política explícita de retenção para diagnóstico futuro.
+- **Remoção:** após Action, fechar SSH, desligar/destruir VM quando necessário, indefinir domínio e remover ISO efêmera, overlay e credenciais temporárias — **preservando o perfil base**. Ao criar perfil, o usuário decide salvar imagem preparada ou descartar staging. Prever política explícita de retenção para diagnóstico futuro.
 
 **Terminologia:** criar, iniciar, desligar e destruir são fases distintas. Destruir no Libvirt encerra a execução do domínio; a remoção de definição e arquivos de disco é uma ação adicional, que precisa ser tratada separadamente.
 
@@ -85,7 +87,8 @@ flowchart LR
 
 ## Pontos para decisão antes da implementação
 
-- Schema versionado do `insula.yaml`: campos de origem, branch/commit, recursos, `setup`, pipelines, jobs, política de falhas e timeout.
+- Schema versionado do `insula.yaml`: referência/versão do perfil, origem do projeto, branch/commit, recursos, `setup`, pipelines, jobs, política de falhas e timeout.
+- Configurações globais do diretório de perfis, instalação de ISO, disco padrão e política de versões, conforme [ARQ-002](ARQ-002-perfis-vm.md).
 - Estratégia concreta de confiança na host key SSH, descoberta do IP e confirmação de término do Cloud-Init.
 - Acesso a repositórios privados, inclusão de arquivos locais ignorados, submódulos e tratamento de segredos.
 - Elevação de privilégios e diretório padrão do `setup`; política de retenção da VM em falhas.
