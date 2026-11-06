@@ -12,12 +12,15 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|list|show|stop")}
+ if len(args)==0{return errors.New("usage: insula vm start|list|show|stop|exec")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
  profileName:=fs.String("profile","","installed cloud-init-ready QCOW2 profile")
  id:=fs.String("id","","VM UUIDv7")
+ commandText:=fs.String("command","","shell command inside the VM")
+ workspace:=fs.String("workspace","/tmp","guest working directory")
+ sudo:=fs.Bool("sudo",false,"execute as root via sudo -n (requires passwordless mode)")
  if err:=fs.Parse(args[1:]);err!=nil{return err}
  if fs.NArg()!=0{return errors.New("unexpected vm arguments")}
  engine,err:=insulavm.New(*cfgPath)
@@ -49,6 +52,13 @@ func vmCommand(args []string)error{
   if e.Status=="running"{
    fmt.Printf("ssh_key=%s\nknown_hosts=%s\n",e.PrivateKeyPath,e.KnownHostsPath)
   }
+ case "exec":
+  if *id==""||*commandText==""{return errors.New("vm exec requires -id and -command")}
+  result,err:=engine.ExecVM(ctx,insulavm.ExecRequest{
+   VMID:*id,Command:*commandText,Workspace:*workspace,Sudo:*sudo,Output:os.Stdout,
+  })
+  if result!=nil{fmt.Println("Logs:",result.LogDirectory)}
+  return err
  case "stop":
   if *id==""{return errors.New("vm stop requires -id")}
   if err:=engine.StopVM(ctx,*id);err!=nil{return err}
