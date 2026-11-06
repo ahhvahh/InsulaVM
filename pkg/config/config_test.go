@@ -38,3 +38,22 @@ func TestRejectsInvalidGlobalSettings(t *testing.T){
   if _,err:=ReadFile(cfg);err==nil{t.Fatalf("accepted invalid config: %s",strings.TrimSpace(src))}
  }
 }
+
+func TestSharedGuestDestinationAndDefaultSSHUser(t *testing.T){
+ root:=t.TempDir()
+ filename:=filepath.Join(root,"config.yaml")
+ for _,tc:=range []struct{source,want string; invalid bool}{
+  {source:"storage:\n  root: ./data\n",want:"/tmp/insulavm/workspace"},
+  {source:"storage:\n  root: ./data\nguest:\n  destination: /opt/build-agent/current/../work\n",want:"/opt/build-agent/work"},
+  {source:"storage:\n  root: ./data\nguest:\n  destination: ../escape\n",invalid:true},
+  {source:"storage:\n  root: ./data\nguest:\n  destination: /\n",invalid:true},
+  {source:"storage:\n  root: ./data\nguest:\n  destination: /tmp/no\\nnewline\n",invalid:true},
+ }{
+  if err:=os.WriteFile(filename,[]byte(tc.source),0600);err!=nil{t.Fatal(err)}
+  cfg,err:=ReadFile(filename)
+  if tc.invalid {if err==nil{t.Errorf("accepted invalid target %q",tc.source)};continue}
+  if err!=nil{t.Fatal(err)}
+  if cfg.Guest.Destination!=tc.want{t.Errorf("destination = %q; want %q",cfg.Guest.Destination,tc.want)}
+  if cfg.SSH.User!="insula"{t.Errorf("default user = %q",cfg.SSH.User)}
+ }
+}
