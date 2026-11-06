@@ -145,8 +145,16 @@ func runTestSSHServer(t *testing.T) (address, keyPath, hostsPath string) {
 								continue
 							}
 							_ = req.Reply(true, nil)
-							// The client sends "sh -s" and the script on stdin.
-							process := exec.Command("sh", "-s")
+							if len(req.Payload)<4 {
+								_ = req.Reply(false,nil)
+								return
+							}
+							count:=int(binary.BigEndian.Uint32(req.Payload[:4]))
+							if count<0||count>len(req.Payload)-4{
+								return
+							}
+							command:=string(req.Payload[4:4+count])
+							process := exec.Command("sh", "-c", command)
 							process.Stdin = channel
 							process.Stdout = channel
 							process.Stderr = channel.Stderr()
