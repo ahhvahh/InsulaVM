@@ -2,7 +2,6 @@ package registry
 
 import (
  "context"
- "errors"
  "path/filepath"
  "testing"
  "time"
@@ -51,10 +50,7 @@ func TestSQLiteLifecycleAndReopen(t *testing.T){
  if err!=nil||stopped.Status!="destroyed"||stopped.FinishedAt==""{
   t.Fatalf("missing history: %+v, %v",stopped,err)
  }
- if _,err:=reopened.Get(ctx,"not-there");!errors.Is(err,errors.Unwrap(err)){
-  // Exact database/sql ErrNoRows is preserved for callers who need it.
-  if err==nil{t.Fatal("missing VM accepted")}
- }
+ if _,err:=reopened.Get(ctx,"not-there");err==nil{t.Fatal("missing VM accepted")}
 }
 
 func TestConcurrentReadWrite(t *testing.T){
