@@ -2,6 +2,7 @@ package identity
 
 import (
  "os"
+ "net"
  "path/filepath"
  "strings"
  "testing"
@@ -36,8 +37,9 @@ func TestUUIDv7AndKeys(t *testing.T){
  if err:=SaveKnownHost(known,"127.0.0.1",keys.Public);err!=nil{t.Fatal(err)}
  check,err:=knownhosts.New(known)
  if err!=nil{t.Fatal(err)}
- if err:=check("127.0.0.1:22",nil,keys.Public);err!=nil{t.Fatalf("pinned known_hosts was rejected: %v",err)}
+ remote:=&net.TCPAddr{IP:net.ParseIP("127.0.0.1"),Port:22}
+ if err:=check("127.0.0.1:22",remote,keys.Public);err!=nil{t.Fatalf("pinned known_hosts was rejected: %v",err)}
  other,err:=GenerateKey()
  if err!=nil{t.Fatal(err)}
- if err:=check("127.0.0.1:22",nil,other.Public);err==nil{t.Fatal("accepted unexpected VM host key")}
+ if err:=check("127.0.0.1:22",remote,other.Public);err==nil{t.Fatal("accepted unexpected VM host key")}
 }
