@@ -17,7 +17,7 @@ Receber um caminho local que aponte para **um arquivo ou diretório**, compactar
 - A origem não é apagada nem movida. A compactação é escrita em arquivo temporário local e removida ao final.
 - O destino é um **diretório absoluto no Linux convidado**, que não pode ser `/`. O diretório é criado caso não exista, pelo usuário SSH.
 - A transferência utiliza o próprio canal SSH, executando `cat` para gravar um arquivo temporário de acesso restrito no convidado. **Não exige SFTP nem abre uma porta adicional.** Ao finalizar, remove o temporário remoto.
-- A verificação de integridade inclui tamanho do arquivo recebido e a validação GZIP/TAR do comando de extração. Ainda **não** há checksum SHA-256 ponta a ponta.
+- A verificação de integridade inclui tamanho do arquivo recebido e a validação GZIP/TAR do comando de extração. A confirmação é lida exclusivamente de stdout; avisos não fatais do `tar` em stderr não são considerados confirmação. Ainda **não** há checksum SHA-256 ponta a ponta.
 - Se houver falha de SSH, compressão, tamanho ou extração, a biblioteca retorna um erro e emite `failed`; não retorna `Imported: true`. O conteúdo de uma extração interrompida **pode permanecer parcialmente aplicado** ao destino; não há publicação atômica nesse ciclo.
 
 ## Etapas visíveis
