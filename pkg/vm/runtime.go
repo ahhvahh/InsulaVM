@@ -106,7 +106,7 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
  if out,err:=exec.CommandContext(ctx,"qemu-img","create","-f","qcow2","-F","qcow2","-b",image,overlay).CombinedOutput();err!=nil{
   return nil,fmt.Errorf("create overlay: %w: %s",err,strings.TrimSpace(string(out)))
  }
- xmlSpec:=domainXMLWithSeed(instance.LibvirtUUID,instance.Name,p.MemoryMiB,p.VCPUs,overlay,seed.ISO,c.Virtualization.Network,instance.MACAddress)
+ xmlSpec:=domainXMLWithBacking(instance.LibvirtUUID,instance.Name,p.MemoryMiB,p.VCPUs,overlay,image,seed.ISO,c.Virtualization.Network,instance.MACAddress)
  xmlPath:=filepath.Join(dir,"domain.xml")
  if err:=os.WriteFile(xmlPath,[]byte(xmlSpec),0600);err!=nil{return nil,err}
  // With qemu:///system, Libvirt launches QEMU under a separate non-root
@@ -269,6 +269,14 @@ func domainXML(name string,memoryMiB,vcpus int,disk,network,mac string)string{
 }
 
 func domainXMLWithSeed(uuid,name string,memoryMiB,vcpus int,disk,seedISO,network,mac string)string{
+ return domainXMLWithBacking(uuid,name,memoryMiB,vcpus,disk,"",seedISO,network,mac)
+}
+
+// domainXMLWithBacking declares the immutable base as a read-only backing
+// image with DAC relabeling disabled. Libvirt otherwise may chown the shared
+// base image to the QEMU UID and not restore it when the VM stops. The host
+// has already granted the QEMU UID read-only permission via a scoped ACL.
+func domainXMLWithBacking(uuid,name string,memoryMiB,vcpus int,disk,baseImage,seedISO,network,mac string)string{
  escape:=func(v string)string{
   var b strings.Builder
   _=xml.EscapeText(&b,[]byte(v))
@@ -276,6 +284,12 @@ func domainXMLWithSeed(uuid,name string,memoryMiB,vcpus int,disk,seedISO,network
  }
  var uuidElement string
  if uuid!=""{uuidElement="<uuid>"+escape(uuid)+"</uuid>"}
+ var backingStore string
+ if baseImage!=""{
+  backingStore="<backingStore type='file'><format type='qcow2'/>"+
+   "<source file='"+escape(baseImage)+"'>"+
+   "<seclabel model='dac' relabel='no'/></source><backingStore/></backingStore>"
+ }
  var seedDisk string
  if seedISO!=""{
   seedDisk="<disk type='file' device='cdrom'><driver name='qemu' type='raw'/>"+
@@ -285,11 +299,11 @@ func domainXMLWithSeed(uuid,name string,memoryMiB,vcpus int,disk,seedISO,network
   "<domain type='kvm'><name>%s</name>%s<memory unit='MiB'>%d</memory>"+
    "<vcpu>%d</vcpu><os><type arch='x86_64'>hvm</type></os>"+
    "<devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/>"+
-   "<source file='%s'/><target dev='vda' bus='virtio'/></disk>%s"+
+   "<source file='%s'/>%s<target dev='vda' bus='virtio'/></disk>%s"+
    "<interface type='network'><mac address='%s'/><source network='%s'/>"+
    "<model type='virtio'/></interface>"+
    "<serial type='pty'><target port='0'/></serial>"+
    "<console type='pty'><target type='serial' port='0'/></console>"+
    "</devices></domain>",
-  escape(name),uuidElement,memoryMiB,vcpus,escape(disk),seedDisk,escape(mac),escape(network))
+  escape(name),uuidElement,memoryMiB,vcpus,escape(disk),backingStore,seedDisk,escape(mac),escape(network))
 }
