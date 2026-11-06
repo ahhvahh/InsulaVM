@@ -102,7 +102,6 @@ func (c *Config) normalize(configDir string) error {
  if c.Virtualization.DefaultDiskGB==0{c.Virtualization.DefaultDiskGB=8}
  if c.Virtualization.DefaultDiskGB<1 {return errors.New("virtualization.default_disk_gb must be positive")}
  if c.Virtualization.QEMUUID<0 || c.Virtualization.QEMUUID>2147483647 {return errors.New("virtualization.qemu_uid must be 0 (disabled) or a positive Linux uid")}
- if c.Virtualization.QEMUUID==0 { /* unset: storage ACL provisioning remains disabled */ }
  if c.SSH.ConnectTimeoutSeconds==0{c.SSH.ConnectTimeoutSeconds=30}
  if c.SSH.User==""{c.SSH.User="insula"}
  if c.SSH.SudoMode==""{c.SSH.SudoMode="disabled"}
