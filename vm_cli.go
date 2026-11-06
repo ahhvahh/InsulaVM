@@ -44,8 +44,8 @@ func vmCommand(args []string)error{
   if *id==""{return errors.New("vm show requires -id")}
   e,err:=engine.GetVM(ctx,*id)
   if err!=nil{return err}
-  fmt.Printf("id=%s\nname=%s\nprofile=%s\nlibvirt_uuid=%s\nip=%s\nmac=%s\nuser=%s\nstatus=%s\ncreated_at=%s\n",
-   e.ID,e.Name,e.Profile,e.LibvirtUUID,e.IP,e.MAC,e.SSHUser,e.Status,e.CreatedAt)
+  fmt.Printf("id=%s\nname=%s\nprofile=%s\nlibvirt_uuid=%s\nip=%s\nmac=%s\nuser=%s\nsudo_mode=%s\nhost_fingerprint=%s\nstatus=%s\ncreated_at=%s\n",
+   e.ID,e.Name,e.Profile,e.LibvirtUUID,e.IP,e.MAC,e.SSHUser,e.SudoMode,e.HostFingerprint,e.Status,e.CreatedAt)
   if e.Status=="running"{
    fmt.Printf("ssh_key=%s\nknown_hosts=%s\n",e.PrivateKeyPath,e.KnownHostsPath)
   }
