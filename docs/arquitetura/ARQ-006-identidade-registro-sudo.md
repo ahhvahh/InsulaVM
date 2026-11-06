@@ -67,6 +67,9 @@ go run . vm exec -config config.yaml -id <UUIDv7> -command "id -un"
 # Eleva um comando individual por sudo -n (quando autorizado).
 go run . vm exec -config config.yaml -id <UUIDv7> -command "id -u" -sudo
 
+# Copia arquivos pelo UUID, usando as credenciais guardadas no cadastro.
+go run . vm import -config config.yaml -id <UUIDv7> -source /srv/projeto -dest /tmp/projeto
+
 # Encerra por ID, remove overlay/seed/chaves e mantém histórico SQLite.
 go run . vm stop -config config.yaml -id <UUIDv7>
 ```
