@@ -3,14 +3,14 @@
 
 # ARQ-002 — Perfis persistentes e discos descartáveis de VM
 
-**Estado:** Proposto — não implementado.
+**Estado:** perfil por YAML, registro de QCOW2 e instâncias descartáveis por Libvirt implementados; instalação pela ISO e Cloud-Init por instância ainda propostos.
 **Escopo:** armazenamento de perfis Debian, criação a partir de ISO e reutilização em Actions.
 **Fluxo de criação:** [FLUX-002](../fluxos/FLUX-002-criacao-perfil-vm.md).
 **Fluxo de execução:** [FLUX-001](../fluxos/FLUX-001-execucao-manifesto.md).
 
 ## Objetivo
 
-O InsulaVM deve permitir preparar um sistema Debian uma vez, preservar suas alterações como **perfil de VM** e executar Actions futuras em instâncias derivadas **descartáveis**. O perfil persistente é uma imagem de disco com o sistema já instalado e configurado; não é a ISO de instalação nem um snapshot de memória RAM.
+O InsulaVM já consegue **registrar um QCOW2 com sistema previamente instalado** como perfil e executar Actions futuras em instâncias derivadas **descartáveis**. A preparação/instalação desse QCOW2 a partir de uma ISO dentro da própria aplicação ainda não foi implementada. O perfil persistente é uma imagem de disco com o sistema já instalado e configurado; não é a ISO de instalação nem um snapshot de memória RAM.
 
 ## Modelo de armazenamento recomendado
 
@@ -32,7 +32,7 @@ A implementação não deve escrever sobre `base.qcow2` enquanto houver Actions 
 
 ### Estrutura proposta
 
-`data_root` é o diretório configurável da aplicação; os caminhos abaixo são **exemplos de convenção**, não parâmetros existentes:
+`storage.root` é definido em [config.yaml](../../config.yaml). Os subdiretórios são configuráveis; o exemplo a seguir também mostra a árvore de staging prevista para instalação por ISO (ainda não implementada):
 
 ```text
 <data_root>/
@@ -56,7 +56,7 @@ A ISO do usuário pode continuar em caminho local externo informado por ele; sal
 
 ### Metadados persistentes do perfil
 
-O formato YAML para `profile.yaml` é **proposta**, separado do manifesto de execução `insula.yaml`, ainda sem schema final.
+O formato inicial de `profile.yaml` já é lido pelo [módulo profile](../../pkg/profile/profile.go), separado do manifesto de execução `insula.yaml`. Campos atuais: `name`, `os`, `memory_mib`, `vcpus`, `disk_gb`, `version`, `image`, `iso` e os overrides opcionais `ssh`. Evoluções como checksums e publicação de novas versões ainda são propostas.
 
 | Informação | Finalidade |
 | --- | --- |
