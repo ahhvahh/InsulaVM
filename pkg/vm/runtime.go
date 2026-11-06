@@ -111,8 +111,9 @@ func (i *Instance) Cleanup(ctx context.Context)error{
   if out,err:=virsh(ctx,i.uri,"destroy",i.Name);err!=nil{
    // If already shut down, Libvirt may report "domain not found".
    // Confirm that it no longer exists before deleting its files.
-   if _,checkErr:=virsh(ctx,i.uri,"dominfo",i.Name);checkErr==nil{
-    return fmt.Errorf("destroy domain: %w: %s",err,strings.TrimSpace(string(out)))
+   checkOut,checkErr:=virsh(ctx,i.uri,"dominfo",i.Name)
+   if checkErr==nil || !strings.Contains(strings.ToLower(string(checkOut)),"not found"){
+    return fmt.Errorf("cannot confirm domain stopped; refusing to delete overlay: %w: %s",err,strings.TrimSpace(string(out)))
    }
   }
   i.active=false
@@ -125,7 +126,7 @@ func domainXML(name string,memoryMiB,vcpus int,disk,network,mac string)string{
  escape:=func(v string)string{
   var b strings.Builder
   _=xml.EscapeText(&b,[]byte(v))
-  return b.String()
+  return strings.ReplaceAll(b.String(), "'", "&apos;")
  }
  return fmt.Sprintf(
   "<domain type='kvm'><name>%s</name><memory unit='MiB'>%d</memory>"+
