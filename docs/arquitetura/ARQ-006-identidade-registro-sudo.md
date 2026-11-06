@@ -29,9 +29,9 @@ Pré-requisito: preparar uma imagem-base compatível, com cache do Cloud-Init li
 
 A CLI e as aplicações Go importadoras usam a mesma configuração `config.yaml`. O caminho-padrão de banco é `<storage.root>/insula.db`, ajustável com `storage.database`.
 
-Tabela `vm_instances`: `id`, `libvirt_uuid`, `name`, `profile`, `ip`, `mac`, `host_fingerprint`, `ssh_user`, `sudo_mode`, `private_key_path`, `known_hosts_path`, `instance_dir`, `status`, `created_at`, `updated_at`, `finished_at`.
+Tabela `vm_instances`: `id`, `libvirt_uuid`, `name`, `profile`, `ip`, `mac`, `host_fingerprint`, `ssh_user`, `ssh_port`, `sudo_mode`, `private_key_path`, `known_hosts_path`, `instance_dir`, `status`, `created_at`, `updated_at`, `finished_at`.
 
-Estados persistidos: `creating`, `running`, `failed`, `destroyed`. Banco WAL e timeout de espera; histórico permanece após limpeza dos discos e chaves. A chave privada **não é armazenada no SQLite**. Cada instância mantém os dados sensíveis em um diretório próprio e restrito dentro de `storage.runs`.
+Estados persistidos: `creating`, `running`, `failed`, `destroyed`. Porta SSH padrão: `22`, também registrada para suportar destinos com porta diferente. Banco WAL e timeout de espera; histórico permanece após limpeza dos discos e chaves. A chave privada **não é armazenada no SQLite**. Cada instância mantém os dados sensíveis em um diretório próprio e restrito dentro de `storage.runs`.
 
 Limite: a versão atual ainda não faz reconciliação automática após desligamento inesperado ou queda do serviço. Por isso, um registro `running` deve ser considerado estado **persistido** até ser verificado contra Libvirt.
 
