@@ -2,6 +2,7 @@ package registry
 
 import (
  "context"
+ "database/sql"
  "path/filepath"
  "testing"
  "time"
@@ -70,4 +71,23 @@ func TestConcurrentReadWrite(t *testing.T){
  }()}
  if err:=s.SetRunning(ctx,"id","192.0.2.11");err!=nil{t.Fatal(err)}
  for i:=0;i<10;i++{if err:=<-done;err!=nil{t.Fatal(err)}}
+}
+
+func TestMigrateEarlierRegistrySchema(t *testing.T){
+ file:=filepath.Join(t.TempDir(),"old.db")
+ db,err:=sql.Open("sqlite",file)
+ if err!=nil{t.Fatal(err)}
+ _,err=db.Exec("CREATE TABLE vm_instances (id TEXT PRIMARY KEY,libvirt_uuid TEXT NOT NULL UNIQUE,name TEXT NOT NULL UNIQUE,profile TEXT NOT NULL,ip TEXT NOT NULL DEFAULT '',mac TEXT NOT NULL,ssh_user TEXT NOT NULL,private_key_path TEXT NOT NULL,known_hosts_path TEXT NOT NULL,instance_dir TEXT NOT NULL,status TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,finished_at TEXT NOT NULL DEFAULT '')")
+ if err!=nil{t.Fatal(err)}
+ if err:=db.Close();err!=nil{t.Fatal(err)}
+ store,err:=Open(file)
+ if err!=nil{t.Fatalf("migration failed: %v",err)}
+ defer store.Close()
+ if err:=store.Insert(context.Background(),Entry{ID:"legacy-upgraded",LibvirtUUID:"legacy-upgraded",Name:"insula-old",Profile:"legacy",SSHUser:"insula",MAC:"52:54:00:01:02:03",InstanceDir:"/tmp/legacy"});err!=nil{
+  t.Fatalf("upgraded registry cannot insert: %v",err)
+ }
+ entry,err:=store.Get(context.Background(),"legacy-upgraded")
+ if err!=nil||entry.SSHPort!=22{
+  t.Fatalf("SSH default port not migrated: %+v, %v",entry,err)
+ }
 }
