@@ -284,10 +284,7 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	defer client.Close()
 
 	for _, item := range m.Imports {
-		destination := item.Destination
-		if destination == "" {
-			destination = e.config.Guest.Destination
-		}
+		destination := e.config.Guest.Destination
 		reporter := importReporter{out: request.Output,callback: request.OnImportProgress,
 			source: item.Source,destination: destination}
 		imported,importErr := importWithClient(ctx,client,item.Source,destination,reporter)
