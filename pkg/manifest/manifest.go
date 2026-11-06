@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ahhvahh/InsulaVM/pkg/storage"
+	"github.com/ahhvahh/InsulaVM/pkg/identity"
 	"gopkg.in/yaml.v3"
 )
 
@@ -36,8 +37,16 @@ type ImportSpec struct {
  Destination string `yaml:"destination"`
 }
 
+// SSHOptions chooses a provisioned, non-root account for this Action.
+// Omit ssh entirely to use the host-wide ssh.user (default: insula).
+// Keys never belong in the Action manifest.
+type SSHOptions struct {
+ User string `yaml:"user"`
+}
+
 type Manifest struct {
 	Profile    string     `yaml:"profile"`
+	SSH        SSHOptions `yaml:"ssh"`
 	Repository Repository `yaml:"repository"`
 	Action     string     `yaml:"action"`
 	Workspace  string     `yaml:"workspace"`
@@ -93,7 +102,10 @@ func (m *Manifest) Validate() error {
 			return fmt.Errorf("profile: %w", err)
 		}
 	}
-	if err := storage.ValidateName(m.Repository.Name); err != nil {
+	if m.SSH.User != "" && !identity.ValidUser(m.SSH.User) {
+        return fmt.Errorf("ssh.user %q must be a valid, non-root Linux username", m.SSH.User)
+    }
+    if err := storage.ValidateName(m.Repository.Name); err != nil {
 		return fmt.Errorf("repository: %w", err)
 	}
 	if m.Action != "" {
@@ -101,8 +113,8 @@ func (m *Manifest) Validate() error {
 			return fmt.Errorf("action: %w", err)
 		}
 	}
-	if m.Workspace == "" || !path.IsAbs(m.Workspace) ||
-		strings.ContainsAny(m.Workspace, string([]byte{13, 10, 0})) {
+	if m.Workspace != "" && (!path.IsAbs(m.Workspace) ||
+		strings.ContainsAny(m.Workspace, string([]byte{13, 10, 0}))) {
 		return errors.New("workspace must be an absolute Linux path")
 	}
 	if len(m.Pipelines) == 0 && len(m.Setup) == 0 && len(m.Imports) == 0 {
@@ -115,8 +127,8 @@ func (m *Manifest) Validate() error {
 		if strings.TrimSpace(item.Source)=="" || strings.ContainsAny(item.Source,string([]byte{0,10,13})){
 			return fmt.Errorf("imports[%d].source must be a local file or directory path",i)
 		}
-		if !path.IsAbs(item.Destination) || item.Destination=="/" ||
-			strings.ContainsAny(item.Destination,string([]byte{0,10,13})){
+		if item.Destination!="" && (!path.IsAbs(item.Destination) || item.Destination=="/" ||
+			strings.ContainsAny(item.Destination,string([]byte{0,10,13}))) {
 			return fmt.Errorf("imports[%d].destination must be an absolute guest directory other than /",i)
 		}
 	}
