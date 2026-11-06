@@ -25,6 +25,36 @@ Pré-requisito: preparar uma imagem-base compatível, com cache do Cloud-Init li
 
 **Não existe negociação de senha SSH nem login como root.** O usuário normal (padrão: `insula`) autentica via chave Ed25519 individual da instância. O IP é uma propriedade que pode mudar; o identificador permanente é o UUIDv7.
 
+## Seleção do usuário SSH por Action
+
+```yaml
+# config.yaml: padrão de todas as VMs
+guest:
+  destination: /tmp/insulavm/workspace
+ssh:
+  user: insula
+```
+
+```yaml
+# insula.yaml: override opcional da Action
+profile: debian-minimal
+ssh:
+  user: buildagent
+repository:
+  name: projeto
+action: testar
+imports:
+  - source: /srv/projeto
+setup:
+  - id -un
+```
+
+A opção `ssh.user` da Action é **opcional**: se ausente, o InsulaVM usa o usuário do perfil (quando definido) ou a configuração global (`insula` por padrão). O Cloud-Init provisiona o usuário escolhido e injeta sua chave pública individual. **Nunca** informe `key`, `known_hosts`, senha ou diretório remoto no YAML da Action.
+
+O caminho `guest.destination` é sempre o destino dos arquivos e o diretório inicial dos jobs quando `workspace` for omitido. O InsulaVM tenta criá-lo **como o usuário SSH**, sem elevar privilégios automaticamente. Para pastas protegidas, prepare permissões no perfil ou escolha um caminho acessível.
+
+Se a Action for executada numa VM SSH **externa**, não gerenciada pelo InsulaVM, a conta já precisa existir e aceitar uma chave previamente autorizada. Nesse caso, configure `ssh.private_key` e `ssh.known_hosts` no `config.yaml` global; não há como provisionar uma conta remota sem acesso prévio.
+
 ## SQLite e arquivos de instância
 
 A CLI e as aplicações Go importadoras usam a mesma configuração `config.yaml`. O caminho-padrão de banco é `<storage.root>/insula.db`, ajustável com `storage.database`.
@@ -68,7 +98,7 @@ go run . vm exec -config config.yaml -id <UUIDv7> -command "id -un"
 go run . vm exec -config config.yaml -id <UUIDv7> -command "id -u" -sudo
 
 # Copia arquivos pelo UUID, usando as credenciais guardadas no cadastro.
-go run . vm import -config config.yaml -id <UUIDv7> -source /srv/projeto -dest /tmp/projeto
+go run . vm import -config config.yaml -id <UUIDv7> -source /srv/projeto
 
 # Encerra por ID, remove overlay/seed/chaves e mantém histórico SQLite.
 go run . vm stop -config config.yaml -id <UUIDv7>
