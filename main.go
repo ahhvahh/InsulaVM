@@ -39,14 +39,14 @@ func run(args []string) error {
 			return importCommand(args[1:])
 		case "help", "-h", "--help":
 			fmt.Println("Usage: insula [run] -config config.yaml -manifest insula.yaml")
-			fmt.Println("       insula import -config config.yaml -host 192.0.2.10:22 -source /host/project -dest /tmp/project")
+			fmt.Println("       insula import -config config.yaml -host 192.0.2.10:22 -source /host/project")
 			fmt.Println("       insula config check -config config.yaml")
 			fmt.Println("       insula vm start -config config.yaml -profile debian-minimal")
 			fmt.Println("       insula vm list -config config.yaml")
 			fmt.Println("       insula vm show -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm exec -id UUIDv7 -command \"id -u\" [-sudo]")
-			fmt.Println("       insula vm import -id UUIDv7 -source /host/projeto -dest /tmp/projeto")
+			fmt.Println("       insula vm import -id UUIDv7 -source /host/projeto")
 			fmt.Println("       insula profile list -config config.yaml")
 			fmt.Println("       insula profile show -config config.yaml -name debian-go")
 			fmt.Println("       insula profile register -config config.yaml -name debian-go -image installed.qcow2 -memory-mib 1024 -vcpus 1 -disk-gb 8")
@@ -73,8 +73,8 @@ func configCommand(args []string) error {
 		return err
 	}
 	c := engine.Configuration()
-	fmt.Printf("Valid: profiles=%s runs=%s logs=%s provider=%s\n",
-		c.Storage.Profiles, c.Storage.Runs, c.Storage.Logs, c.Virtualization.Provider)
+	fmt.Printf("Valid: profiles=%s runs=%s logs=%s provider=%s guest_destination=%s ssh_user=%s\n",
+		c.Storage.Profiles, c.Storage.Runs, c.Storage.Logs, c.Virtualization.Provider, c.Guest.Destination, c.SSH.User)
 	return nil
 }
 
