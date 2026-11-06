@@ -11,7 +11,7 @@
 ## Status verificável dos componentes
 
 - **Implementado:** [executor SSH](../../pkg/executor/ssh.go), [armazenamento local de logs](../../pkg/storage/logger.go), [manifesto YAML](../../pkg/manifest/manifest.go) e [CLI](../../main.go), seguindo o [FLUX-003](../fluxos/FLUX-003-execucao-sequencial-logs.md).
-- **Proposto:** criação de perfis, gerenciamento de VM por Libvirt, Cloud-Init automatizado, transferência de repositórios, isolamento de Actions e limpeza de overlays. A CLI atual requer VM Debian já acessível com workspace preparado.
+- **Implementado:** perfis QCOW2, gerenciamento temporário de VM por Libvirt, Cloud-Init NoCloud com identidade SSH por instância, importação TAR.GZ, pasta `guest.destination` configurável, jobs sequenciais e limpeza de overlays. **Proposto:** instalação do Linux pela ISO instaladora e checkout Git automático.
 
 ## Objetivo e limites
 
@@ -39,7 +39,7 @@ flowchart LR
 | --- | --- | --- |
 | CLI/orquestrador | Criar perfis interativamente, validar manifesto, coordenar etapas, cancelamento e resultado | Go |
 | Gerenciador de perfis | Salvar imagem-base QCOW2 imutável, metadados e overlays por Action | Libvirt/QEMU; [ARQ-002](ARQ-002-perfis-vm.md) |
-| Gerenciador de VM | Criar disco temporário, gerar XML, ISO Cloud-Init, iniciar/parar/remover domínio | `pkg/vm/kvm.go`; KVM, QEMU e Libvirt |
+| Gerenciador de VM | Criar disco temporário, gerar XML, ISO Cloud-Init, iniciar/parar/remover domínio | `pkg/vm/runtime.go`; KVM, QEMU e Libvirt |
 | Preparação da instância | Configurar identidade, usuário, rede e chave pública SSH quando o sistema instalado tiver Cloud-Init operacional | Cloud-Init / NoCloud |
 | Executor remoto | Conectar, executar comandos sequenciais no contexto correto e capturar saída | `pkg/executor/ssh.go`; `golang.org/x/crypto/ssh` |
 | Preparador de repositório | Obter referência remota ou empacotar projeto local; disponibilizar checkout | Git + transporte autenticado |
@@ -69,7 +69,7 @@ flowchart LR
 
 1. Gerar par de chaves SSH **no hospedeiro**, proteger a chave privada e injetar somente a pública via Cloud-Init; não transmitir senhas em logs.
 2. Validar a chave de identidade do **servidor SSH convidado** por material de confiança obtido por canal confiável. `InsecureIgnoreHostKey` não é aceitável para a implementação final. A estratégia de distribuição/verificação da chave do servidor ainda precisa ser definida.
-3. Criar sessão SSH para cada comando/job; montar o contexto do diretório da pipeline na raiz do checkout, por exemplo `cd /app/repo-workspace && <comando>`. Escapar o caminho de forma segura e não concatenar valores arbitrários sem validação.
+3. Criar sessão SSH para cada comando/job; montar o contexto do diretório da pipeline na raiz do checkout, por exemplo `cd <guest.destination> && <comando>`. Escapar o caminho de forma segura e não concatenar valores arbitrários sem validação.
 4. Configurar `StdoutPipe()` e `StderrPipe()` antes de `Start()`. Consumir os dois fluxos concorrentemente, linha a linha, com buffers dimensionados para linhas longas. Depois aguardar `Wait()` e registrar status de saída.
 5. Mostrar mensagens com prefixo identificador do job, como `[run-tests] Instalando pacotes...`. Preservar a ordem **dentro de cada fluxo**; a interleaving de stdout e stderr não garante ordem global. Incluir origem do fluxo no registro interno quando pertinente.
 6. Não usar `Output()` nem `CombinedOutput()` como mecanismo de streaming. `Wait()` é necessário para obter o resultado, sem impedir que os leitores publiquem linhas enquanto o comando executa.
@@ -79,7 +79,7 @@ flowchart LR
 
 - **Remoto:** obter URL e referência solicitadas (branch/tag/commit) e materializar uma revisão identificável. Para repositórios privados, evitar gravar credenciais no disco ou na ISO da VM.
 - **Local:** compactar o conteúdo de trabalho autorizado no hospedeiro e transferir por canal autenticado (por exemplo, archive TAR via SSH); não pressupor que todo diretório local seja um repositório Git válido.
-- **Raiz de execução:** `/app/repo-workspace` é o caminho **proposto** para o checkout. Jobs da pipeline sempre executam nessa raiz. Comandos de `setup` têm contexto e elevação de privilégio definidos explicitamente no futuro contrato.
+- **Raiz de execução:** `guest.destination` de `config.yaml` define o destino padrão de todos os arquivos e o diretório de trabalho dos jobs. Exemplo: `/tmp/insulavm/workspace`. Comandos de `setup` têm contexto e elevação de privilégio definidos explicitamente no futuro contrato.
 - **Ordem:** materialização do projeto antes de `setup`; execução de `setup` antes dos jobs, conforme [FLUX-001](../fluxos/FLUX-001-execucao-manifesto.md).
 
 ## Segurança e requisitos não funcionais
