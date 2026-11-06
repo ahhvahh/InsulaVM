@@ -21,6 +21,7 @@ import (
 	"github.com/ahhvahh/InsulaVM/pkg/executor"
 	"github.com/ahhvahh/InsulaVM/pkg/manifest"
 	"github.com/ahhvahh/InsulaVM/pkg/profile"
+	"github.com/ahhvahh/InsulaVM/pkg/registry"
 	"github.com/ahhvahh/InsulaVM/pkg/storage"
 	"github.com/ahhvahh/InsulaVM/pkg/vm"
 	"golang.org/x/crypto/ssh"
@@ -34,6 +35,8 @@ type Pipeline = manifest.Pipeline
 type Job = manifest.Job
 type ImportSpec = manifest.ImportSpec
 type Profile = profile.Profile
+// VMInfo is persisted in the shared SQLite registry.
+type VMInfo = registry.Entry
 
 // Engine holds immutable host configuration. Multiple Run calls may use the
 // same Engine concurrently; each run creates its own log directory and VM.
@@ -90,6 +93,29 @@ func (e *Engine) StartVM(ctx context.Context, name string) (*vm.Instance, error)
 	return vm.Start(ctx, &e.config, p)
 }
 
+// GetVM loads a VM by its persistent UUIDv7 identifier.
+func (e *Engine) GetVM(ctx context.Context,id string)(VMInfo,error){
+ if ctx==nil{return VMInfo{},errors.New("context is required")}
+ store,err:=registry.Open(e.config.Storage.Database)
+ if err!=nil{return VMInfo{},err}
+ defer store.Close()
+ return store.Get(ctx,id)
+}
+
+// ListVMs lists historical and currently registered VM instances.
+func (e *Engine) ListVMs(ctx context.Context)([]VMInfo,error){
+ if ctx==nil{return nil,errors.New("context is required")}
+ store,err:=registry.Open(e.config.Storage.Database)
+ if err!=nil{return nil,err}
+ defer store.Close()
+ return store.List(ctx)
+}
+
+// StopVM destroys a disposable instance (by UUIDv7) and marks its history.
+func(e *Engine)StopVM(ctx context.Context,id string)error{
+ return vm.StopByID(ctx,&e.config,id)
+}
+
 // RunRequest selects the action to run and optionally overrides SSH settings.
 // Either ManifestPath or Manifest must be supplied, never both.
 type RunRequest struct {
@@ -111,6 +137,8 @@ type RunRequest struct {
 
 // RunResult records progress even if a job fails and Run returns an error.
 type RunResult struct {
+	VMID string
+	MACAddress string
 	Profile string
 	Host string
 	VMName string
@@ -198,9 +226,6 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	if request.KnownHosts != "" {
 		hosts = request.KnownHosts
 	}
-	if user == "" || key == "" || hosts == "" {
-		return result, errors.New("SSH user, private key and known_hosts are required")
-	}
 	logRoot := e.config.Storage.Logs
 	if request.LogRoot != "" {
 		logRoot = request.LogRoot
@@ -218,8 +243,13 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 		if err != nil {
 			return result, err
 		}
+		result.VMID = instance.ID
 		result.VMName = instance.Name
+		result.MACAddress = instance.MACAddress
 		host = instance.Address
+		// New disposable VMs use fresh, per-instance identities from Cloud-Init.
+		// Existing hosts still use explicit or globally configured SSH keys.
+		user, key, hosts = instance.SSHUser, instance.SSHPrivateKeyPath, instance.SSHKnownHostsPath
 		defer func() {
 			cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
@@ -227,6 +257,9 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 		}()
 	}
 	result.Host = host
+	if user == "" || key == "" || hosts == "" {
+		return result, errors.New("SSH user, private key and known_hosts are required")
+	}
 	connectTimeout := time.Duration(e.config.SSH.ConnectTimeoutSeconds) * time.Second
 	client, err := dialWithRetry(ctx, executor.DialConfig{
 		Address: host,
