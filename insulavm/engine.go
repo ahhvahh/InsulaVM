@@ -7,7 +7,7 @@
 // An existing Linux guest must have SSH and the workspace configured.
 // Automatic VM creation requires a previously installed QCOW2 profile and
 // QEMU/Libvirt on the host. OS installation, Cloud-Init provisioning and
-// repository transfer are not implemented yet.
+// arbitrary host file/directory imports are supported. Git checkout is not yet automated.
 package insulavm
 
 import (
@@ -32,6 +32,7 @@ type Manifest = manifest.Manifest
 type Repository = manifest.Repository
 type Pipeline = manifest.Pipeline
 type Job = manifest.Job
+type ImportSpec = manifest.ImportSpec
 type Profile = profile.Profile
 
 // Engine holds immutable host configuration. Multiple Run calls may use the
@@ -104,6 +105,8 @@ type RunRequest struct {
 	// Output receives streamed job lines; nil means no console output.
 	// Regardless of Output, jobs always write persistent files.
 	Output io.Writer
+	// OnImportProgress receives structured events before each setup/job.
+	OnImportProgress func(ImportProgress)
 }
 
 // RunResult records progress even if a job fails and Run returns an error.
@@ -113,6 +116,7 @@ type RunResult struct {
 	VMName string
 	LogDirectory string
 	CompletedJobs []string
+	Imports []ImportResult
 	StartedAt time.Time
 	FinishedAt time.Time
 }
@@ -236,6 +240,16 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	}
 	defer client.Close()
 
+	for _, item := range m.Imports {
+		reporter := importReporter{out: request.Output,callback: request.OnImportProgress,
+			source: item.Source,destination: item.Destination}
+		imported,importErr := importWithClient(ctx,client,item.Source,item.Destination,reporter)
+		if imported!=nil{result.Imports=append(result.Imports,*imported)}
+		if importErr!=nil{
+			reporter.send("failed","Falha na importacao: "+importErr.Error(),0,0,0)
+			return result,fmt.Errorf("import %s to %s: %w",item.Source,item.Destination,importErr)
+		}
+	}
 	timeout := request.CommandTimeout
 	if timeout == 0 {
 		timeout = 30 * time.Minute
