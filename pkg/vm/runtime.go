@@ -59,18 +59,23 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(instance *In
  dir,err:=os.MkdirTemp(c.Storage.Runs,"insula-vm-")
  if err!=nil{return nil,err}
  instance=&Instance{Directory:dir,uri:c.Virtualization.LibvirtURI,registryPath:c.Storage.Database,Profile:p.Name,SudoMode:c.SSH.SudoMode}
+ // Keep a separate reference for cleanup. Start returns (nil, error) on
+ // failure, which sets the named result "instance" to nil before deferred
+ // functions execute. Using that named result would panic and hide the real
+ // Libvirt/Cloud-Init error.
+ created:=instance
  registered:=false
  success:=false
  defer func(){
   if success{return}
   cleanupCtx,cancel:=context.WithTimeout(context.Background(),25*time.Second)
   defer cancel()
-  if cleanupErr:=instance.Cleanup(cleanupCtx);cleanupErr!=nil{
+  if cleanupErr:=created.Cleanup(cleanupCtx);cleanupErr!=nil{
    runErr=errors.Join(runErr,fmt.Errorf("failed to clean up failed VM: %w",cleanupErr))
   }
   if registered{
-   if store,err:=registry.Open(instance.registryPath);err==nil{
-    _=store.SetFailed(cleanupCtx,instance.ID)
+   if store,err:=registry.Open(created.registryPath);err==nil{
+    _=store.SetFailed(cleanupCtx,created.ID)
     _=store.Close()
    }
   }
