@@ -33,8 +33,11 @@ func run(args []string) error {
 			return profileCommand(args[1:])
 		case "run":
 			return runAction(args[1:])
+		case "import":
+			return importCommand(args[1:])
 		case "help", "-h", "--help":
 			fmt.Println("Usage: insula [run] -config config.yaml -manifest insula.yaml")
+			fmt.Println("       insula import -config config.yaml -host 192.0.2.10:22 -source /host/project -dest /tmp/project")
 			fmt.Println("       insula config check -config config.yaml")
 			fmt.Println("       insula profile list -config config.yaml")
 			fmt.Println("       insula profile show -config config.yaml -name debian-go")
