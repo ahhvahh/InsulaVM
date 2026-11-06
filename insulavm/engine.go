@@ -34,6 +34,7 @@ type Repository = manifest.Repository
 type Pipeline = manifest.Pipeline
 type Job = manifest.Job
 type ImportSpec = manifest.ImportSpec
+type SSHOptions = manifest.SSHOptions
 type Profile = profile.Profile
 // VMInfo is persisted in the shared SQLite registry.
 type VMInfo = registry.Entry
@@ -217,6 +218,9 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 			hosts = p.SSH.KnownHosts
 		}
 	}
+	if m.SSH.User != "" {
+		user = m.SSH.User
+	}
 	if request.User != "" {
 		user = request.User
 	}
@@ -239,7 +243,11 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	if host == "" {
 		// The VM overlay is private to this invocation. Other concurrent
 		// runs using the same read-only backing image get their own overlay.
-		instance, err := vm.Start(ctx, &e.config, p)
+		// Provision the actual Action SSH account into the new guest.
+		// The per-instance SSH keys are generated and managed by the VM runtime.
+		configuredProfile := *p
+		configuredProfile.SSH.User = user
+		instance, err := vm.Start(ctx, &e.config, &configuredProfile)
 		if err != nil {
 			return result, err
 		}
@@ -274,22 +282,30 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	defer client.Close()
 
 	for _, item := range m.Imports {
+		destination := item.Destination
+		if destination == "" {
+			destination = e.config.Guest.Destination
+		}
 		reporter := importReporter{out: request.Output,callback: request.OnImportProgress,
-			source: item.Source,destination: item.Destination}
-		imported,importErr := importWithClient(ctx,client,item.Source,item.Destination,reporter)
+			source: item.Source,destination: destination}
+		imported,importErr := importWithClient(ctx,client,item.Source,destination,reporter)
 		if imported!=nil{result.Imports=append(result.Imports,*imported)}
 		if importErr!=nil{
 			reporter.send("failed","Falha na importacao: "+importErr.Error(),0,0,0)
-			return result,fmt.Errorf("import %s to %s: %w",item.Source,item.Destination,importErr)
+			return result,fmt.Errorf("import %s to %s: %w",item.Source,destination,importErr)
 		}
 	}
 	timeout := request.CommandTimeout
 	if timeout == 0 {
 		timeout = 30 * time.Minute
 	}
+	workspace := m.Workspace
+	if workspace == "" {
+		workspace = e.config.Guest.Destination
+	}
 	runner := &executor.Executor{
 		Client: client,
-		Workspace: m.Workspace,
+		Workspace: workspace,
 		Console: request.Output,
 		CommandTimeout: timeout,
 	}
