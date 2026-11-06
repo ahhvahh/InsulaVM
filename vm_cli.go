@@ -12,7 +12,7 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|list|show|stop|exec")}
+ if len(args)==0{return errors.New("usage: insula vm start|list|show|stop|exec|import")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -21,6 +21,8 @@ func vmCommand(args []string)error{
  commandText:=fs.String("command","","shell command inside the VM")
  workspace:=fs.String("workspace","/tmp","guest working directory")
  sudo:=fs.Bool("sudo",false,"execute as root via sudo -n (requires passwordless mode)")
+ source:=fs.String("source","","host file/directory to import")
+ destination:=fs.String("dest","","absolute directory inside VM")
  if err:=fs.Parse(args[1:]);err!=nil{return err}
  if fs.NArg()!=0{return errors.New("unexpected vm arguments")}
  engine,err:=insulavm.New(*cfgPath)
@@ -59,6 +61,14 @@ func vmCommand(args []string)error{
   })
   if result!=nil{fmt.Println("Logs:",result.LogDirectory)}
   return err
+ case "import":
+  if *id==""||*source==""||*destination==""{return errors.New("vm import requires -id, -source and -dest")}
+  result,err:=engine.ImportToVM(ctx,insulavm.VMImportRequest{
+   VMID:*id,SourcePath:*source,DestinationPath:*destination,Output:os.Stdout,
+  })
+  if err!=nil{return err}
+  fmt.Printf("Imported %d file(s) into VM %s at %s\n",result.Files,*id,result.DestinationPath)
+  return nil
  case "stop":
   if *id==""{return errors.New("vm stop requires -id")}
   if err:=engine.StopVM(ctx,*id);err!=nil{return err}
