@@ -47,6 +47,8 @@ Usar `@main` traz a revisão da branch na resolução inicial; a versão efetiva
 | Iniciar VM | `Engine.StartVM(ctx, profileName)` | Cria overlay, inicia VM e retorna instância para cleanup explícito |
 | Executar Action | `Engine.Run(ctx, RunRequest)` | Perfil/host, imports locais, SSH, setup, jobs, logs e cleanup |
 | Importar arquivos | `Engine.ImportPath(ctx, ImportRequest)` | Compactar arquivo/pasta, enviar SSH, extrair na VM e acompanhar o progresso |
+| Gerenciar VMs | `Engine.StartVM/GetVM/ListVMs/StopVM` | SQLite UUIDv7, MAC, IP e credenciais SSH da instância |
+| Executar por ID | `Engine.ExecVM(ctx, ExecRequest)` | Comando como usuário comum ou elevação explícita por `sudo -n` |
 
 O `RunRequest` também oferece `OnImportProgress func(ImportProgress)` para informar estágios de transferência. O resultado `RunResult.Imports` contém as importações concluídas. Mais detalhes em [ARQ-005](ARQ-005-importacao-arquivos.md).
 
@@ -106,8 +108,8 @@ O pacote `insulavm` é o ponto de entrada recomendado. Os pacotes em `pkg/` cont
 
 ## Limites atuais e condições de operação
 
-- **Não implementado:** instalar SO da ISO, fornecer bootstrap Cloud-Init por VM, clonar automaticamente um repositório Git, expor API REST/UDS e fila gerenciada. O upload de arquivos e diretórios locais já foi implementado pelo método `ImportPath` e pelo `imports` do manifesto.
-- **Necessário para VM automática:** perfil QCOW2 com SO já instalado, suporte VirtIO/DHCP/SSH, hipervisor KVM/QEMU/Libvirt e permissões de armazenamento adequadas.
+- **Não implementado:** instalar SO da ISO instaladora, clonar automaticamente um repositório Git, expor API REST/UDS e fila gerenciada. Bootstrap Cloud-Init NoCloud, SQLite e sudo são implementados em [ARQ-006](ARQ-006-identidade-registro-sudo.md). O upload de arquivos e diretórios locais já foi implementado pelo método `ImportPath` e pelo `imports` do manifesto.
+- **Necessário para VM automática:** perfil QCOW2 com SO já instalado, Cloud-Init/SSH/sudo preparado, suporte VirtIO/DHCP, hipervisor KVM/QEMU/Libvirt e permissões de armazenamento adequadas.
 - **Necessário para modo Host:** máquina Linux já acessível por SSH e diretório de trabalho presente.
 - **Segurança:** scripts do manifesto executam shell; acesso a Libvirt concede privilégios relevantes. O chamador deve validar permissões, não usar manifestos de origem não confiável, não inserir segredos em comandos/logs e configurar chaves/host keys verificadas.
 - **Concorrência:** instâncias e arquivos de log são independentes, mas ainda faltam limites globais, lock/versionamento de perfis e teste de carga real em KVM.
