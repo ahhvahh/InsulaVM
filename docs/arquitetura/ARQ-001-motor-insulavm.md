@@ -3,16 +3,21 @@
 
 # ARQ-001 — Arquitetura do motor InsulaVM
 
-**Estado:** Proposto — não implementado.
+**Estado:** arquitetura integral proposta; executor SSH, parser YAML e persistência de logs implementados.
 **Escopo:** motor local em Go, hospedeiro Linux e VM convidada Debian.
 **Fluxos:** [FLUX-001 — Executar Action](../fluxos/FLUX-001-execucao-manifesto.md) e [FLUX-002 — Criar perfil](../fluxos/FLUX-002-criacao-perfil-vm.md).
 **Persistência das VMs:** [ARQ-002 — Perfis e overlays](ARQ-002-perfis-vm.md).
+
+## Status verificável dos componentes
+
+- **Implementado:** [executor SSH](../../pkg/executor/ssh.go), [armazenamento local de logs](../../pkg/storage/logger.go), [manifesto YAML](../../pkg/manifest/manifest.go) e [CLI](../../main.go), seguindo o [FLUX-003](../fluxos/FLUX-003-execucao-sequencial-logs.md).
+- **Proposto:** criação de perfis, gerenciamento de VM por Libvirt, Cloud-Init automatizado, transferência de repositórios, isolamento de Actions e limpeza de overlays. A CLI atual requer VM Debian já acessível com workspace preparado.
 
 ## Objetivo e limites
 
 O InsulaVM é uma ferramenta CLI open-source que permite preparar perfis persistentes de VM Debian e, depois, lê `insula.yaml` para executar `setup` e pipelines em instâncias descartáveis derivadas desses perfis. O hospedeiro controla virtualização, transferência do projeto, comunicação SSH, logs e encerramento; o convidado não recebe agente próprio do InsulaVM.
 
-Esta é uma arquitetura **planejada**, não um inventário de funcionalidades disponíveis. Na revisão inicial da branch `main` existiam apenas `README.md`, `.gitignore` e `LICENSE`.
+A arquitetura completa continua **planejada**; os componentes básicos de execução SSH e logs agora têm implementação verificável. Na revisão inicial da branch `main` existiam apenas `README.md`, `.gitignore` e `LICENSE`.
 
 ## Contexto e componentes
 
@@ -58,7 +63,7 @@ flowchart LR
 | API do Libvirt | `libvirt.org/go/libvirt` | Binding oficial atual com Go modules; substitui `libvirt.org/libvirt-go` legado. `github.com/libvirt/libvirt-go` é espelho arquivado. Usa CGO e biblioteca nativa Libvirt. |
 | SSH | `golang.org/x/crypto/ssh` | Sessões SSH e pipes separados para stdout/stderr. |
 
-**Nenhuma dependência foi adicionada ao `go.mod` neste ciclo documental.**
+**Nota:** `go.mod` contém as dependências SSH e YAML do executor implementado. O binding Libvirt permanece previsto, ainda não adicionado.
 
 ## Comunicação, execução e telemetria
 
