@@ -9,8 +9,6 @@ import (
 	"encoding/binary"
 	"encoding/pem"
 	"errors"
-	"fmt"
-	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -101,7 +99,7 @@ func TestRunCancellation(t *testing.T) {
 
 func runTestSSHServer(t *testing.T) (address, keyPath, hostsPath string) {
 	t.Helper()
-	public, private, err := ed25519.GenerateKey(rand.Reader)
+	_, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,7 +180,6 @@ func runTestSSHServer(t *testing.T) (address, keyPath, hostsPath string) {
 		t.Fatal(err)
 	}
 	hostsPath = filepath.Join(path, "known_hosts")
-	_ = public
 	if err := os.WriteFile(hostsPath, []byte(knownhosts.Line(
 		[]string{listener.Addr().String()}, signer.PublicKey())+"\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -261,5 +258,4 @@ func TestRunFailureDoesNotExecuteFollowingCommands(t *testing.T) {
 	if !strings.Contains(string(content), "<< before") {
 		t.Fatalf("missing early output: %s", content)
 	}
-	_ = fmt.Sprint(io.Discard) // compile-time import sanity for client example
 }
