@@ -1,5 +1,7 @@
-# Example only: connect to a Debian VM with an existing checkout.
-# The CLI does not provision a VM or clone repositories in this cycle.
+# Example: profile debian-minimal must be registered from an already-installed
+# QCOW2 disk. With -host supplied, a prepared guest is used instead.
+# Repository transfer and installation from ISO are not yet implemented.
+profile: debian-minimal
 repository:
   name: example-repo
 action: test
