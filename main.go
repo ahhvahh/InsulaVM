@@ -45,6 +45,7 @@ func run(args []string) error {
 			fmt.Println("       insula vm list -config config.yaml")
 			fmt.Println("       insula vm show -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm status -config config.yaml -id UUIDv7")
+			fmt.Println("       insula vm shell -config config.yaml -id UUIDv7 [-directory InsulaVM]")
 			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm exec -id UUIDv7 -command \"id -u\" [-sudo]")
 			fmt.Println("       insula vm import -id UUIDv7 -source /host/projeto")
