@@ -40,24 +40,8 @@ jobs:
           printf 'must-not-be-included\n' > "$tmp/sample-repo/untracked.txt"
           bash scripts/repositorio-vm.sh empacotar "$tmp/sample-repo" "$tmp/output"
           test -s "$tmp/output/sample-repo.tar.gz"
-          tar -tzf "$tmp/output/sample-repo.tar.gz" | grep -q '^sample-repo/hello.txt        run: |
-          consumer="$(mktemp -d)"
-          cd "$consumer"
-          go mod init example.com/insulavm-consumer
-          go mod edit -replace "github.com/ahhvahh/InsulaVM=$GITHUB_WORKSPACE"
-          cp "$GITHUB_WORKSPACE/examples/go-library/main.go" ./main.go
-          go mod tidy
-          go test ./...
-
-          if tar -tzf "$tmp/output/sample-repo.tar.gz" | grep -q 'untracked.txt        run: |
-          consumer="$(mktemp -d)"
-          cd "$consumer"
-          go mod init example.com/insulavm-consumer
-          go mod edit -replace "github.com/ahhvahh/InsulaVM=$GITHUB_WORKSPACE"
-          cp "$GITHUB_WORKSPACE/examples/go-library/main.go" ./main.go
-          go mod tidy
-          go test ./...
-; then
+          tar -tzf "$tmp/output/sample-repo.tar.gz" | grep -q '^sample-repo/hello.txt$'
+          if tar -tzf "$tmp/output/sample-repo.tar.gz" | grep -q 'untracked.txt$'; then
             echo "untracked content was included" >&2
             exit 1
           fi
