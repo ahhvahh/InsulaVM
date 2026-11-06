@@ -6,6 +6,13 @@ repository:
   name: example-repo
 action: test
 workspace: /app/repo-workspace
+# Optional: import a directory (its CONTENTS) or a single file from
+# the host to the VM before setup and jobs. Uncomment and adapt:
+# imports:
+#   - source: /home/user/my-project
+#     destination: /app/repo-workspace
+#   - source: /home/user/settings.ini
+#     destination: /tmp/config
 setup:
   - "echo Debian environment is ready"
 pipelines:
