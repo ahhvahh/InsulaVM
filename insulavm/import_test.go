@@ -20,10 +20,11 @@ func TestImportPathDirectoryProgressAndConfirmation(t *testing.T){
  if err:=os.Mkdir(filepath.Join(source,"nested"),0755);err!=nil{t.Fatal(err)}
  if err:=os.WriteFile(filepath.Join(source,"nested","hello.txt"),[]byte("hello from host"),0600);err!=nil{t.Fatal(err)}
  dest:=filepath.Join(t.TempDir(),"guest output")
+ engine.config.Guest.Destination=dest
  var out bytes.Buffer
  var events []ImportProgress
  result,err:=engine.ImportPath(context.Background(),ImportRequest{
-  SourcePath:source,DestinationPath:dest,Host:host,User:"test",PrivateKey:key,
+  SourcePath:source,Host:host,User:"test",PrivateKey:key,
   KnownHosts:hosts,Output:&out,OnProgress:func(p ImportProgress){events=append(events,p)},
  })
  if err!=nil{t.Fatal(err)}
@@ -53,8 +54,9 @@ func TestImportPathSingleFile(t *testing.T){
  source:=filepath.Join(t.TempDir(),"single.sh")
  if err:=os.WriteFile(source,[]byte("#!/bin/sh\necho okay\n"),0700);err!=nil{t.Fatal(err)}
  dest:=filepath.Join(t.TempDir(),"guest")
+ engine.config.Guest.Destination=dest
  result,err:=engine.ImportPath(context.Background(),ImportRequest{
-  SourcePath:source,DestinationPath:dest,Host:host,User:"test",PrivateKey:key,KnownHosts:hosts,
+  SourcePath:source,Host:host,User:"test",PrivateKey:key,KnownHosts:hosts,
  })
  if err!=nil{t.Fatal(err)}
  if result.Files!=1||!result.Imported{t.Fatalf("result %+v",result)}
@@ -69,13 +71,13 @@ func TestRunImportsBeforeJobs(t *testing.T){
  source:=t.TempDir()
  if err:=os.WriteFile(filepath.Join(source,"marker.txt"),[]byte("import-before-job"),0600);err!=nil{t.Fatal(err)}
  dest:=filepath.Join(t.TempDir(),"guest")
+ engine.config.Guest.Destination=dest
  var out bytes.Buffer
  var stages []string
  m:=&Manifest{
   Repository:Repository{Name:"integration"},
   Action:"import-check",
-  Workspace:t.TempDir(),
-  Imports:[]ImportSpec{{Source:source,Destination:dest}},
+  Imports:[]ImportSpec{{Source:source}},
   Pipelines:[]Pipeline{{Name:"checks",Jobs:[]Job{{
    Name:"verify",Commands:[]string{"test -f '"+filepath.ToSlash(filepath.Join(dest,"marker.txt"))+"'","echo verified"},
   }}}},
@@ -104,7 +106,7 @@ func TestImportPathReportsFailure(t *testing.T){
  var events []ImportProgress
  _,err:=engine.ImportPath(context.Background(),ImportRequest{
   SourcePath:filepath.Join(t.TempDir(),"notfound"),
-  DestinationPath:"/tmp/guest",Host:host,User:"test",PrivateKey:key,
+  Host:host,User:"test",PrivateKey:key,
   KnownHosts:hosts,OnProgress:func(p ImportProgress){events=append(events,p)},
  })
  if err==nil{t.Fatal("expected nonexistent source error")}
@@ -135,9 +137,10 @@ func TestImportToVMByID(t *testing.T){
  source:=filepath.Join(t.TempDir(),"uploaded.txt")
  if err:=os.WriteFile(source,[]byte("transferred by VM ID"),0600);err!=nil{t.Fatal(err)}
  dest:=filepath.Join(t.TempDir(),"guest")
+ engine.config.Guest.Destination=dest
  var stages []string
  result,err:=engine.ImportToVM(ctx,VMImportRequest{
-  VMID:id,SourcePath:source,DestinationPath:dest,
+  VMID:id,SourcePath:source,
   OnProgress:func(p ImportProgress){stages=append(stages,p.Stage)},
  })
  if err!=nil{t.Fatal(err)}
