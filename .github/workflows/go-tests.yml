@@ -22,3 +22,13 @@ jobs:
         run: |
           go vet ./...
           go test -race ./...
+
+      - name: Compile example from an independent Go module
+        run: |
+          consumer="$(mktemp -d)"
+          cd "$consumer"
+          go mod init example.com/insulavm-consumer
+          go mod edit -replace "github.com/ahhvahh/InsulaVM=$GITHUB_WORKSPACE"
+          cp "$GITHUB_WORKSPACE/examples/go-library/main.go" ./main.go
+          go mod tidy
+          go test ./...
