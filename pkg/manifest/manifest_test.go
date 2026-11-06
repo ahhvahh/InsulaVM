@@ -50,3 +50,17 @@ func TestRejectsUnsafePathAndBadCommands(t *testing.T) {
 		t.Fatal("expected empty command error")
 	}
 }
+
+func TestImportsBeforeJobsSchema(t *testing.T) {
+ src := "repository:\n  name: demo\naction: import\nworkspace: /tmp/work\nimports:\n  - source: ./project\n    destination: /tmp/work\n"
+ m,err:=Decode(strings.NewReader(src))
+ if err!=nil{t.Fatal(err)}
+ if len(m.Imports)!=1||m.Imports[0].Destination!="/tmp/work"{t.Fatalf("imports: %+v",m.Imports)}
+ for _,bad:=range []string{
+  strings.Replace(src,"/tmp/work\n","../relative\n",1),
+  strings.Replace(src,"destination: /tmp/work","destination: /",1),
+  strings.Replace(src,"source: ./project","source: ''",1),
+ }{
+  if _,err:=Decode(strings.NewReader(bad));err==nil{t.Fatalf("accepted invalid import YAML: %s",bad)}
+ }
+}
