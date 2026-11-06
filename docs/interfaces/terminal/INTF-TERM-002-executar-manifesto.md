@@ -3,18 +3,19 @@
 
 # INTF-TERM-002 — Executar manifesto via SSH
 
-**Estado:** Implementado como ponto de entrada SSH para VM existente; provisionamento e clonagem ainda propostos.
+**Estado:** implementado para SSH em VM existente e início automático de instância a partir de QCOW2 registrado; instalação pela ISO e transferência do repositório ainda não implementadas.
 **Fluxo efetivo:** [FLUX-003 — Execução sequencial e logs](../../fluxos/FLUX-003-execucao-sequencial-logs.md).
 **Fluxo futuro de Action completa:** [FLUX-001](../../fluxos/FLUX-001-execucao-manifesto.md).
 
 ## Objetivo
 
-Ler um manifesto `insula.yaml`, conectar à VM Debian já inicializada, executar `setup` e jobs em ordem, imprimir respostas em tempo real e gravá-las em arquivos físicos no hospedeiro.
+Ler `config.yaml` e `insula.yaml`, carregar o perfil selecionado para iniciar VM descartável em Libvirt **ou** conectar a uma VM existente via `-host`, executar `setup` e jobs em ordem e registrar os logs no hospedeiro.
 
 ## Comando implementado
 
 ```bash
-go run . \
+go run . run \
+  -config config.yaml \
   -manifest insula.yaml \
   -logs-root /var/lib/insulavm/logs \
   -host 192.0.2.10:22 \
@@ -28,17 +29,18 @@ O endereço IP acima é ilustrativo. `INSULA_LOG_ROOT` também define o caminho 
 
 | Opção | Obrigatória? | Significado |
 | --- | --- | --- |
+| `-config` | Não; padrão `config.yaml` | Parâmetros globais, caminhos e Libvirt |
 | `-manifest` | Não; padrão `insula.yaml` | Arquivo de manifesto YAML |
 | `-logs-root` | Sim, ou `INSULA_LOG_ROOT` | Pasta raiz dos logs no hospedeiro |
-| `-host` | Sim | Endereço TCP da VM Debian, incluindo porta |
-| `-user` | Sim | Usuário SSH da VM |
-| `-key` | Sim | Chave privada SSH não criptografada usada pela CLI |
-| `-known-hosts` | Sim | Lista confiável de chaves públicas de hosts SSH |
+| `-host` | Opcional | Endereço de VM existente; evita criar VM automática do perfil |
+| `-user` | Se não houver em configuração | Usuário SSH da VM |
+| `-key` | Se não houver em configuração | Chave privada SSH não criptografada usada pela CLI |
+| `-known-hosts` | Se não houver em configuração | Lista confiável de chaves públicas de hosts SSH |
 | `-command-timeout` | Não; padrão `30m` | Tempo máximo por comando remoto |
 
 ## Manifesto suportado
 
-O arquivo [insula.yaml.example](../../../insula.yaml.example) apresenta um exemplo completo. Os campos suportados neste primeiro ciclo são `repository.name`, `action` (opcional quando há uma única pipeline), `workspace` (caminho absoluto dentro da VM), `setup` (lista de comandos) e `pipelines[].name/jobs[].name/commands/allow_failure`. Campos não reconhecidos são rejeitados.
+O arquivo [insula.yaml.example](../../../insula.yaml.example) apresenta um exemplo completo. Os campos suportados são `profile` (nome do perfil registrado), `repository.name`, `action` (opcional quando há uma única pipeline), `workspace` (caminho absoluto dentro da VM), `setup` (lista de comandos) e `pipelines[].name/jobs[].name/commands/allow_failure`. Campos não reconhecidos são rejeitados.
 
 ## Entradas, saídas e códigos
 
@@ -47,7 +49,7 @@ O arquivo [insula.yaml.example](../../../insula.yaml.example) apresenta um exemp
 - **stderr:** erros da CLI (manifesto, SSH, log, falha de job); mensagens `stderr` remotas aparecem identificadas no fluxo do terminal.
 - **Código de saída da CLI:** `0` se todos os jobs terminarem segundo a política `allow_failure`; `1` em erro fatal.
 - **Cancelamento:** `Ctrl+C` cancela o contexto, fecha sessão remota em curso e encerra a CLI com erro.
-- **Limitações:** não cria VM, não transfere o projeto e não modifica a imagem-base; `workspace` precisa existir.
+- **Limitações:** pode criar instância a partir de imagem QCOW2 previamente registrada, mas não instala SO por ISO, não transfere o projeto e não modifica a imagem-base; `workspace` precisa existir.
 
 ## Exemplo de arquivo de log
 
