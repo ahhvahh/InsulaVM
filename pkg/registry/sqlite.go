@@ -114,7 +114,7 @@ func(s *Store)update(ctx context.Context,id,status,ip string,finished bool)error
  if n!=1{return fmt.Errorf("VM %s not found",id)}
  return nil
 }
-const fields="id,libvirt_uuid,name,profile,ip,mac,host_fingerprint,sudo_mode,ssh_user,private_key_path,known_hosts_path,instance_dir,status,created_at,updated_at,finished_at"
+const fields="id,libvirt_uuid,name,profile,ip,mac,host_fingerprint,sudo_mode,ssh_user,ssh_port,private_key_path,known_hosts_path,instance_dir,status,created_at,updated_at,finished_at"
 
 func scan(row interface{Scan(...any)error})(Entry,error){
  var e Entry
