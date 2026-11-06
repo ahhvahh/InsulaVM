@@ -86,6 +86,36 @@ qemu-img info "$IMG"
 
 A geração do XML agora declara a imagem-base explicitamente como backing store e adiciona `<seclabel model='dac' relabel='no'/>` **somente à imagem-base**. Com `virtualization.qemu_uid` e as ACLs de leitura correspondentes, o Libvirt não precisa modificar seu proprietário. O overlay continua gerenciado normalmente pelo Libvirt. O comportamento é documentado em [cadeias de backing images](https://libvirt.org/kbase/backing_chains.html) e [segurança do XML do domínio](https://libvirt.org/formatdomain.html#security-label).
 
+## Enviar um repositório Git para uma VM e abrir o terminal
+
+O script [scripts/repositorio-vm.sh](scripts/repositorio-vm.sh) usa **bash, git, tar e gzip** para criar `<nome-do-repositório>.tar.gz` a partir de `HEAD`. Ele empacota **somente arquivos versionados**, sem `.git`, alterações locais não commitadas, arquivos ignorados ou discos temporários. O pacote contém uma pasta raiz com o nome do repositório.
+
+Para gerar somente o TAR.GZ no diretório atual:
+
+```bash
+bash scripts/repositorio-vm.sh empacotar .
+# Resultado: ./InsulaVM.tar.gz
+```
+
+Para gerar o arquivo, enviá-lo à VM **já iniciada**, enviar o próprio script, extrair em `guest.destination` e abrir uma sessão SSH na pasta do projeto:
+
+```bash
+git pull --ff-only origin main
+go build -o insula .
+bash scripts/repositorio-vm.sh enviar 01a1b24e-88cb-7464-9acc-06a08cf727fd .
+```
+
+Para outro repositório local, substitua `.` pelo caminho do projeto. A VM é mantida ligada quando você digita `exit` no terminal SSH. A transferência usa o comando existente `insula vm import` e não precisa de um serviço adicional na VM. A extração usa `insula vm exec` no destino global configurado.
+
+É possível abrir a mesma VM sem enviar arquivos:
+
+```bash
+./insula vm shell -config config.yaml -id UUID_DA_VM
+./insula vm shell -config config.yaml -id UUID_DA_VM -directory InsulaVM
+```
+
+**Importante:** o pacote é um snapshot do commit atual, não um clone Git completo. Para realizar commits/pushes dentro da VM, será necessário um clone Git separado ou implementar exportação de histórico. Não inclua segredos ou chaves privadas em arquivos versionados.
+
 ## Criar instâncias com SSH automático e sudo
 
 Uma **imagem QCOW2 com Linux já instalado e preparado com Cloud-Init** é inicializada com uma ISO **NoCloud/CIDATA gerada pelo InsulaVM**, contendo um usuário `insula` e chaves Ed25519 individuais. A ISO de configuração não instala Linux; o instalador Debian/Arch por ISO é uma funcionalidade diferente e ainda pendente.
