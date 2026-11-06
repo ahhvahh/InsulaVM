@@ -1,18 +1,24 @@
-# Example: profile debian-minimal must be registered from an already-installed
-# QCOW2 disk. With -host supplied, a prepared guest is used instead.
-# Repository transfer and installation from ISO are not yet implemented.
+# InsulaVM Action manifest. The VM profile is an installed QCOW2 with Cloud-Init.
+# All imports and jobs use guest.destination from the global config.yaml.
+# SSH user defaults to config.yaml ssh.user (insula if omitted).
+# SSH private keys are automatically generated for managed VM instances.
 profile: debian-minimal
+
 repository:
   name: example-repo
 action: test
-workspace: /app/repo-workspace
-# Optional: import a directory (its CONTENTS) or a single file from
-# the host to the VM before setup and jobs. Uncomment and adapt:
+
+# Optional: provision a different non-root SSH account for THIS Action.
+# Do not put SSH keys or passwords in this manifest.
+# ssh:
+#   user: buildagent
+
+# Optional host file(s)/directory(ies) to import to config.yaml guest.destination
+# before setup/jobs. Files are added to the same guest destination directory.
 # imports:
 #   - source: /home/user/my-project
-#     destination: /app/repo-workspace
 #   - source: /home/user/settings.ini
-#     destination: /tmp/config
+
 setup:
   - "echo Debian environment is ready"
 pipelines:
