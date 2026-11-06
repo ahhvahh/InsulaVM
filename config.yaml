@@ -17,6 +17,10 @@ guest:
 virtualization:
   provider: kvm
   libvirt_uri: qemu:///system
+  # For libvirt qemu:///system hosts where QEMU cannot access private files:
+  # install 'acl' and set this to the UID shown in the Libvirt error,
+  # e.g. 'as uid:64055, gid:64055'. Never configure 0/root.
+  # qemu_uid: 64055
   network: default
   default_disk_gb: 8
 
