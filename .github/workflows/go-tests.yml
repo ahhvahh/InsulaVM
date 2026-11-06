@@ -1,0 +1,22 @@
+name: Go tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Resolve module dependencies
+        run: go mod tidy
+      - name: Validate and test
+        run: |
+          go vet ./...
+          go test -race ./...
