@@ -31,7 +31,7 @@ func vmShellArgs(record registry.Entry, workspace,directory string)([]string,err
   return nil,errors.New("-directory deve ser relativo a guest.destination, sem escapar com ..")
  }
  guestDir:=path.Join(workspace,cleaned)
- remote:="cd -- "+shellQuote(guestDir)+" && exec \"\${SHELL:-/bin/sh}\" -l"
+ remote:="cd -- "+shellQuote(guestDir)+" && exec \"${SHELL:-/bin/sh}\" -l"
  return []string{
   "-tt",
   "-i",record.PrivateKeyPath,
