@@ -167,6 +167,8 @@ type RunRequest struct {
 	Output io.Writer
 	// OnImportProgress receives structured events before each setup/job.
 	OnImportProgress func(ImportProgress)
+	// OnVMProgress receives VM startup progress when Run creates a guest.
+	OnVMProgress func(VMProgress)
 }
 
 // RunResult records progress even if a job fails and Run returns an error.
@@ -281,7 +283,7 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 		// The per-instance SSH keys are generated and managed by the VM runtime.
 		configuredProfile := *p
 		configuredProfile.SSH.User = user
-		instance, err := vm.Start(ctx, &e.config, &configuredProfile)
+		instance, err := vm.StartWithProgress(ctx, &e.config, &configuredProfile, request.OnVMProgress)
 		if err != nil {
 			return result, err
 		}
