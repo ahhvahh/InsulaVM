@@ -6,6 +6,7 @@ import (
  "fmt"
  "io"
  "net"
+ "strconv"
  "strings"
  "time"
 
@@ -54,7 +55,7 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if timeout==0{timeout=30*time.Minute}
  connectTimeout:=time.Duration(e.config.SSH.ConnectTimeoutSeconds)*time.Second
  client,err:=dialWithRetry(ctx,executor.DialConfig{
-  Address:net.JoinHostPort(vm.IP,"22"),
+  Address:net.JoinHostPort(vm.IP,strconv.Itoa(vm.SSHPort)),
   User:vm.SSHUser,
   PrivateKeyPath:vm.PrivateKeyPath,
   KnownHostsPath:vm.KnownHostsPath,
