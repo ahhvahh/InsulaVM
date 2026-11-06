@@ -3,7 +3,7 @@
 
 # Documentação — InsulaVM
 
-**Estado geral:** configuração global, catálogo de perfis QCOW2, criação de overlay, inicialização de VM transitória via Libvirt e execução SSH sequencial implementados; instalação a partir da ISO, Cloud-Init automático e transferência de repositório ainda pendentes.
+**Estado geral:** configuração global, catálogo de perfis QCOW2, criação de overlay, inicialização de VM transitória via Libvirt e execução SSH sequencial implementados; instalação do sistema a partir da ISO instaladora e checkout automático Git ainda pendentes; Cloud-Init NoCloud e importação local já implementados.
 
 O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perfil selecionado em `insula.yaml`, pode importar arquivos/pastas locais em TAR.GZ antes dos jobs, inicia uma VM descartável usando overlay QCOW2 ou usa uma VM SSH existente, e grava logs por job. A CLI e outros projetos Go podem usar o mesmo motor através do pacote importável `insulavm`. O Linux deve estar instalado em uma imagem com Cloud-Init; a ISO NoCloud de configuração já é gerada, mas a instalação do sistema a partir de ISO instaladora permanece pendente. O InsulaVM registra as VMs em SQLite.
 
@@ -13,9 +13,9 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 | --- | --- | --- |
 | [ARQ-001 — Arquitetura do motor](arquitetura/ARQ-001-motor-insulavm.md) | Explicação/arquitetura | Componentes, dependências Go futuras, provisionamento, autenticação, segurança e decisões pendentes |
 | [ARQ-002 — Perfis de VM](arquitetura/ARQ-002-perfis-vm.md) | Arquitetura | Instalação inicial proposta, metadados QCOW2 e overlays descartáveis |
-| [ARQ-003 — Configuração e catálogo](arquitetura/ARQ-003-configuracao-perfis.md) | Arquitetura implementada | Config global, perfis por diretório, seleção e execução por Libvirt |
+| [ARQ-003 — Configuração e catálogo](arquitetura/ARQ-003-configuracao-perfis.md) | Arquitetura implementada | Config global, `guest.destination` compartilhado, perfis e Libvirt |
 | [ARQ-004 — Biblioteca Go](arquitetura/ARQ-004-biblioteca-go.md) | Integração implementada | API Go para orquestradores externos, `Run(ctx, request)`, retorno estruturado e ciclo de vida |
-| [ARQ-005 — Importação TAR.GZ](arquitetura/ARQ-005-importacao-arquivos.md) | Transferência implementada | Compactar host, enviar SSH, extrair na VM, confirmar e informar progresso ao consumidor |
+| [ARQ-005 — Importação TAR.GZ](arquitetura/ARQ-005-importacao-arquivos.md) | Transferência implementada | Destino configurado globalmente, TAR.GZ via SSH, extração e progresso por callback |
 | [ARQ-006 — SSH, SQLite e sudo](arquitetura/ARQ-006-identidade-registro-sudo.md) | Instâncias registradas | UUIDv7, NoCloud seed ISO, SSH Ed25519, IP/MAC e escalonamento sudo sem senha |
 | [FLUX-001 — Execução de manifesto](fluxos/FLUX-001-execucao-manifesto.md) | Fluxo parcialmente implementado | Executar Actions a partir de perfil, preparar repositório, setup, jobs, logs e limpeza |
 | [FLUX-002 — Criar perfil de VM](fluxos/FLUX-002-criacao-perfil-vm.md) | Fluxo proposto | Perguntas de recursos e ISO, instalação Debian, terminal e salvamento |
@@ -23,9 +23,9 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 | [INTF-TERM-001 — Criar perfil pelo terminal](interfaces/terminal/INTF-TERM-001-criar-perfil-vm.md) | CLI proposta | Interação prevista com operador, confirmações, entradas e saídas |
 | [INTF-TERM-002 — Executar manifesto](interfaces/terminal/INTF-TERM-002-executar-manifesto.md) | CLI implementada | Flags, SSH, logs, manifesto e limitações atuais |
 | [INTF-TERM-003 — Configuração e perfis](interfaces/terminal/INTF-TERM-003-configuracao-perfis.md) | CLI implementada | Validar config, listar/inspecionar/registrar perfis e iniciar instância |
-| [Exemplo config.yaml](../config.yaml) | Configuração | Padrões de diretórios, virtualização e SSH |
+| [Exemplo config.yaml](../config.yaml) | Configuração | Pasta de destino comum, virtualização e SSH |
 | [Exemplo de consumo da biblioteca](../examples/go-library/main.go) | Exemplo Go | Outro processo controla execução in-processo, sem sockets |
-| [Exemplo de insula.yaml](../insula.yaml.example) | Exemplo de entrada | Manifesto com setup, pipelines, jobs e allow_failure |
+| [Exemplo de insula.yaml](../insula.yaml.example) | Exemplo de entrada | Manifesto com usuário SSH opcional, imports sem destino, setup e jobs |
 | [README da raiz](../README.md) | Visão geral | Propósito do projeto e entrada para a documentação |
 
 ## Prefixos documentais
@@ -48,6 +48,6 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 
 - Versionamento semântico e estabilização da API pública Go após testes de compatibilidade com um projeto consumidor.
 - Contrato completo do manifesto `insula.yaml` para instalar ISO, transferir projetos e selecionar versões de perfis (o parser atual seleciona nome do perfil e jobs).
-- Provisionamento ISO interativo, Cloud-Init com identidade própria por VM e gerenciamento de perfis versionados.
-- Transferência de repositórios e inicialização do workspace remoto.
+- Provisionamento ISO instaladora interativo e gerenciamento de perfis versionados. Cloud-Init com identidade própria já foi implementado.
+- Checkout automático Git; transferência de arquivos locais e inicialização do diretório global já são suportadas.
 - Sanitização de segredos de logs, operação de limpeza e testes de ponta a ponta com uma VM real.
