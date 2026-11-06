@@ -12,7 +12,7 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|list|show|status|stop|exec|import")}
+ if len(args)==0{return errors.New("usage: insula vm start|list|show|status|shell|stop|exec|import")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -20,6 +20,7 @@ func vmCommand(args []string)error{
  id:=fs.String("id","","VM UUIDv7")
  commandText:=fs.String("command","","shell command inside the VM")
  workspace:=fs.String("workspace","","guest working directory; default: config.yaml guest.destination")
+ directory:=fs.String("directory","","guest subdirectory for interactive vm shell (relative to guest.destination)")
  sudo:=fs.Bool("sudo",false,"execute as root via sudo -n (requires passwordless mode)")
  source:=fs.String("source","","host file/directory to import")
  if err:=fs.Parse(args[1:]);err!=nil{return err}
@@ -69,6 +70,8 @@ func vmCommand(args []string)error{
    fmt.Printf("ssh_key=%s\nknown_hosts=%s\n",localPathForCLI(e.PrivateKeyPath),localPathForCLI(e.KnownHostsPath))
    fmt.Println("SSH:",sshCommandForCLI(e.PrivateKeyPath,e.KnownHostsPath,e.SSHUser,e.IP))
   }
+ case "shell":
+  return vmShell(ctx,engine,*id,*directory)
  case "exec":
   if *id==""||*commandText==""{return errors.New("vm exec requires -id and -command")}
   result,err:=engine.ExecVM(ctx,insulavm.ExecRequest{
@@ -88,7 +91,7 @@ func vmCommand(args []string)error{
   if *id==""{return errors.New("vm stop requires -id")}
   if err:=engine.StopVM(ctx,*id);err!=nil{return err}
   fmt.Println("VM encerrada:",*id)
- default:return errors.New("usage: insula vm start|list|show|status|stop|exec|import")
+ default:return errors.New("usage: insula vm start|list|show|status|shell|stop|exec|import")
  }
  return nil
 }
