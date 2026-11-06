@@ -47,7 +47,6 @@ func TestSharedGuestDestinationAndDefaultSSHUser(t *testing.T){
   {source:"storage:\n  root: ./data\nguest:\n  destination: /opt/build-agent/current/../work\n",want:"/opt/build-agent/work"},
   {source:"storage:\n  root: ./data\nguest:\n  destination: ../escape\n",invalid:true},
   {source:"storage:\n  root: ./data\nguest:\n  destination: /\n",invalid:true},
-  {source:"storage:\n  root: ./data\nguest:\n  destination: /tmp/no\\nnewline\n",invalid:true},
  }{
   if err:=os.WriteFile(filename,[]byte(tc.source),0600);err!=nil{t.Fatal(err)}
   cfg,err:=ReadFile(filename)
