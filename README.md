@@ -86,6 +86,30 @@ qemu-img info "$IMG"
 
 A geração do XML agora declara a imagem-base explicitamente como backing store e adiciona `<seclabel model='dac' relabel='no'/>` **somente à imagem-base**. Com `virtualization.qemu_uid` e as ACLs de leitura correspondentes, o Libvirt não precisa modificar seu proprietário. O overlay continua gerenciado normalmente pelo Libvirt. O comportamento é documentado em [cadeias de backing images](https://libvirt.org/kbase/backing_chains.html) e [segurança do XML do domínio](https://libvirt.org/formatdomain.html#security-label).
 
+## Enviar arquivo para VM ativa e executar comandos em sequência
+
+O script [`scripts/enviar-executar-vm.sh`](scripts/enviar-executar-vm.sh) usa `insula vm import`, aguarda o fim do envio, pode extrair `.tar.gz`/`.tgz`, executa cada comando com `insula vm exec` e opcionalmente abre `insula vm shell`. **Não inicia nem interrompe a VM**. O destino é sempre `guest.destination` do `config.yaml` (padrão: `/tmp/insulavm/workspace`).
+
+```bash
+bash scripts/enviar-executar-vm.sh \
+  --id UUID_DA_VM \
+  --source ./pacote.tar.gz \
+  --extract \
+  --command 'ls -lah' \
+  --command 'bash ./instalar.sh' \
+  --shell
+```
+
+Para enviar um script Bash simples e executá-lo imediatamente:
+
+```bash
+bash scripts/enviar-executar-vm.sh \
+  --id UUID_DA_VM --source ./instalar.sh \
+  --command 'bash ./instalar.sh'
+```
+
+É possível usar `--command` várias vezes; a execução é estritamente sequencial. `--sudo` aplica `sudo -n` aos comandos posteriores (quando permitido pela VM). Se importação, extração ou qualquer comando falhar, os seguintes não são executados e o script retorna erro. O `vm exec` mantém logs de cada execução no hospedeiro. **Extraia apenas arquivos TAR de origem confiável.** Consulte `--help` para todas as opções.
+
 ## Enviar um repositório Git para uma VM e abrir o terminal
 
 O script [scripts/repositorio-vm.sh](scripts/repositorio-vm.sh) usa **bash, git, tar e gzip** para criar `<nome-do-repositório>.tar.gz` a partir de `HEAD`. Ele empacota **somente arquivos versionados**, sem `.git`, alterações locais não commitadas, arquivos ignorados ou discos temporários. O pacote contém uma pasta raiz com o nome do repositório.
