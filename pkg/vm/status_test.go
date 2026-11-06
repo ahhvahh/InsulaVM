@@ -62,3 +62,13 @@ func TestActiveDomainStateFailsFastForStoppedVM(t *testing.T){
   t.Fatalf("did not reject stopped domain: state=%q err=%v",state,err)
  }
 }
+
+
+func TestVirshUsesStableCLocale(t *testing.T){
+ fakeVirshForStatus(t,"printf '%s/%s\\n' \"$LC_ALL\" \"$LANG\"\n")
+ t.Setenv("LC_ALL","pt_BR.UTF-8")
+ t.Setenv("LANG","pt_BR.UTF-8")
+ output,err:=virsh(context.Background(),"qemu:///system","domstate",runningID)
+ if err!=nil{t.Fatal(err)}
+ if string(output)!="C/C\n"{t.Fatalf("Libvirt status is not locale independent: %q",output)}
+}
