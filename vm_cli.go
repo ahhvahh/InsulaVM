@@ -13,7 +13,7 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|list|show|status|shell|stop|stop-all|exec|import|deploy")}
+ if len(args)==0{return errors.New("usage: insula vm start|list|show|status|shell|stop|stop-all|freeze|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -22,6 +22,8 @@ func vmCommand(args []string)error{
  vcpus:=fs.Int("vcpus",0,"override guest vCPUs for this VM only; 0 keeps profile default")
  dryRun:=fs.Bool("dry-run",false,"list managed VMs that would be stopped by stop-all without changing them")
  id:=fs.String("id","","VM UUIDv7")
+ freezeName:=fs.String("name","","unique name for a frozen VM profile")
+ shutdownTimeout:=fs.Duration("shutdown-timeout",3*time.Minute,"graceful guest shutdown deadline for freeze")
  commandText:=fs.String("command","","shell command inside the VM")
  workspace:=fs.String("workspace","","guest working directory; default: config.yaml guest.destination")
  directory:=fs.String("directory","","guest subdirectory for interactive vm shell (relative to guest.destination)")
@@ -110,6 +112,20 @@ func vmCommand(args []string)error{
   if err!=nil{return presentCLIError(err,root)}
   fmt.Printf("DEPLOY SUCCESS: vm=%s arquivo=%s script=%s status=success\n",result.VMID,result.SourceName,result.ScriptName)
   return nil
+ case "freeze":
+  if *id==""||*freezeName==""{return errors.New("vm freeze requires -id and -name")}
+  result,err:=engine.FreezeVM(ctx,insulavm.VMFreezeRequest{
+   VMID:*id,Name:*freezeName,ShutdownTimeout:*shutdownTimeout,
+   OnProgress:func(p insulavm.VMFreezeProgress){
+    fmt.Fprintf(os.Stderr,"[InsulaVM][freeze:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
+   },
+  })
+  if result!=nil&&result.ImagePath!=""{
+   fmt.Printf("Perfil congelado: %s imagem=%s origem_encerrada=%t\n",result.ProfileName,localPathForCLI(result.ImagePath),result.SourceCleaned)
+  }
+  if err!=nil{return presentCLIError(err,root)}
+  fmt.Printf("FREEZE SUCCESS: name=%s source=%s\n",result.ProfileName,result.VMID)
+  return nil
  case "stop-all":
   if *id!=""{return errors.New("vm stop-all does not accept -id; use vm stop -id UUID instead")}
   result,err:=engine.StopAllVMs(ctx,insulavm.VMStopAllOptions{
@@ -130,7 +146,7 @@ func vmCommand(args []string)error{
   if *id==""{return errors.New("vm stop requires -id")}
   if err:=engine.StopVM(ctx,*id);err!=nil{return err}
   fmt.Println("VM encerrada:",*id)
- default:return errors.New("usage: insula vm start|list|show|status|shell|stop|stop-all|exec|import|deploy")
+ default:return errors.New("usage: insula vm start|list|show|status|shell|stop|stop-all|freeze|exec|import|deploy")
  }
  return nil
 }
