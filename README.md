@@ -18,6 +18,43 @@ Exemplos de perfis (somente metadados; **sem discos instalados**):
 [Alpine](examples/profiles/alpine-minimal/profile.yaml),
 [Void](examples/profiles/void-minimal/profile.yaml).
 
+## Reutilizar perfis e configurar cada VM
+
+Um perfil instalado (`profile.yaml` + imagem-base QCOW2) pode ser reutilizado por quantas instâncias independentes forem necessárias. Cada inicialização gera um **overlay QCOW2 próprio**, sem modificar o perfil ou a imagem-base. RAM/vCPUs podem ser ajustadas por instância, sem alterar as configurações gravadas.
+
+```bash
+./insula vm start -profile debian13
+./insula vm start -profile debian13 -memory-mib 2048 -vcpus 2
+./insula vm start -profile debian13 -memory-mib 4096 -vcpus 4
+```
+
+Na biblioteca Go, `StartVMWithOptions` aceita `VMStartOptions` com `Profile`, `MemoryMiB` e `VCPUs` (zero = usar os valores do perfil). Para gerenciamento do ciclo de vida, `StopOnContextDone` provoca limpeza **assíncrona e de melhor esforço** quando o contexto é cancelado, e `OnStopError` recebe erros dessa limpeza. Para aguardar e validar o encerramento, prefira chamar `StopVM` explicitamente.
+
+```go
+engine, err := insulavm.New("config.yaml")
+if err != nil { return err }
+ctx := context.Background()
+instance, err := engine.StartVMWithOptions(ctx, insulavm.VMStartOptions{
+    Profile: "debian13",
+    MemoryMiB: 2048,
+    VCPUs: 2,
+}, nil)
+if err != nil { return err }
+fmt.Println(instance.ID, instance.IPAddress)
+// A VM continua ativa; chame engine.StopVM(ctx, instance.ID) quando terminar.
+```
+
+## Encerrar todas as VMs gerenciadas
+
+```bash
+./insula vm stop-all -dry-run  # Simula e lista os alvos sem encerrar
+./insula vm stop-all           # Desliga as instancias gerenciadas restantes
+```
+
+O `stop-all` lê **somente as VMs cadastradas no SQLite do InsulaVM** associado a `config.yaml` e confere cada domínio no Libvirt. Não encerra VMs externas nem varre todos os domínios do host para desligá-los. Domínios ausentes são ignorados; o comando também remove overlay, ISO e chaves temporárias das instâncias efetivamente encerradas. Domínios ativos, pausados ou ainda presentes são candidatos à limpeza. Erros ou estado Libvirt desconhecido são reportados sem presumir que o domínio desapareceu; os outros alvos continuam sendo processados. O resultado exibe quantas instâncias foram encontradas, encerradas, ignoradas ou apresentaram falhas.
+
+Em Go, use `engine.StopAllVMs(ctx, insulavm.VMStopAllOptions{DryRun: true})` para simular e `DryRun: false` para executar. A função retorna `VMStopAllResult` e possível erro agregado.
+
 ## Usar como biblioteca Go
 
 O InsulaVM também funciona **dentro de outro processo Go**, sem iniciar binário auxiliar, API HTTP ou socket. A API pública está no pacote `insulavm`; o `package main` da raiz é somente a CLI.
