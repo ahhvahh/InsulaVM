@@ -12,8 +12,9 @@ Opcoes:
   --id UUID             UUID da VM ja iniciada (obrigatorio)
   --source CAMINHO       Arquivo ou pasta local (obrigatorio)
   --extract              Extrai .tar.gz/.tgz recebido em guest.destination
+  --script CAMINHO        Envia um script Bash local e executa apos a carga
   --command 'COMANDO'    Executa comando remoto apos upload (repetivel)
-  --sudo                 Executa comandos --command usando sudo -n
+  --sudo                 Executa --script e --command usando sudo -n
   --shell                Abre terminal SSH apos todas as etapas (opcional)
   --config CAMINHO       Configuracao InsulaVM (padrao: ../config.yaml)
   --insula CAMINHO       Executavel InsulaVM (padrao: ../insula)
@@ -22,10 +23,12 @@ Opcoes:
 Exemplo:
   bash scripts/enviar-executar-vm.sh \
     --id UUID_DA_VM --source ./app.tar.gz --extract \
-    --command 'ls -lah' --command 'bash ./instalar.sh' --shell
+    --script ./instalar.sh --command 'ls -lah' --shell
 
 O destino e sempre guest.destination do config.yaml.
-Se um comando falhar, a sequencia e interrompida e o script retorna erro.
+Ordem: enviar arquivo, extrair (--extract), enviar/executar script (--script),
+executar --command em sequencia e abrir terminal (--shell).
+Se uma etapa falhar, as etapas seguintes NAO serao executadas.
 Somente descompacte pacotes TAR.GZ de origem confiavel.
 USAGE
 }
@@ -57,6 +60,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_dir="$(cd -- "$script_dir/.." && pwd -P)"
 vm_id=""
 source_file=""
+execution_script=""
 extract=false
 shell=false
 sudo=false
@@ -72,6 +76,8 @@ while (($#)); do
       need_value "$@"; source_file="$2"; shift 2 ;;
     --extract)
       extract=true; shift ;;
+    --script)
+      need_value "$@"; execution_script="$2"; shift 2 ;;
     --command)
       need_value "$@"; commands+=("$2"); shift 2 ;;
     --sudo)
@@ -93,6 +99,13 @@ done
   die "Informe --id com um UUID valido"
 [[ -n "$source_file" ]] || die "Informe --source com o arquivo/pasta para enviar"
 source_file="$(absolute_source "$source_file")"
+if [[ -n "$execution_script" ]]; then
+  [[ -f "$execution_script" && ! -L "$execution_script" ]] || die "--script exige um arquivo Bash comum"
+  execution_script="$(absolute_source "$execution_script")"
+  [[ -r "$execution_script" ]] || die "Sem permissao para ler script: $execution_script"
+  [[ "$(basename -- "$source_file")" != "$(basename -- "$execution_script")" ]] ||
+    die "Arquivo principal e script nao podem ter o mesmo nome no guest.destination"
+fi
 [[ -f "$config" ]] || die "Arquivo de configuracao ausente: $config"
 [[ -x "$insula" ]] || die "Executavel InsulaVM ausente: $insula (compile com go build -o insula .)"
 
@@ -108,12 +121,26 @@ log "Enviando $(basename -- "$source_file") para a VM $vm_id"
 "$insula" vm import -config "$config" -id "$vm_id" -source "$source_file"
 log "Transferencia concluida"
 
+# O script e enviado apenas depois que a carga principal foi confirmada.
+# Para --extract, ele sera enviado depois da descompactacao.
 if "$extract"; then
   archive_name="$(basename -- "$source_file")"
   log "Extraindo $archive_name dentro de guest.destination"
   "$insula" vm exec -config "$config" -id "$vm_id" \
     -command "tar -xzf $(remote_quote "$archive_name")"
   log "Extracao concluida"
+fi
+
+if [[ -n "$execution_script" ]]; then
+  script_name="$(basename -- "$execution_script")"
+  log "Enviando script de pos-carga: $script_name"
+  "$insula" vm import -config "$config" -id "$vm_id" -source "$execution_script"
+  log "Executando script de pos-carga: $script_name"
+  script_exec_args=(vm exec -config "$config" -id "$vm_id" \
+    -command "bash -e -- $(remote_quote "./$script_name")")
+  if "$sudo"; then script_exec_args+=(-sudo); fi
+  "$insula" "${script_exec_args[@]}"
+  log "Script de pos-carga concluido"
 fi
 
 if (("${#commands[@]}")); then
