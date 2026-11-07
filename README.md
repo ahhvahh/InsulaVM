@@ -44,6 +44,35 @@ fmt.Println(instance.ID, instance.IPAddress)
 // A VM continua ativa; chame engine.StopVM(ctx, instance.ID) quando terminar.
 ```
 
+## Congelar uma VM preparada e reutilizar como modelo
+
+Após instalar dependências e configurar uma VM gerenciada, crie um **perfil congelado por nome**:
+
+```bash
+./insula vm list
+./insula vm freeze -id UUID_DA_VM -name debian13-go-testes
+./insula profile list
+./insula profile show -name debian13-go-testes
+./insula vm start -profile debian13-go-testes
+./insula vm start -profile debian13-go-testes -memory-mib 4096 -vcpus 4
+```
+
+`vm freeze` exige uma VM em execução, provisionada pelo InsulaVM, com `cloud-init`, SSH e `sudo -n` habilitado. A operação **não é um pause/snapshot de RAM**: prepara a imagem para clonagem (`cloud-init clean --logs --machine-id --seed`, remove chaves SSH antigas), solicita desligamento ACPI, aguarda o desaparecimento do domínio transiente e executa `qemu-img convert` para produzir um QCOW2 autônomo, sem backing file. O novo perfil é salvo em `data/profiles/<nome>/versions/v001/base.qcow2`. Ao concluir, elimina a VM original e seus arquivos temporários. O nome não pode sobrescrever um perfil existente.
+
+**Atenção:** o congelamento **encerra a VM de origem**. Não execute `vm stop` antes dele: isso apagaria o overlay que precisa ser capturado. Se a conversão falhar, o overlay é mantido para recuperação; quando a limpeza da VM original falhar após o perfil ser salvo, o comando informa ambos os estados. Na nova inicialização, o Cloud-Init cria novas credenciais e identidade de máquina. Remova também segredos de aplicativos, tokens e dados privados antes de congelar.
+
+```go
+result, err := engine.FreezeVM(ctx, insulavm.VMFreezeRequest{
+    VMID: vm.ID,
+    Name: "debian13-go-testes",
+    ShutdownTimeout: 3 * time.Minute,
+})
+if err != nil { return err }
+fmt.Println(result.ProfileName, result.ImagePath)
+```
+
+**ISO x perfil congelado:** esse comando gera um **QCOW2**, não uma ISO Live ou instaladora. O InsulaVM inicia instâncias diretamente de perfis QCOW2 com Cloud-Init. Iniciar de uma ISO instaladora ou exportar uma ISO Live personalizada continua sendo um fluxo separado, ainda não implementado nativamente.
+
 ## Encerrar todas as VMs gerenciadas
 
 ```bash
