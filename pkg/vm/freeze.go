@@ -19,7 +19,8 @@ func ShutdownForFreeze(ctx context.Context, uri, uuid string, timeout time.Durat
  if timeout <= 0 { return errors.New("shutdown timeout must be positive") }
  infos, err := InspectRegistered(ctx,uri,[]registry.Entry{{LibvirtUUID:uuid}})
  if err != nil { return err }
- if len(infos)!=1 || !infos[0].IsRunning() {
+ if len(infos)!=1 { return errors.New("Libvirt returned an invalid VM status result") }
+ if !infos[0].IsRunning() {
   return fmt.Errorf("VM %s must be running for a safe freeze (state: %s)",uuid,infos[0].LibvirtState)
  }
  output,err := virsh(ctx,uri,"shutdown",uuid)
