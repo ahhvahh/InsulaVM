@@ -110,6 +110,33 @@ bash scripts/enviar-executar-vm.sh \
 
 É possível usar `--command` várias vezes; a execução é estritamente sequencial. `--sudo` aplica `sudo -n` aos comandos posteriores (quando permitido pela VM). Se importação, extração ou qualquer comando falhar, os seguintes não são executados e o script retorna erro. O `vm exec` mantém logs de cada execução no hospedeiro. **Extraia apenas arquivos TAR de origem confiável.** Consulte `--help` para todas as opções.
 
+### Executar um script Bash após carregar um arquivo
+
+O mesmo comando aceita `--script /caminho/local/pos-carga.sh`. Primeiro envia o arquivo principal, opcionalmente extrai com `--extract`, **depois envia o script Bash e executa-o automaticamente** no diretório `guest.destination` da VM. O script recebe como primeiro argumento (`$1`) o **nome do arquivo enviado**. Não é necessário marcar o arquivo `.sh` como executável, pois ele roda com `bash -e`.
+
+```bash
+bash scripts/enviar-executar-vm.sh \
+  --id UUID_DA_VM \
+  --source ./pacote.tar.gz \
+  --extract \
+  --script ./pos-carga.sh \
+  --shell
+```
+
+Exemplo de `pos-carga.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+pacote="${1:?nome do arquivo ausente}"
+echo "Arquivo recebido: $pacote"
+test -f "$pacote"
+ls -lah
+# Escreva aqui os comandos de instalacao/teste necessarios.
+```
+
+**Ordem garantida:** upload principal → extração opcional → upload do script → execução do script → `--command` adicionais → `--shell`. Falhas interrompem a sequência e produzem código de saída diferente de zero. `--sudo` aplica-se ao script e aos comandos. A VM existente não é desligada.
+
 ## Enviar um repositório Git para uma VM e abrir o terminal
 
 O script [scripts/repositorio-vm.sh](scripts/repositorio-vm.sh) usa **bash, git, tar e gzip** para criar `<nome-do-repositório>.tar.gz` a partir de `HEAD`. Ele empacota **somente arquivos versionados**, sem `.git`, alterações locais não commitadas, arquivos ignorados ou discos temporários. O pacote contém uma pasta raiz com o nome do repositório.
