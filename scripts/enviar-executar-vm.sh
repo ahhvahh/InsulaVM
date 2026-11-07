@@ -12,7 +12,7 @@ Opcoes:
   --id UUID             UUID da VM ja iniciada (obrigatorio)
   --source CAMINHO       Arquivo ou pasta local (obrigatorio)
   --extract              Extrai .tar.gz/.tgz recebido em guest.destination
-  --script CAMINHO        Envia um script Bash local e executa apos a carga
+  --script CAMINHO       Envia um script Bash local e executa apos a carga
   --command 'COMANDO'    Executa comando remoto apos upload (repetivel)
   --sudo                 Executa --script e --command usando sudo -n
   --shell                Abre terminal SSH apos todas as etapas (opcional)
@@ -28,6 +28,7 @@ Exemplo:
 O destino e sempre guest.destination do config.yaml.
 Ordem: enviar arquivo, extrair (--extract), enviar/executar script (--script),
 executar --command em sequencia e abrir terminal (--shell).
+O script recebe como primeiro argumento o nome do arquivo/pasta enviado.
 Se uma etapa falhar, as etapas seguintes NAO serao executadas.
 Somente descompacte pacotes TAR.GZ de origem confiavel.
 USAGE
@@ -137,7 +138,7 @@ if [[ -n "$execution_script" ]]; then
   "$insula" vm import -config "$config" -id "$vm_id" -source "$execution_script"
   log "Executando script de pos-carga: $script_name"
   script_exec_args=(vm exec -config "$config" -id "$vm_id" \
-    -command "bash -e -- $(remote_quote "./$script_name")")
+    -command "bash -e -- $(remote_quote "./$script_name") $(remote_quote "$(basename -- "$source_file")")")
   if "$sudo"; then script_exec_args+=(-sudo); fi
   "$insula" "${script_exec_args[@]}"
   log "Script de pos-carga concluido"
