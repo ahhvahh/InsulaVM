@@ -48,6 +48,7 @@ func run(args []string) error {
 			fmt.Println("       insula vm shell -config config.yaml -id UUIDv7 [-directory InsulaVM]")
 			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm stop-all -config config.yaml [-dry-run]")
+			fmt.Println("       insula vm freeze -id UUIDv7 -name debian13-tests [-shutdown-timeout 3m]")
 			fmt.Println("       insula vm exec -id UUIDv7 -command \"id -u\" [-sudo]")
 			fmt.Println("       insula vm import -id UUIDv7 -source /host/projeto")
 			fmt.Println("       insula vm deploy -config config.yaml -id UUIDv7 -source pacote.tar.gz -script instalar.sh [-extract] [-sudo]")
