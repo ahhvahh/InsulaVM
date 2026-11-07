@@ -13,11 +13,14 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|list|show|status|shell|stop|exec|import|deploy")}
+ if len(args)==0{return errors.New("usage: insula vm start|list|show|status|shell|stop|stop-all|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
- profileName:=fs.String("profile","","installed cloud-init-ready QCOW2 profile")
+ profileName:=fs.String("profile","","registered, reusable cloud-init-ready QCOW2 profile")
+ memoryMiB:=fs.Int("memory-mib",0,"override guest RAM in MiB for this VM only; 0 keeps profile default")
+ vcpus:=fs.Int("vcpus",0,"override guest vCPUs for this VM only; 0 keeps profile default")
+ dryRun:=fs.Bool("dry-run",false,"list managed VMs that would be stopped by stop-all without changing them")
  id:=fs.String("id","","VM UUIDv7")
  commandText:=fs.String("command","","shell command inside the VM")
  workspace:=fs.String("workspace","","guest working directory; default: config.yaml guest.destination")
@@ -44,7 +47,9 @@ func vmCommand(args []string)error{
     fmt.Fprintf(os.Stderr,"[InsulaVM][aviso] VM do mesmo perfil ja esta ativa: %s (IP %s). 'vm start' cria uma NOVA instancia descartavel.\n",entry.Record.ID,entry.Record.IP)
    }
   }
-  instance,err:=engine.StartVMWithProgress(ctx,*profileName,func(p insulavm.VMProgress){
+  instance,err:=engine.StartVMWithOptions(ctx,insulavm.VMStartOptions{
+   Profile:*profileName,MemoryMiB:*memoryMiB,VCPUs:*vcpus,
+  },func(p insulavm.VMProgress){
    fmt.Fprintf(os.Stderr,"[InsulaVM][vm:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
   })
   if err!=nil{return presentCLIError(err,root)}
@@ -105,11 +110,27 @@ func vmCommand(args []string)error{
   if err!=nil{return presentCLIError(err,root)}
   fmt.Printf("DEPLOY SUCCESS: vm=%s arquivo=%s script=%s status=success\n",result.VMID,result.SourceName,result.ScriptName)
   return nil
+ case "stop-all":
+  if *id!=""{return errors.New("vm stop-all does not accept -id; use vm stop -id UUID instead")}
+  result,err:=engine.StopAllVMs(ctx,insulavm.VMStopAllOptions{
+   DryRun:*dryRun,
+   OnProgress:func(p insulavm.VMStopAllProgress){
+    fmt.Fprintf(os.Stderr,"[InsulaVM][stop-all:%s] %s %s\n",p.Stage,p.VMID,p.Message)
+   },
+  })
+  if result!=nil{
+   if *dryRun{
+    fmt.Printf("STOP-ALL DRY-RUN: registradas=%d alvos=%d ignoradas=%d falhas=%d\n",result.Checked,len(result.Targets),len(result.Skipped),len(result.Failed))
+   }else{
+    fmt.Printf("STOP-ALL: registradas=%d encerradas=%d ignoradas=%d falhas=%d\n",result.Checked,len(result.Stopped),len(result.Skipped),len(result.Failed))
+   }
+  }
+  return presentCLIError(err,root)
  case "stop":
   if *id==""{return errors.New("vm stop requires -id")}
   if err:=engine.StopVM(ctx,*id);err!=nil{return err}
   fmt.Println("VM encerrada:",*id)
- default:return errors.New("usage: insula vm start|list|show|status|shell|stop|exec|import|deploy")
+ default:return errors.New("usage: insula vm start|list|show|status|shell|stop|stop-all|exec|import|deploy")
  }
  return nil
 }
