@@ -49,6 +49,7 @@ func run(args []string) error {
 			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm exec -id UUIDv7 -command \"id -u\" [-sudo]")
 			fmt.Println("       insula vm import -id UUIDv7 -source /host/projeto")
+			fmt.Println("       insula vm deploy -config config.yaml -id UUIDv7 -source pacote.tar.gz -script instalar.sh [-extract] [-sudo]")
 			fmt.Println("       insula profile list -config config.yaml")
 			fmt.Println("       insula profile show -config config.yaml -name debian-go")
 			fmt.Println("       insula profile register -config config.yaml -name debian-go -image installed.qcow2 -memory-mib 1024 -vcpus 1 -disk-gb 8")
