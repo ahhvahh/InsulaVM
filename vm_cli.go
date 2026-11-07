@@ -7,12 +7,13 @@ import (
  "fmt"
  "os"
  "os/signal"
+ "time"
 
  "github.com/ahhvahh/InsulaVM/insulavm"
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|list|show|status|shell|stop|exec|import")}
+ if len(args)==0{return errors.New("usage: insula vm start|list|show|status|shell|stop|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -23,6 +24,9 @@ func vmCommand(args []string)error{
  directory:=fs.String("directory","","guest subdirectory for interactive vm shell (relative to guest.destination)")
  sudo:=fs.Bool("sudo",false,"execute as root via sudo -n (requires passwordless mode)")
  source:=fs.String("source","","host file/directory to import")
+ script:=fs.String("script","","local Bash file to upload and execute after deploy")
+ extract:=fs.Bool("extract",false,"extract trusted .tar.gz/.tgz source in guest.destination before executing script")
+ cmdTimeout:=fs.Duration("command-timeout",30*time.Minute,"timeout for each remote deploy step")
  if err:=fs.Parse(args[1:]);err!=nil{return err}
  if fs.NArg()!=0{return errors.New("unexpected vm arguments")}
  engine,err:=insulavm.New(*cfgPath)
@@ -87,11 +91,25 @@ func vmCommand(args []string)error{
   if err!=nil{return err}
   fmt.Printf("Imported %d file(s) into VM %s at %s\n",result.Files,*id,result.DestinationPath)
   return nil
+ case "deploy":
+  if *id==""||*source==""||*script==""{
+   return errors.New("vm deploy requires -id, -source and -script")
+  }
+  result,err:=engine.DeployToVM(ctx,insulavm.VMDeployRequest{
+   VMID:*id,SourcePath:*source,ScriptPath:*script,Extract:*extract,Sudo:*sudo,
+   Output:os.Stdout,CommandTimeout:*cmdTimeout,
+  })
+  if result!=nil && result.ScriptLogDirectory!=""{
+   fmt.Println("Logs:",localPathForCLI(result.ScriptLogDirectory))
+  }
+  if err!=nil{return presentCLIError(err,root)}
+  fmt.Printf("DEPLOY SUCCESS: vm=%s arquivo=%s script=%s status=success\n",result.VMID,result.SourceName,result.ScriptName)
+  return nil
  case "stop":
   if *id==""{return errors.New("vm stop requires -id")}
   if err:=engine.StopVM(ctx,*id);err!=nil{return err}
   fmt.Println("VM encerrada:",*id)
- default:return errors.New("usage: insula vm start|list|show|status|shell|stop|exec|import")
+ default:return errors.New("usage: insula vm start|list|show|status|shell|stop|exec|import|deploy")
  }
  return nil
 }
