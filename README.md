@@ -86,6 +86,33 @@ qemu-img info "$IMG"
 
 A geração do XML agora declara a imagem-base explicitamente como backing store e adiciona `<seclabel model='dac' relabel='no'/>` **somente à imagem-base**. Com `virtualization.qemu_uid` e as ACLs de leitura correspondentes, o Libvirt não precisa modificar seu proprietário. O overlay continua gerenciado normalmente pelo Libvirt. O comportamento é documentado em [cadeias de backing images](https://libvirt.org/kbase/backing_chains.html) e [segurança do XML do domínio](https://libvirt.org/formatdomain.html#security-label).
 
+## Deploy nativo: enviar arquivo e executar script na VM
+
+O comando nativo **`insula vm deploy`** recebe os caminhos locais de um arquivo e de um script Bash, usa a VM **já ativa** no Libvirt e executa as etapas de forma síncrona. Não cria nem desliga instâncias. O destino é `guest.destination` (`/tmp/insulavm/workspace` por padrão).
+
+```bash
+./insula vm deploy -config config.yaml \
+  -id UUID_DA_VM \
+  -source ./pacote.tar.gz \
+  -script ./instalar.sh \
+  -extract
+```
+
+O `-extract` é opcional e deve ser usado apenas com arquivos `.tar.gz` ou `.tgz` confiáveis. Sem ele, o script Bash pode abrir o arquivo diretamente. O script é executado com **`bash -e`** e recebe o nome do arquivo enviado como argumento **`$1`**. Exemplo de `instalar.sh`:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+arquivo="$1"
+echo "Recebido: $arquivo"
+test -f "$arquivo"
+ls -lah
+```
+
+**Ordem garantida:** enviar arquivo → extrair (se solicitado) → enviar script → executar o script → confirmar sucesso. O binário imprime `DEPLOY SUCCESS: ... status=success` e retorna **código de saída `0`** somente depois de todas as etapas concluídas. Falha em qualquer transferência, extração ou comando aborta o processo e retorna **código diferente de zero**; logs são gerados pelo executor SSH. O `-sudo` opcional executa as etapas de comando via `sudo -n`, quando configurado. Para ver o código de saída, execute `echo $?` imediatamente depois.
+
+Com arquivos arbitrários, use apenas scripts confiáveis. Como o diretório de destino é compartilhado por importações da mesma VM, evite arquivos com nomes repetidos em operações concorrentes.
+
 ## Enviar arquivo para VM ativa e executar comandos em sequência
 
 O script [`scripts/enviar-executar-vm.sh`](scripts/enviar-executar-vm.sh) usa `insula vm import`, aguarda o fim do envio, pode extrair `.tar.gz`/`.tgz`, executa cada comando com `insula vm exec` e opcionalmente abre `insula vm shell`. **Não inicia nem interrompe a VM**. O destino é sempre `guest.destination` do `config.yaml` (padrão: `/tmp/insulavm/workspace`).
