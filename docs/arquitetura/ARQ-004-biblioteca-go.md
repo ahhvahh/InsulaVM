@@ -61,7 +61,7 @@ O `RunRequest` oferece `ManifestPath` **ou** `Manifest *insulavm.Manifest` (excl
 
 O `RunResult` retorna `SSHUser`, `Profile`, `Host`, `VMID`, `VMName`, `LogDirectory`, `CompletedJobs`, `StartedAt` e `FinishedAt`. Em caso de erro depois de iniciar a execução, `Run` devolve, quando disponível, **resultado parcial e erro**. O erro de cleanup não substitui o original.
 
-`Run` é **bloqueante** até a conclusão dos jobs. O orquestrador pode chamá-lo em goroutine se desejar concorrência e controlar cancelamento/timeouts com `context.Context`. Não há fila, banco de estados ou `GetStatus` dentro da biblioteca neste ciclo. Para streaming, o consumidor fornece um `io.Writer`; o motor continua salvando os logs físicos. O consumidor deve sincronizar um writer compartilhado por execuções concorrentes.
+`Run` é **bloqueante** até a conclusão dos jobs. O orquestrador pode chamá-lo em goroutine se desejar concorrência e controlar cancelamento/timeouts com `context.Context`. Há registro SQLite de estados das VMs e consulta por `GetVMStatus`/`ListVMStatus`. Não há fila gerenciada nem API para acompanhar o progresso de cada job após o retorno de `Run`. Para streaming, o consumidor fornece um `io.Writer`; o motor continua salvando os logs físicos. O consumidor deve sincronizar um writer compartilhado por execuções concorrentes.
 
 ## Contratos de ciclo de vida acrescentados
 
