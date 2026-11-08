@@ -95,6 +95,18 @@ type CommandResult struct {
 
 O `ExecuteScript` compartilha os mesmos streams e retorno de `ExecuteCommand`; adiciona `ScriptPath` e argumentos. Para os demais métodos, preservar os tipos/resultados existentes como `VMStopAllResult` e `VMFreezeResult` enquanto for possível sem quebrar consumidores.
 
+## Importação na API legada implementada
+
+Os métodos **atuais** `ImportToVM(ctx, VMImportRequest)` e `ImportPath(ctx, ImportRequest)` não são sinônimos do futuro `UploadArchive`. O primeiro recebe `VMID` e `SourcePath` local e recupera a identidade da VM registrada; o segundo usa host e credenciais SSH configurados para uma máquina externa.
+
+- O diretório `guest.destination` pertence ao `config.yaml`, é um caminho Linux absoluto diferente de `/` e tem padrão `/tmp/insulavm/workspace`. Os requests existentes **não possuem destino sobrescrevível**. Quando `workspace` não é informado, `ExecVM` e jobs usam o mesmo valor.
+- `SourcePath` pode ser um arquivo regular ou um diretório local; a implementação rejeita symlinks/dispositivos na origem. Uma pasta envia seu conteúdo, sem acrescentar uma pasta externa; arquivos preservam o próprio nome.
+- O InsulaVM cria um TAR.GZ temporário, transmite via SSH, compara o **tamanho** recebido, extrai no workspace e descarta o arquivo temporário. Os dados extraídos podem permanecer se houver erro posterior. Não existe SHA-256 remoto, extração atômica ou retomada.
+- `ImportResult` confirma `Imported` e fornece `DestinationPath` e contagens quando disponíveis. `OnProgress func(ImportProgress)` entrega `Stage`, `Message`, `SourcePath`, `DestinationPath` (informativo), `BytesSent`, `TotalBytes`, `Files` e `At`. Os estágios incluem `connecting`, `validating`, `compressing`, `compressed`, `uploading`, `verifying`, `extracting` e `completed`; falhas usam `failed`.
+- O progresso é separado da semântica pretendida para STDIO bruto de comandos. Atualmente a CLI apresenta mensagens de importação no terminal, não um stream de processo remoto transparente.
+
+**Situação:** o método canônico `UploadArchive` continua **pendente**; deverá aceitar um TAR.GZ já compactado, preservá-lo na pasta de destino e apenas extrair quando `Extract=true`. Consulte [ARQ-005 — Arquitetura da importação](../arquitetura/ARQ-005-importacao-arquivos.md) e [INTF-TERM-004 — CLI implementada](../interfaces/terminal/INTF-TERM-004-gerenciar-vms.md).
+
 ## Semântica da CLI
 
 - Para **métodos de controle** (criação, upload, stop, freeze), CLI pode apresentar mensagens humanas por padrão e modo estruturado `--output json` quando implementado. A estrutura deve representar o mesmo resultado exposto em Go.

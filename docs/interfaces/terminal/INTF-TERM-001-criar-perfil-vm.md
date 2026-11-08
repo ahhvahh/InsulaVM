@@ -7,6 +7,7 @@
 **Plataforma:** CLI no hospedeiro Linux.
 **Fluxo associado:** [FLUX-002 — Criação de perfil de VM](../../fluxos/FLUX-002-criacao-perfil-vm.md).
 **Regras de persistência:** [ARQ-002 — Perfis persistentes](../../arquitetura/ARQ-002-perfis-vm.md).
+**Contrato canônico proposto:** [CONTR-001 — CreateProfileFromISO](../../contratos/CONTR-001-operacoes-canonicas.md).
 
 ## Objetivo
 
@@ -14,13 +15,13 @@ Disponibilizar operação interativa de criação e configuração de perfil de 
 
 ## Invocação planejada
 
-Uma sintaxe **ilustrativa e não aprovada** para futura implementação:
+O nome de operação canônico **proposto em CONTR-001** é:
 
-```shell
-insula vm profile create
+```bash
+insula profile create-from-iso
 ```
 
-Nenhum nome de binário/subcomando, flag, código de saída ou parâmetro de configuração foi validado em código. A forma final será aprovada antes da implementação.
+Este comando **não existe na CLI atual**. O nome está definido como alvo documental; a forma interativa ou as flags, validação e códigos de saída ainda dependem da implementação. Não usar `insula vm profile create`, que diverge do contrato.
 
 ## Fluxo já implementado para preservar VMs preparadas
 
@@ -33,11 +34,12 @@ A criação interativa **a partir de ISO instaladora** descrita aqui permanece p
 | 1 | Nome do perfil da VM | Não vazio, seguro para diretório e sem duplicidade |
 | 2 | Memória RAM em **MiB** | Inteiro positivo dentro dos limites do host |
 | 3 | Quantidade de núcleos virtuais (vCPUs) | Inteiro positivo, sujeito a limites de alocação |
-| 4 | Caminho absoluto de ISO Debian já baixada | Arquivo existe, é legível e compatível com o modo de boot |
-| 5 | Confirmação de provisionamento | Mostrar resumo antes de criar |
+| 4 | Tamanho do disco virtual em **GiB** | Inteiro positivo e espaço suficiente no host, sem reduzir disco existente |
+| 5 | Caminho absoluto de ISO Debian já baixada | Arquivo existe, é legível e compatível com o modo de boot |
+| 6 | Confirmação de provisionamento | Mostrar resumo antes de criar |
 | Após saída do terminal | Salvar alterações? **Sim/Não** | Exigir escolha explícita |
 
-O sistema também precisa definir **tamanho do disco virtual** e política de espaço; pergunta adicional ou padrão global estão **pendentes**.
+O tamanho do disco integra a entrada canônica `DiskGiB` de `CreateProfileFromISO`. Sua coleta é obrigatória no fluxo de criação proposto; não há flag nem prompt implementado.
 
 ## Comportamento do terminal
 
@@ -56,6 +58,7 @@ InsulaVM — Criar perfil (proposta)
 Nome do perfil: debian-build
 RAM (MiB): 4096
 vCPUs: 2
+Disco virtual (GiB): 16
 Caminho da ISO local: /iso/debian-installer.iso
 
 Provisionando VM temporária...
@@ -80,7 +83,7 @@ O texto acima é **simulação documental**, não evidência de um comando funci
 
 ## Decisões de interface pendentes
 
-- Nome definitivo do comando e das flags; uso de parâmetro direto versus perguntas.
+- Flags definitivas, uso de parâmetros diretos versus perguntas e formato da saída; o nome-alvo `profile create-from-iso` permanece o do CONTR-001.
 - Teclas de retorno do console e escolha de terminal externo ou PTY no próprio processo.
 - Apresentação de estados de recuperação e reconexão após queda do SSH.
 - Formato da configuração global de diretórios, armazenamento e recursos padrão.

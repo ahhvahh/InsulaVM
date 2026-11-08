@@ -62,7 +62,7 @@ A execução percorre **somente** os UUIDs do banco SQLite associado ao `config.
 
 | Aspecto | Contrato efetivo |
 | --- | --- |
-| stdin | Nenhuma entrada interativa em `start`, `list`, `show`, `status`, `freeze`, `stop` ou `stop-all`; `shell` transfere o terminal para SSH |
+| stdin | Nenhuma entrada interativa em `start`, `list`, `status`, `freeze`, `stop` ou `stop-all`; `shell` transfere o terminal para SSH |
 | stdout | Dados de VM, sugestões de comando SSH, resumos `STOP-ALL` e `FREEZE SUCCESS` quando aplicável |
 | stderr | Mensagens de progresso, avisos de perfil duplicado em execução, falhas de validação e Libvirt |
 | Código de saída | `0` quando `vmCommand` retorna `nil`; `1` em erro retornado pelo executável |
