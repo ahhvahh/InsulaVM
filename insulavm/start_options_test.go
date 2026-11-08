@@ -72,3 +72,24 @@ func TestVMStartOptionsContextPolicyRequiresCancelableContext(t *testing.T){
   t.Fatal("accepted nil context")
  }
 }
+
+func TestVMStartInstallationScriptValidation(t *testing.T){
+ dir:=t.TempDir()
+ good:=filepath.Join(dir,"setup.sh")
+ if err:=os.WriteFile(good,[]byte("#!/bin/bash\nset -e\nprintf ready\n"),0600);err!=nil{t.Fatal(err)}
+ data,err:=readVMStartupScript(good)
+ if err!=nil||len(data)==0{t.Fatalf("valid setup script failed: %v",err)}
+ if _,err:=readVMStartupScript("relative/setup.sh");err==nil{t.Fatal("accepted relative script")}
+ link:=filepath.Join(dir,"link.sh")
+ if err:=os.Symlink(good,link);err!=nil{t.Fatal(err)}
+ if _,err:=readVMStartupScript(link);err==nil{t.Fatal("accepted symlink script")}
+ empty:=filepath.Join(dir,"empty.sh")
+ if err:=os.WriteFile(empty,nil,0600);err!=nil{t.Fatal(err)}
+ if _,err:=readVMStartupScript(empty);err==nil{t.Fatal("accepted empty script")}
+ nul:=filepath.Join(dir,"nul.sh")
+ if err:=os.WriteFile(nul,[]byte{0},0600);err!=nil{t.Fatal(err)}
+ if _,err:=readVMStartupScript(nul);err==nil{t.Fatal("accepted NUL in startup script")}
+ big:=filepath.Join(dir,"big.sh")
+ if err:=os.WriteFile(big,make([]byte,256*1024+1),0600);err!=nil{t.Fatal(err)}
+ if _,err:=readVMStartupScript(big);err==nil{t.Fatal("accepted oversized startup script")}
+}
