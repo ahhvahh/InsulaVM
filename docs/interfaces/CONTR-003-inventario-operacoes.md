@@ -1,0 +1,78 @@
+<!-- A-BIOMA-DOC-STANDARD -->
+<!-- A-BIOMA-DOC-REVISADO -->
+
+# CONTR-003 — Inventário de operações e redução de redundâncias
+
+**Estado:** revisão de interface em 2026-11-08; consolidação progressiva, sem alteração de comportamento das APIs Go existentes.
+**Fonte normativa:** [CONTR-001 — Operações canônicas](CONTR-001-operacoes-canonicas.md) e [CONTR-002 — STDIO](CONTR-002-transporte-stdio.md).
+**Implementação atual:** [main.go](../../main.go), [vm_cli.go](../../vm_cli.go), [insulavm/engine.go](../../insulavm/engine.go).
+
+## Comandos atualmente executáveis
+
+| Intenção | CLI | Biblioteca Go | Situação |
+| --- | --- | --- | --- |
+| Validar configuração | `insula config check` | `New`, `Configuration` | implementado |
+| Listar perfis | `insula profile list` | `ListProfiles` | implementado |
+| Consultar perfil | `insula profile show` | `GetProfile` | implementado |
+| Registrar QCOW2 pronto | `insula profile register` | `RegisterProfile` | implementado |
+| Iniciar VM de perfil | `insula vm start` | `StartVMWithOptions` | implementado para perfil, RAM, vCPUs; disco por instância pendente |
+| Listar VMs | `insula vm list` | `ListVMStatus` | implementado |
+| Consultar VM/estado | `insula vm status` | `GetVMStatus` | implementado; alias redundante `vm show` retirado da CLI nesta revisão |
+| Terminal PTY interativo | `insula vm shell` | sem fachada Go dedicada | somente CLI |
+| Executar comando | `insula vm exec` | `ExecVM` | implementado; STDIO bruto pendente |
+| Importar para VM gerenciada | `insula vm import` | `ImportToVM` | implementado; extrai conteúdo |
+| Importar para host SSH externo | `insula import` | `ImportPath` | implementado; não é a mesma operação que importar por UUID |
+| Enviar arquivo e executar script | `insula vm deploy` | `DeployToVM` | implementado; inclui upload de arquivo + script |
+| Executar jobs por manifesto | `insula run` | `Run` | implementado; orquestra pipeline |
+| Congelar VM em perfil | `insula vm freeze` | `FreezeVM` | implementado; remove origem depois do sucesso |
+| Parar VM | `insula vm stop` | `StopVM` | implementado |
+| Parar todas | `insula vm stop-all` | `StopAllVMs` | implementado |
+
+Além destes, `insula help` exibe ajuda e a CLI sem verbo explícito executa `run` por compatibilidade histórica. Nenhum dos dois constitui operação de VM independente.
+
+## Operações canônicas alvo ainda ausentes ou parciais
+
+| Contrato alvo | CLI alvo | Estado e relação com legado |
+| --- | --- | --- |
+| `CreateProfileFromISO` | `insula profile create-from-iso` | pendente; não confundir ISO instaladora com QCOW2 preexistente |
+| `CreateVM` | `insula vm create` | parcial por `vm start`; clonar origem e alterar disco pendentes |
+| `UploadArchive` | `insula vm upload` | parcial por `vm import`; salvar TAR.GZ sem extrair ainda pendente |
+| `ExecuteScript` | `insula vm run-script` | parcial por `vm deploy`; STDIO fiel pendente |
+| `ExecuteCommand` | `insula vm command` | parcial por `vm exec`; stdin + streams independentes + exit code pendentes |
+| `StopVM` | `insula vm stop` | implementado |
+| `StopAllVMs` | `insula vm stop-all` | implementado |
+| `FreezeVM` | `insula vm freeze` | implementado |
+
+**Não anunciar como executáveis** comandos alvo que ainda não constam do código.
+
+## Duplicidades reais e não duplicidades
+
+| Par atual | Avaliação | Ação |
+| --- | --- | --- |
+| `vm show` e `vm status` | comandos equivalentes, mesma implementação | retirar alias `vm show` da CLI e manter `vm status` |
+| `StartVM`, `StartVMWithProgress`, `StartVMWithOptions` | wrappers de configuração/feedback do mesmo runtime | quando `CreateVM` estiver funcional, tornar os antigos compatíveis/deprecados antes de remoção versionada |
+| `vm start` versus futuro `vm create` | sobreposição parcial | implementar `CreateVM` uma vez no Engine; migrar sem quebrar CLI atual |
+| `vm exec` versus futuro `vm command` | sobreposição parcial | motor único; não alterar formato de STDIO da CLI legada sem versionamento |
+| `vm import` versus futuro `vm upload` | sobreposição parcial; `import` extrai | motor de transferência único com `Extract` explícito |
+| `vm deploy` versus futuro `vm run-script` | composição de operações, não equivalência completa | `DeployToVM` como composição de upload e execução; sem segundo motor |
+| `vm shell` versus `vm exec` | **não redundante**: PTY interativo versus comando individual | preservar |
+| `insula import` versus `vm import` | **não redundante**: host externo versus UUID gerenciado | preservar até existir contrato separado de host externo |
+| `insula run` versus `vm exec` | **não redundante**: pipeline/manifesto e VM transitória versus comando numa VM existente | preservar |
+| `vm list` versus `vm status` | **não redundante**: coleção versus detalhe de um UUID | preservar |
+| `profile show` versus `vm status` | **não redundante**: perfil de imagem versus instância | preservar |
+| `vm stop` versus `vm stop-all` | **não redundante**: alvo único versus conjunto | preservar |
+
+## Política de consolidação
+
+1. Remover **somente aliases comprovadamente idênticos**, como `vm show`, nesta revisão.
+2. Não remover/exportar API Go existente prematuramente; os nomes canônicos ainda são em grande parte especificações não implementadas.
+3. Implementar os contratos canônicos como fachadas sobre o **mesmo** núcleo de VM/SSH/transferência já usado pela CLI.
+4. Após a paridade e testes de compatibilidade, marcar wrappers legados como deprecados e removê-los em versão de quebra explicitamente aprovada.
+5. Comandos novos e biblioteca devem expor entradas e retornos equivalentes, segundo CONTR-001. STDIO fiel, segundo CONTR-002.
+
+## Validação
+
+- CLI `vm show` deve responder uso inválido; `vm status` continua aceito.
+- Verificar que nenhum guia público sugere `vm show`.
+- Validar que `vm shell`, `vm exec`, `vm import`, `vm deploy` e `run` seguem distintos e não foram removidos.
+- Executar `go test ./...` para verificar regressões; execução real KVM/Libvirt requer host apropriado.
