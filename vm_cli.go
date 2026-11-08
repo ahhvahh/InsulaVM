@@ -13,7 +13,7 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|list|show|status|shell|stop|stop-all|freeze|exec|import|deploy")}
+ if len(args)==0{return errors.New("usage: insula vm start|list|status|shell|stop|stop-all|freeze|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -69,8 +69,8 @@ func vmCommand(args []string)error{
    fmt.Printf("%-36s %-12s %-12s %-18s %-15s %s\n",e.ID,e.Status,entry.LibvirtState,e.IP,e.Profile,e.Name)
    if entry.Warning!=""{fmt.Fprintln(os.Stderr,"  [aviso]",entry.Warning)}
   }
- case "show","status":
-  if *id==""{return errors.New("vm show/status requires -id")}
+ case "status":
+  if *id==""{return errors.New("vm status requires -id")}
   checked,err:=engine.GetVMStatus(ctx,*id)
   if err!=nil{return err}
   e:=checked.Record
@@ -146,7 +146,7 @@ func vmCommand(args []string)error{
   if *id==""{return errors.New("vm stop requires -id")}
   if err:=engine.StopVM(ctx,*id);err!=nil{return err}
   fmt.Println("VM encerrada:",*id)
- default:return errors.New("usage: insula vm start|list|show|status|shell|stop|stop-all|freeze|exec|import|deploy")
+ default:return errors.New("usage: insula vm start|list|status|shell|stop|stop-all|freeze|exec|import|deploy")
  }
  return nil
 }
