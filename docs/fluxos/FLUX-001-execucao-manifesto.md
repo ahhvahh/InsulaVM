@@ -5,7 +5,7 @@
 
 **Estado:** seleção de perfil, overlay QCOW2, início de VM via Libvirt, importação TAR.GZ opcional, SSH e logs implementados; checkout de repositório Git e instalação do SO por ISO instaladora ainda pendentes; Cloud-Init NoCloud por instância já implementado. Ver [FLUX-003](FLUX-003-execucao-sequencial-logs.md) e [ARQ-003](../arquitetura/ARQ-003-configuracao-perfis.md).
 **Versão aprovada:** nenhuma.
-**Ponto de entrada:** futura CLI com `insula.yaml` referenciando perfil de VM publicado.
+**Ponto de entrada:** CLI implementada `insula run -manifest insula.yaml` ou `Engine.Run(ctx, RunRequest)`.
 **Arquitetura do motor:** [ARQ-001](../arquitetura/ARQ-001-motor-insulavm.md).
 **Perfis e overlays:** [ARQ-002](../arquitetura/ARQ-002-perfis-vm.md).
 **Criação de perfil:** [FLUX-002](FLUX-002-criacao-perfil-vm.md).
@@ -20,7 +20,7 @@ Executar `setup` e pipelines/jobs em instância descartável derivada de um **pe
 
 ## Pré-condições
 
-- Manifesto YAML legível que seleciona perfil e, conceitualmente, origem local/remota do projeto, `setup` e jobs. **Nomes e tipos finais do YAML ainda não foram definidos**.
+- Manifesto YAML legível que seleciona perfil e, conceitualmente, origem local/remota do projeto, `setup` e jobs. **Os campos aceitos são definidos pelo parser** [`pkg/manifest/manifest.go`](../../pkg/manifest/manifest.go); campos desconhecidos são rejeitados.
 - Perfil publicado e validado conforme [FLUX-002](FLUX-002-criacao-perfil-vm.md), com versão de imagem QCOW2 imutável.
 - Capacidade do host KVM/QEMU/Libvirt, permissões de rede e disco para overlay; recursos conforme perfil.
 - O perfil precisa oferecer **bootstrap remoto confiável** (preferencialmente Cloud-Init instalado e preparado no sistema convidado) para identidade, rede e autenticação SSH. Apenas ter sido instalado pela ISO Debian não garante isso.
@@ -136,4 +136,4 @@ Métodos como `Output()` e `CombinedOutput()` não cumprem o requisito de stream
 
 ## Pendências
 
-O schema oficial de `insula.yaml`, seleção/versão de perfil, nome e flags da CLI, códigos de saída e política de paralelismo ainda dependem de contrato. Também é necessário validar provisionamento de identidades únicas em perfis clonados, rede, host keys e políticas para retenção de artefatos.
+O parser atual de `insula.yaml`, a CLI e os códigos de saída já estão implementados. Ainda faltam contratos estáveis/versionamento público, seleção de versões além do perfil ativo, política global de paralelismo e provisionamento por ISO instaladora. Também é necessário validar provisionamento de identidades únicas em perfis clonados, rede, host keys e políticas para retenção de artefatos.
