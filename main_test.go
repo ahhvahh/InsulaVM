@@ -2,9 +2,21 @@ package main
 
 import (
  "os"
+ "strings"
  "path/filepath"
  "testing"
 )
+
+func TestRedundantVMShowAliasRemoved(t *testing.T) {
+ dir := t.TempDir()
+ configFile := filepath.Join(dir, "config.yaml")
+ data := []byte("storage:\n  root: ./data\nvirtualization:\n  provider: kvm\n  default_disk_gb: 8\n")
+ if err := os.WriteFile(configFile, data, 0600); err != nil { t.Fatal(err) }
+ err := run([]string{"vm", "show", "-config", configFile, "-id", "x"})
+ if err == nil || !strings.Contains(err.Error(), "usage: insula vm") {
+  t.Fatalf("vm show should be unsupported; got: %v", err)
+ }
+}
 
 func TestConfigCheckAndProfileCommands(t *testing.T){
  dir:=t.TempDir()
