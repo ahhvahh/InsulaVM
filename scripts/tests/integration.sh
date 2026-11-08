@@ -1,28 +1,36 @@
 #!/usr/bin/env bash
 # Real KVM integration suite; run on a dedicated Debian host.
-# Required: pre-installed Debian 13 QCOW2 with Cloud-Init, SSH and passwordless sudo.
+# Requires KVM and either a prepared Debian 13 QCOW2 or a Debian 13 amd64 installer ISO.
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "$0")/../.." && pwd)"
 CONFIG="$ROOT/config.yaml"
 BASE_IMAGE=""
+INSTALLER_ISO=""
 LIVE_TEST=1
 GO_API_TEST=1
 while (($#)); do
   case "$1" in
     --config) CONFIG="$2"; shift 2 ;;
     --base-qcow2) BASE_IMAGE="$2"; shift 2 ;;
+    --installer-iso) INSTALLER_ISO="$2"; shift 2 ;;
     --skip-live-iso) LIVE_TEST=0; shift ;;
     --skip-go-api) GO_API_TEST=0; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
   esac
 done
-if [[ -z "$BASE_IMAGE" || ! -f "$BASE_IMAGE" || ! -f "$CONFIG" || "$BASE_IMAGE" != /* || "$CONFIG" != /* ]]; then
-  echo "Usage: bash scripts/tests/integration.sh --config /absolute/config.yaml --base-qcow2 /absolute/debian13.qcow2 [--skip-live-iso]" >&2
+if [[ ! -f "$CONFIG" || "$CONFIG" != /* ||
+      ( -z "$BASE_IMAGE" && -z "$INSTALLER_ISO" ) ||
+      ( -n "$BASE_IMAGE" && ( "$BASE_IMAGE" != /* || ! -f "$BASE_IMAGE" ) ) ||
+      ( -n "$INSTALLER_ISO" && ( "$INSTALLER_ISO" != /* || ! -f "$INSTALLER_ISO" ) ) ]]; then
+  echo "Usage: bash scripts/tests/integration.sh --config /absolute/config.yaml (--base-qcow2 /absolute/debian13.qcow2 | --installer-iso /absolute/debian13.iso) [--skip-live-iso] [--skip-go-api]" >&2
   exit 2
 fi
 for tool in virsh qemu-img ssh; do
   command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 2; }
 done
+if [[ -n "$INSTALLER_ISO" ]]; then
+  for tool in virt-install guestmount guestunmount openssl; do command -v "$tool" >/dev/null || { echo "missing tool: $tool" >&2; exit 2; }; done
+fi
 [[ -c /dev/kvm ]] || { echo "/dev/kvm unavailable" >&2; exit 2; }
 cd "$ROOT"
 TMP="$(mktemp -d)"
@@ -53,8 +61,17 @@ tag="it-$(date +%s)-$RANDOM"
 base="$tag-base"
 frozen="$tag-frozen"
 clone="$tag-clone"
-echo "[integration] register prepared Debian QCOW2"
-insula profile register -name "$base" -image "$BASE_IMAGE" -os debian -memory-mib 2048 -vcpus 2 -disk-gb 8
+if [[ -z "$BASE_IMAGE" ]]; then
+  echo "[integration] install Debian 13 from ISO and create the reusable base profile"
+  output="$(insula profile create-from-iso -name "$base" -iso "$INSTALLER_ISO" -memory-mib 2048 -vcpus 2 -disk-gb 12 -install-timeout 90m)"
+  echo "$output"
+  grep -q 'PROFILE ISO OK' <<<"$output"
+  BASE_IMAGE="$(sed -nE 's/^PROFILE ISO OK: name=[^ ]+ image=(.*) sha256=[0-9a-f]{64}$/\1/p' <<<"$output")"
+  [[ -s "$BASE_IMAGE" ]] || { echo "[integration] no reusable QCOW2 from installer ISO" >&2; exit 1; }
+else
+  echo "[integration] register prepared Debian QCOW2"
+  insula profile register -name "$base" -image "$BASE_IMAGE" -os debian -memory-mib 2048 -vcpus 2 -disk-gb 8
+fi
 insula profile clone -source "$base" -name "$clone"
 echo "[integration] boot clone and upload guest verification script"
 output="$(insula vm start -profile "$clone")"
@@ -132,8 +149,8 @@ if [[ "$LIVE_TEST" == 1 ]]; then
 fi
 if [[ "$GO_API_TEST" == 1 ]]; then
   echo "[integration] public Go Engine API end-to-end"
-  INSULA_TEST_CONFIG="$CONFIG" INSULA_TEST_QCOW2="$BASE_IMAGE" INSULA_TEST_LIVE_ISO="$LIVE_TEST" \
-    go test -tags integration -count=1 -timeout 50m -v ./tests/integration
+  INSULA_TEST_CONFIG="$CONFIG" INSULA_TEST_QCOW2="$BASE_IMAGE" INSULA_TEST_LIVE_ISO="$LIVE_TEST" INSULA_TEST_INSTALLER_ISO="$INSTALLER_ISO" \
+    go test -tags integration -count=1 -timeout 150m -v ./tests/integration
 fi
 echo INSULA_INTEGRATION_OK
 echo "Profiles kept for inspection: $base $clone $frozen"

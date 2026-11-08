@@ -13,7 +13,7 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|start-iso|list|status|shell|console|stop|stop-all|freeze|exec|import|deploy")}
+ if len(args)==0{return errors.New("usage: insula vm start|start-iso|list|status|shell|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -22,6 +22,7 @@ func vmCommand(args []string)error{
  startupScript:=fs.String("startup-script","","absolute path to trusted first-boot script (Live ISO only)")
  memoryMiB:=fs.Int("memory-mib",0,"override guest RAM in MiB for this VM only; 0 keeps profile default")
  vcpus:=fs.Int("vcpus",0,"override guest vCPUs for this VM only; 0 keeps profile default")
+ prepareLiveBoot:=fs.Bool("prepare-live-boot",false,"install live-boot inside managed Debian before freezing for ISO export")
  graceTimeout:=fs.Duration("grace-timeout",30*time.Second,"VM graceful shutdown deadline before escalation")
  forceAfterTimeout:=fs.Bool("force-after-timeout",true,"use hard destroy after graceful shutdown deadline")
  dryRun:=fs.Bool("dry-run",false,"list managed VMs that would be stopped by stop-all without changing them")
@@ -139,6 +140,17 @@ func vmCommand(args []string)error{
   if err!=nil{return presentCLIError(err,root)}
   fmt.Printf("FREEZE SUCCESS: name=%s source=%s\n",result.ProfileName,result.VMID)
   return nil
+ case "export-iso":
+  if *id==""||*freezeName==""{return errors.New("vm export-iso requires -id and -name")}
+  result,err:=engine.ExportVMToLiveISO(ctx,insulavm.VMExportISORequest{
+   VMID:*id,Name:*freezeName,PrepareLiveBoot:*prepareLiveBoot,
+   ShutdownTimeout:*shutdownTimeout,CommandTimeout:*cmdTimeout,
+   OnProgress:func(p insulavm.VMFreezeProgress){
+    fmt.Fprintf(os.Stderr,"[InsulaVM][export-iso:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
+   },
+  })
+  if err!=nil{return presentCLIError(err,root)}
+  fmt.Printf("VM ISO OK: profile=%s iso=%s source=%s\n",result.Freeze.ProfileName,localPathForCLI(result.ISOPath),*id)
  case "stop-all":
   if *id!=""{return errors.New("vm stop-all does not accept -id; use vm stop -id UUID instead")}
   result,err:=engine.StopAllVMs(ctx,insulavm.VMStopAllOptions{

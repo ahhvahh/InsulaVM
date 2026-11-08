@@ -4,7 +4,7 @@ Ferramenta em **Go** para criar e gerenciar VMs Linux descartáveis com **QEMU/K
 
 **Implementado:** perfis QCOW2 reutilizáveis, identidade por VM com Cloud-Init NoCloud, registro SQLite, criação e encerramento de instâncias, importação, deploy, execução de pipelines, congelamento de uma VM preparada em novo perfil nomeado e encerramento em lote de VMs gerenciadas.
 
-**Ainda não implementado:** instalar Linux automaticamente a partir de ISO instaladora e checkout automático de repositórios Git. **Novo, sem validação KVM real:** clonagem independente de perfis, exportação de ISO Live Debian com live-boot, boot da ISO Live e desligamento gracioso com escalada. A imagem-base QCOW2 deve ter um sistema Linux previamente instalado e preparado com Cloud-Init, SSH, rede DHCP e, para congelamento, sudo sem senha.
+**Ainda não implementado:** checkout automático de repositórios Git, instalador interativo por console e contrato canônico `CreateVM` com origem por UUID e mudança de disco. **Implementado e não validado em KVM real:** instalação automática de Debian 13 amd64 a partir de ISO local usando `virt-install`/Preseed, com registro de perfil QCOW2. **Novo, sem validação KVM real:** clonagem independente de perfis, exportação de ISO Live Debian com live-boot, boot da ISO Live e desligamento gracioso com escalada. A imagem-base QCOW2 deve ter um sistema Linux previamente instalado e preparado com Cloud-Init, SSH, rede DHCP e, para congelamento, sudo sem senha.
 
 ## Contrato canônico CLI / biblioteca Go
 
@@ -31,6 +31,26 @@ go build -o insula .
 ```
 
 O registro de perfil é necessário apenas se ele ainda não existir. Consulte [GUIA-001](docs/guias/GUIA-001-operar-insulavm.md) para instalação de dependências, acesso SSH, importações e execução.
+
+## Instalar um perfil a partir da ISO Debian 13
+
+O comando cria uma VM instaladora temporária, instala Debian 13 em QCOW2 com Preseed, valida os componentes do sistema e registra o perfil. **Requer internet no instalador** para os pacotes de Cloud-Init/SSH/sudo/live-boot; não foi validado em host KVM real.
+
+```bash
+./insula profile create-from-iso -name debian13 -iso /isos/debian-13-amd64-netinst.iso \
+  -memory-mib 2048 -vcpus 2 -disk-gb 12 -install-timeout 90m
+./insula vm start -profile debian13
+```
+
+Biblioteca Go: `engine.CreateProfileFromISO(ctx, insulavm.CreateProfileFromISORequest{...})`. Dependências adicionais: `virt-install`, `openssl`, `guestmount`, `guestunmount` e acesso ao Libvirt. Veja [INTF-TERM-007](docs/interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md).
+
+## Exportar ISO diretamente de uma instância
+
+```bash
+./insula vm export-iso -id UUID_DA_VM -name debian13-live -prepare-live-boot
+```
+
+Essa operação instala `live-boot` no guest (quando solicitada), congela o QCOW2, **encerra e remove a VM de origem** e exporta uma ISO Live. A biblioteca expõe `ExportVMToLiveISO(ctx, VMExportISORequest)`; se a exportação falhar após o congelamento, o perfil QCOW2 fica preservado para nova tentativa.
 
 ## Preparar e congelar um ambiente
 

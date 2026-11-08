@@ -27,7 +27,7 @@
 
 | Método Go (desejado) | CLI canônica (desejada) | Entradas lógicas | Retorno obrigatório | Situação na main de 2026-11-08 |
 | --- | --- | --- | --- | --- |
-| `CreateProfileFromISO` | `insula profile create-from-iso` | Nome, ISO local, RAM MiB, vCPUs, disco GiB, modo de instalação | Perfil, imagem QCOW2, progresso, erro | **Pendente:** instalação de sistema por ISO não existe |
+| `CreateProfileFromISO` | `insula profile create-from-iso` | Nome, ISO local, RAM MiB, vCPUs, disco GiB, modo de instalação | Perfil, imagem QCOW2, progresso, erro | **Implementado na develop, não verificado em KVM real:** Debian 13 amd64, modo automático; wizard interativo pendente |
 | `CreateVM` | `insula vm create` | Perfil registrado **ou** origem VM existente, RAM, vCPUs, disco opcional, script inicial opcional | UUIDv7, nome, estado, IP/SSH, progresso, erro | **Parcial:** `StartVMWithOptions` cria por perfil, RAM/vCPUs; disco/clone direto pendentes |
 | `UploadArchive` | `insula vm upload` | UUIDv7, caminho TAR.GZ local, `Extract` | Pasta, nome do pacote, bytes, hash/verificação, resultado/erro | **Parcial:** `ImportToVM` compacta e **extrai sempre**; `DeployToVM` envia fonte e executa script |
 | `ExecuteScript` | `insula vm run-script` | UUIDv7, script local, argumentos, stdin, stdout, stderr, timeout, sudo | Exit code, início/fim, logs separados, erro de transporte | **Parcial:** `DeployToVM` executa script, mas mistura progresso com saída |
@@ -155,3 +155,12 @@ Este conjunto amplia os oito métodos de referência, preservando a compatibilid
 | `StopVMWithOptions` | UUID, período de graça e force no timeout | `VMStopResult` (Graceful, Forced, TimedOut) | padrão 30 s; só força em deadline, não em erro Libvirt |
 
 A CLI expõe `profile clone`, `profile export-iso`, `vm start-iso`, `vm console` e `vm stop -grace-timeout/-force-after-timeout`. A biblioteca preserva `StopVM` legado (destruição imediata) para compatibilidade; **a CLI `vm stop` usa a nova política graciosa**. Não confundir `StartVMFromISO` (Live pronta) com `CreateProfileFromISO` (instaladora Debian ainda pendente). Consulte [INTF-TERM-006](terminal/INTF-TERM-006-iso-live.md) e [FLUX-006](../fluxos/FLUX-006-teste-integral-iso-vm.md).
+
+## Extensões implementadas em develop — Debian ISO instaladora e VM ISO Live
+
+| Go | CLI | Retorno | Situação |
+| --- | --- | --- | --- |
+| `CreateProfileFromISO(ctx, CreateProfileFromISORequest)` | `profile create-from-iso -name -iso -memory-mib -vcpus -disk-gb [-install-timeout]` | Perfil QCOW2 independente, caminho, SHA256 da ISO, progresso | Implementado; execução real não verificada |
+| `ExportVMToLiveISO(ctx, VMExportISORequest)` | `vm export-iso -id -name [-prepare-live-boot]` | Perfil congelado e caminho da ISO Live | Implementado; execução real não verificada |
+
+Ambos reutilizam biblioteca Go para a CLI. Exportar uma VM congela e remove a origem; instalar uma ISO cria um perfil e preserva o arquivo original. O `CreateVM` canônico com clone por UUID, mudança do disco por instância e os contratos de STDIO fiel continuam parciais.

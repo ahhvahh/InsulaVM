@@ -127,3 +127,62 @@ func contains(values []string,target string)bool{
  for _,value:=range values{if value==target{return true}}
  return false
 }
+
+
+// TestCreateProfileFromDebianInstallerISO verifies the newly exposed Go API
+// with real Debian Installer media. It runs only when an installer ISO is
+// deliberately provided to scripts/tests/integration.sh.
+func TestCreateProfileFromDebianInstallerISO(t *testing.T){
+ configPath:=os.Getenv("INSULA_TEST_CONFIG")
+ installerISO:=os.Getenv("INSULA_TEST_INSTALLER_ISO")
+ if installerISO==""{t.Skip("provide --installer-iso to run the real Debian installer test")}
+ if configPath==""{t.Fatal("INSULA_TEST_CONFIG required")}
+ engine,err:=insulavm.New(configPath)
+ if err!=nil{t.Fatal(err)}
+ ctx,cancel:=context.WithTimeout(context.Background(),115*time.Minute)
+ defer cancel()
+ name:=fmt.Sprintf("go-api-iso-%d",time.Now().UnixNano())
+ result,err:=engine.CreateProfileFromISO(ctx,insulavm.CreateProfileFromISORequest{
+  Name:name,ISOPath:installerISO,MemoryMiB:2048,VCPUs:2,DiskGB:12,
+  Timeout:90*time.Minute,
+  OnProgress:func(p insulavm.ProfileISOProgress){t.Logf("Installer [%s] %s",p.Stage,p.Message)},
+ })
+ if err!=nil{t.Fatal(err)}
+ if !result.Installed || result.Profile.Name!=name{t.Fatalf("installer did not create a reusable profile: %+v",result)}
+ instance,err:=engine.StartVMWithOptions(ctx,insulavm.VMStartOptions{Profile:name},nil)
+ if err!=nil{t.Fatalf("boot newly installed profile: %v",err)}
+ t.Cleanup(func(){
+  cleanupCtx,done:=context.WithTimeout(context.Background(),45*time.Second)
+  defer done()
+  _,_=engine.StopVMWithOptions(cleanupCtx,insulavm.VMStopOptions{VMID:instance.ID,GracePeriod:5*time.Second,ForceAfterTimeout:true})
+ })
+ var output bytes.Buffer
+ _,err=engine.ExecVM(ctx,insulavm.ExecRequest{VMID:instance.ID,Command:"test -f /etc/debian_version && echo INSULA_INSTALLER_API_OK",Output:&output})
+ if err!=nil||!strings.Contains(output.String(),"INSULA_INSTALLER_API_OK"){t.Fatalf("new Debian VM failed: %v %s",err,output.String())}
+ if os.Getenv("INSULA_TEST_LIVE_ISO")=="0"{
+  _,err=engine.StopVMWithOptions(ctx,insulavm.VMStopOptions{VMID:instance.ID,GracePeriod:30*time.Second,ForceAfterTimeout:true})
+  if err!=nil{t.Fatal(err)}
+  return
+ }
+ exported,err:=engine.ExportVMToLiveISO(ctx,insulavm.VMExportISORequest{
+  VMID:instance.ID,Name:name+"-frozen",
+  PrepareLiveBoot:true,CommandTimeout:30*time.Minute,ShutdownTimeout:3*time.Minute,
+ })
+ if err!=nil{t.Fatalf("export VM directly to Live ISO: %+v %v",exported,err)}
+ stat,err:=os.Stat(exported.ISOPath)
+ if err!=nil||stat.Size()==0{t.Fatalf("Live ISO missing after freezing VM: %v",err)}
+ live,err:=engine.StartVMFromISO(ctx,insulavm.LiveISOStartOptions{Profile:name+"-frozen",ISOPath:exported.ISOPath})
+ if err!=nil{t.Fatalf("ISO could not boot: %v",err)}
+ t.Cleanup(func(){
+  cleanupCtx,done:=context.WithTimeout(context.Background(),45*time.Second)
+  defer done()
+  _,_=engine.StopVMWithOptions(cleanupCtx,insulavm.VMStopOptions{VMID:live.ID,GracePeriod:5*time.Second,ForceAfterTimeout:true})
+ })
+ var liveOutput bytes.Buffer
+ _,err=engine.ExecVM(ctx,insulavm.ExecRequest{VMID:live.ID,Command:"echo INSULA_ISO_FROM_INSTALLER_OK",Output:&liveOutput})
+ if err!=nil||!strings.Contains(liveOutput.String(),"INSULA_ISO_FROM_INSTALLER_OK"){
+  t.Fatalf("Live ISO guest validation: %v %s",err,liveOutput.String())
+ }
+ if _,err:=engine.StopVMWithOptions(ctx,insulavm.VMStopOptions{VMID:live.ID,GracePeriod:30*time.Second,ForceAfterTimeout:true});err!=nil{t.Fatal(err)}
+ t.Log("INSULA_INSTALLER_ISO_INTEGRATION_OK")
+}

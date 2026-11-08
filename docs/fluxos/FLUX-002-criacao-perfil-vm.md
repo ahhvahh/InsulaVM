@@ -3,7 +3,7 @@
 
 # FLUX-002 — Criação e publicação de perfil de VM
 
-**Estado:** Proposto — não implementado.
+**Estado:** assistente interativo proposto; instalador automático não interativo implementado, sem validação KVM real.
 **Versão aprovada:** nenhuma.
 **Entrada:** operação interativa de criação de perfil na CLI.
 **Interface de terminal:** [INTF-TERM-001](../interfaces/terminal/INTF-TERM-001-criar-perfil-vm.md).
@@ -15,7 +15,7 @@ Criar um perfil de máquina Debian reutilizável por meio de ISO local, alocando
 
 ## Distinção entre criação por ISO e congelamento implementado
 
-Este documento descreve **somente o fluxo interativo proposto** de instalar um sistema a partir de uma ISO convencional. O InsulaVM já implementa um caminho diferente: iniciar uma VM de perfil QCOW2 existente, preparar o sistema e **congelar** a VM por um nome novo, em [FLUX-004 — Congelar VM](FLUX-004-congelar-vm.md). Esse fluxo implementado não produz ISO Live e não substitui o instalador da distribuição.
+Este documento descreve **principalmente o fluxo interativo proposto** de instalar um sistema a partir de uma ISO convencional. O InsulaVM já implementa um caminho diferente: iniciar uma VM de perfil QCOW2 existente, preparar o sistema e **congelar** a VM por um nome novo, em [FLUX-004 — Congelar VM](FLUX-004-congelar-vm.md). Esse fluxo implementado não produz ISO Live e não substitui o instalador da distribuição.
 
 ## Pré-condições
 
@@ -111,3 +111,13 @@ sequenceDiagram
 - [ARQ-002 — Perfis e overlays](../arquitetura/ARQ-002-perfis-vm.md)
 - [INTF-TERM-001 — Criação pelo terminal](../interfaces/terminal/INTF-TERM-001-criar-perfil-vm.md)
 - [FLUX-001 — Actions e pipelines](FLUX-001-execucao-manifesto.md)
+
+## Caminho implementado: instalador Debian 13 não interativo
+
+1. O operador chama [INTF-TERM-007](../interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md) ou `Engine.CreateProfileFromISO` com nome, ISO local, RAM, vCPUs e disco.
+2. A biblioteca verifica ISO9660, nome, limites, permissões e dependências. Calcula SHA256 da ISO.
+3. Cria um QCOW2 isolado em `storage.runs/insula-install-*`, injeta Preseed no initramfs e chama `virt-install --location` com serial, rede Libvirt e timeout.
+4. Após o instalador desligar, verifica `domstate=shut off`, inspeciona o filesystem com libguestfs e valida Debian 13, SSH, Cloud-Init, sudo e live-boot, além de imagem QCOW2 autônoma.
+5. Somente então registra o novo perfil independente e remove o staging, após verificar que o domínio foi encerrado/indefinido. Se não puder confirmar o encerramento, mantém staging para evitar apagar disco em uso.
+
+Esse fluxo não substitui a manutenção interativa descrita no diagrama acima. A aceitação do boot real está em [GUIA-003](../guias/GUIA-003-testes.md).

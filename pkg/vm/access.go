@@ -93,3 +93,10 @@ func setACL(ctx context.Context, uid int, perm, path string) error {
  }
  return nil
 }
+
+// GrantQEMUInstallAccess grants the configured QEMU UID read-only access to
+// an installer ISO and write access only to its disposable QCOW2 disk. The
+// caller must never pass a persistent profile base as the writable disk.
+func GrantQEMUInstallAccess(ctx context.Context,uid int,iso,disk string)error{
+ return grantQEMUStorageAccess(ctx,uid,iso,disk,iso)
+}

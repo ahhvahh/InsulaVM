@@ -3,7 +3,7 @@
 
 # INTF-TERM-001 — Criar perfil de máquina pelo terminal
 
-**Estado:** Proposto — sem executável/flags implementadas.
+**Estado:** wizard interativo proposto; operação não interativa a partir da ISO Debian implementada em [INTF-TERM-007](INTF-TERM-007-instalar-debian-iso.md), ainda sem validação real em KVM.
 **Plataforma:** CLI no hospedeiro Linux.
 **Fluxo associado:** [FLUX-002 — Criação de perfil de VM](../../fluxos/FLUX-002-criacao-perfil-vm.md).
 **Regras de persistência:** [ARQ-002 — Perfis persistentes](../../arquitetura/ARQ-002-perfis-vm.md).

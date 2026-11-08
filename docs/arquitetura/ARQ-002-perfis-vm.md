@@ -3,14 +3,14 @@
 
 # ARQ-002 — Perfis persistentes e discos descartáveis de VM
 
-**Estado:** perfil por YAML, registro de QCOW2, instâncias descartáveis e Cloud-Init NoCloud automático implementados; instalação do SO pela ISO instaladora ainda pendente.
+**Estado:** perfil por YAML, registro de QCOW2, instâncias descartáveis e Cloud-Init NoCloud automático implementados; instalação automática não interativa do Debian 13 a partir de ISO local implementada, sem validação KVM real; assistente interativo ainda pendente.
 **Escopo:** armazenamento de perfis Debian, criação a partir de ISO e reutilização em Actions.
 **Fluxo de criação:** [FLUX-002](../fluxos/FLUX-002-criacao-perfil-vm.md).
 **Fluxo de execução:** [FLUX-001](../fluxos/FLUX-001-execucao-manifesto.md).
 
 ## Objetivo
 
-O InsulaVM já consegue **registrar um QCOW2 com sistema previamente instalado** como perfil e executar Actions futuras em instâncias derivadas **descartáveis**. A preparação/instalação desse QCOW2 a partir de uma ISO dentro da própria aplicação ainda não foi implementada. O perfil persistente é uma imagem de disco com o sistema já instalado e configurado; não é a ISO de instalação nem um snapshot de memória RAM.
+O InsulaVM já consegue **registrar um QCOW2 com sistema previamente instalado** como perfil e executar Actions futuras em instâncias derivadas **descartáveis**. A instalação de Debian 13 amd64 diretamente de ISO local por `CreateProfileFromISO` e `profile create-from-iso` está implementada em modo não interativo com `virt-install` e `preseed.cfg`, mas ainda precisa de teste integral em KVM. O perfil persistente é uma imagem de disco com o sistema já instalado e configurado; não é a ISO de instalação nem um snapshot de memória RAM.
 
 ## Modelo de armazenamento recomendado
 
@@ -32,7 +32,7 @@ A implementação não deve escrever sobre `base.qcow2` enquanto houver Actions 
 
 ### Estrutura proposta
 
-`storage.root` é definido em [config.yaml](../../config.yaml). Os subdiretórios são configuráveis; o exemplo a seguir também mostra a árvore de staging prevista para instalação por ISO (ainda não implementada):
+`storage.root` é definido em [config.yaml](../../config.yaml). Os subdiretórios são configuráveis; o exemplo a seguir também mostra a árvore de staging; o instalador não interativo usa atualmente `storage.runs/insula-install-*`:
 
 ```text
 <data_root>/
@@ -138,3 +138,9 @@ As próximas instâncias usam `vm start -profile <nome>` ou [`StartVMWithOptions
 - Libvirt — backing storage: https://libvirt.org/formatstorage.html
 - Debian Installer — Preseed: https://wiki.debian.org/DebianInstaller/Preseed
 - Cloud-Init — NoCloud: https://docs.cloud-init.io/en/26.1/reference/datasources/nocloud.html
+
+## Instalador automático não interativo — estado na develop
+
+[`CreateProfileFromISO`](../../insulavm/create_profile_iso.go) usa ISO Debian 13 amd64 local, Preseed injetado no initramfs, `virt-install`, QCOW2 temporário e verificação offline de `/etc/os-release`, Cloud-Init, SSH, sudo e live-boot por `guestmount`. O perfil só é registrado após o domínio parar e a verificação passar; rejeita nome repetido e ISO sem assinatura ISO9660. O arquivo original de ISO não é modificado. A credencial do instalador é aleatória, armazenada apenas como hash no Preseed temporário. O SHA256 da ISO é devolvido na operação, sem extensão de schema YAML.
+
+Diferente do fluxo interativo proposto no restante desta arquitetura, o novo comando **não** pergunta ao usuário se deseja salvar, nem permite editar o sistema pelo console antes da publicação. Esse fluxo futuro permanece em [FLUX-002](../fluxos/FLUX-002-criacao-perfil-vm.md). Veja o contrato de uso em [INTF-TERM-007](../interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md).

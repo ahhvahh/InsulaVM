@@ -49,6 +49,18 @@ O marcador de êxito é INSULA_INTEGRATION_OK. Em erro, o script termina com có
 
 ## Cobertura e limites
 
-A matriz de testes unitários invoca todos os subcomandos da CLI e todos os métodos públicos de `Engine` pelo menos em um caminho de validação ou cenário controlado. Isso **não significa** cobertura total dos caminhos ou das linhas: a suíte integral é necessária para os fluxos positivos dependentes de Libvirt/SSH. `CreateProfileFromISO` (instalação automática por ISO Debian netinst) ainda não existe na API; seu teste de boot de instalador não pode ser marcado como implementado.
+A matriz de testes unitários invoca todos os subcomandos da CLI e todos os métodos públicos de `Engine` pelo menos em um caminho de validação ou cenário controlado. Isso **não significa** cobertura total dos caminhos ou das linhas: a suíte integral é necessária para os fluxos positivos dependentes de Libvirt/SSH. `CreateProfileFromISO` (instalação automática de Debian 13 via Preseed) tem testes unitários com ferramentas do host simuladas e opção de teste integral com ISO real; o cenário de boot de instalador ainda não foi executado em KVM.
 
 O `vm stop` utiliza `virsh shutdown UUID --mode acpi` para que o teste de botão de energia ignorado seja determinístico mesmo quando o guest tiver QEMU Guest Agent. O timeout cobre também a tentativa inicial de `shutdown`; ao expirar, somente a VM registrada pode receber `virsh destroy`. Esse comportamento usa as opções documentadas no [manual oficial virsh](https://www.libvirt.org/manpages/virsh.html). O shutdown/limpeza completa pode exceder a janela de 30 s por operações de Libvirt e armazenamento.
+
+## Instalar Debian 13 da ISO durante a suíte integral
+
+Com `--installer-iso`, o script instala Debian da ISO e pode usar o QCOW2 produzido como base quando `--base-qcow2` não for fornecido. Requer `virt-install`, `openssl`, `guestmount`, `guestunmount`, acesso a repositórios APT no guest e rede Libvirt.
+
+```bash
+bash scripts/tests/integration.sh \
+  --config /etc/insulavm/test-config.yaml \
+  --installer-iso /isos/debian-13-amd64-netinst.iso
+```
+
+Com a suíte Go habilitada, também executa o teste opt-in `TestCreateProfileFromDebianInstallerISO` que chama diretamente a biblioteca, inicia uma VM do perfil criado e, com testes Live habilitados, tenta a exportação da própria VM e novo boot pela ISO. Este teste prolongado não é executado no CI padrão sem KVM.

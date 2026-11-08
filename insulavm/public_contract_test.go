@@ -33,6 +33,8 @@ func TestPublicEngineMethodContractMatrix(t *testing.T) {
   {"StartVMWithProgress",func()error{_,err:=e.StartVMWithProgress(ctx,"not-found",nil);return err}},
   {"StartVMWithOptions",func()error{_,err:=e.StartVMWithOptions(ctx,VMStartOptions{Profile:"not-found"},nil);return err}},
   {"StartVMFromISO",func()error{_,err:=e.StartVMFromISO(ctx,LiveISOStartOptions{Profile:"not-found"});return err}},
+  {"CreateProfileFromISO",func()error{_,err:=e.CreateProfileFromISO(ctx,CreateProfileFromISORequest{});return err}},
+  {"ExportVMToLiveISO",func()error{_,err:=e.ExportVMToLiveISO(ctx,VMExportISORequest{});return err}},
   {"ExportProfileLiveISO",func()error{_,err:=e.ExportProfileLiveISO(ctx,"not-found");return err}},
   {"GetVM",func()error{_,err:=e.GetVM(ctx,"not-found");return err}},
   {"GetVMStatus",func()error{_,err:=e.GetVMStatus(ctx,"not-found");return err}},
@@ -73,6 +75,8 @@ func TestPublicEngineNilContextContract(t *testing.T) {
   {"StopVMWithOptions",func()error{_,err:=e.StopVMWithOptions(nil,VMStopOptions{VMID:"any"});return err}},
   {"OpenConsole",func()error{return e.OpenConsole(nil,"any",nil,nil,nil)}},
   {"CloneProfile",func()error{_,err:=e.CloneProfile(nil,"a","b");return err}},
+  {"CreateProfileFromISO",func()error{_,err:=e.CreateProfileFromISO(nil,CreateProfileFromISORequest{});return err}},
+  {"ExportVMToLiveISO",func()error{_,err:=e.ExportVMToLiveISO(nil,VMExportISORequest{});return err}},
   {"ExportProfileLiveISO",func()error{_,err:=e.ExportProfileLiveISO(nil,"bad");return err}},
  }
  for _,tc:=range checks{
