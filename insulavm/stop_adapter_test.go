@@ -40,7 +40,7 @@ func simulatedLibvirtEngine(t *testing.T) (*Engine,string,string,string) {
 case "$3" in
  list) printf '%s\n' "$MOCK_UUID" ;;
  domstate) echo running ;;
- shutdown) echo "shutdown $4" >> "$MOCK_CALLS" ;;
+ shutdown) echo "shutdown $4 $5 $6" >> "$MOCK_CALLS" ;;
  destroy) echo "destroy $4" >> "$MOCK_CALLS" ;;
  console) echo "CONSOLE_OK" ;;
  *) echo "unexpected virsh operation: $3" >&2; exit 97 ;;
@@ -69,7 +69,7 @@ func TestStopVMWithOptionsRealAdapterEscalatesAfterDeadline(t *testing.T) {
  contents,err:=os.ReadFile(calls)
  if err!=nil{t.Fatal(err)}
  commands:=strings.Split(strings.TrimSpace(string(contents)),"\n")
- if len(commands)!=2||commands[0]!="shutdown "+id||commands[1]!="destroy insula-force-test"{
+ if len(commands)!=2||commands[0]!="shutdown "+id+" --mode acpi"||commands[1]!="destroy insula-force-test"{
   t.Fatalf("wrong command ordering/ownership: %q",contents)
  }
  if _,err:=os.Stat(dir);!errors.Is(err,os.ErrNotExist){

@@ -32,7 +32,7 @@ type stopPolicyBackend interface {
 }
 
 func(e *Engine)gracefulShutdown(ctx context.Context,id string,limit time.Duration)error {
-    return vm.ShutdownForFreeze(ctx,e.config.Virtualization.LibvirtURI,id,limit)
+    return vm.ShutdownWithMode(ctx,e.config.Virtualization.LibvirtURI,id,limit,"acpi")
 }
 
 // StopVMWithOptions performs graceful shutdown with an explicit escalation
