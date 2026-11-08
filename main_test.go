@@ -16,6 +16,10 @@ func TestRedundantVMShowAliasRemoved(t *testing.T) {
  if err == nil || !strings.Contains(err.Error(), "usage: insula vm") {
   t.Fatalf("vm show should be unsupported; got: %v", err)
  }
+ err = run([]string{"vm", "status", "-config", configFile, "-id", "x"})
+ if err == nil || strings.Contains(err.Error(), "usage: insula vm") {
+  t.Fatalf("vm status must remain routed to status lookup; got: %v", err)
+ }
 }
 
 func TestConfigCheckAndProfileCommands(t *testing.T){
