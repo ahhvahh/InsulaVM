@@ -6,6 +6,12 @@ Ferramenta em **Go** para criar e gerenciar VMs Linux descartáveis com **QEMU/K
 
 **Ainda não implementado:** instalar Linux automaticamente a partir de ISO instaladora, exportar ISO Live e checkout automático de repositórios Git. A imagem-base QCOW2 deve ter um sistema Linux previamente instalado e preparado com Cloud-Init, SSH, rede DHCP e, para congelamento, sudo sem senha.
 
+## Contrato canônico CLI / biblioteca Go
+
+O padrão de integração para **ambas** as interfaces está em [CONTR-001 — Operações canônicas](docs/interfaces/CONTR-001-operacoes-canonicas.md) e [CONTR-002 — Transporte STDIO](docs/interfaces/CONTR-002-transporte-stdio.md). Os oito métodos de referência são `CreateProfileFromISO`, `CreateVM`, `UploadArchive`, `ExecuteScript`, `ExecuteCommand`, `StopVM`, `StopAllVMs` e `FreezeVM`.
+
+**Atenção:** esta padronização define a API-alvo. O pacote atual implementa apenas parte dela; consulte a matriz de situação nos contratos antes de integrar. Métodos legados da CLI e biblioteca permanecem documentados como implementados. Nenhum método inexistente deve ser considerado disponível apenas por constar na especificação.
+
 ## Começar
 
 Requisitos: **Go 1.23+**, Linux com KVM/QEMU/Libvirt, `virsh`, `qemu-img`, rede Libvirt com DHCP, permissões para operar o hipervisor e geração de ISO NoCloud (`genisoimage` ou `xorriso`). O `config.yaml` é opcional na linha de comando, mas o arquivo precisa existir no local esperado.
