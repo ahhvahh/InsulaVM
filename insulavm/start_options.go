@@ -4,6 +4,9 @@ import (
  "context"
  "errors"
  "fmt"
+ "os"
+ "path/filepath"
+ "strings"
  "time"
 
  "github.com/ahhvahh/InsulaVM/pkg/vm"
@@ -21,6 +24,10 @@ type VMStartOptions struct {
  Profile string
  MemoryMiB int
  VCPUs int
+ // StartupScriptPath is an optional absolute path to a trusted host script.
+ // InsulaVM embeds it in the first-boot Cloud-Init seed as root. This is NOT
+ // a path to a script supplied by an untrusted repository or workflow YAML.
+ StartupScriptPath string
  StopOnContextDone bool
  OnStopError func(error)
 }
@@ -54,8 +61,13 @@ func(e *Engine)StartVMWithOptions(ctx context.Context,opts VMStartOptions,onProg
  }
  p,err:=e.resolveVMStartProfile(opts)
  if err!=nil{return nil,err}
+ var startupScript []byte
+ if opts.StartupScriptPath!=""{
+  startupScript,err=readVMStartupScript(opts.StartupScriptPath)
+  if err!=nil{return nil,err}
+ }
  if err:=e.config.EnsureDirectories();err!=nil{return nil,err}
- instance,err:=vm.StartWithProgress(ctx,&e.config,p,onProgress)
+ instance,err:=vm.StartWithStartupScript(ctx,&e.config,p,startupScript,onProgress)
  if err!=nil{return nil,err}
  if opts.StopOnContextDone {
   // Do not use ctx after cancellation; cleanup needs its own timeout.
@@ -69,4 +81,22 @@ func(e *Engine)StartVMWithOptions(ctx context.Context,opts VMStartOptions,onProg
   }(instance.ID)
  }
  return instance,nil
+}
+
+// readVMStartupScript refuses symlinks, relative paths, binary payloads and
+// scripts too large to fit safely in a NoCloud user-data seed.
+func readVMStartupScript(p string)([]byte,error){
+ if !filepath.IsAbs(p){return nil,errors.New("StartupScriptPath must be absolute")}
+ info,err:=os.Lstat(p)
+ if err!=nil{return nil,err}
+ if !info.Mode().IsRegular(){return nil,errors.New("startup script must be a regular host file")}
+ if info.Size()==0||info.Size()>256*1024{
+  return nil,errors.New("startup script must be 1..262144 bytes")
+ }
+ content,err:=os.ReadFile(p)
+ if err!=nil{return nil,err}
+ if len(content)==0||len(content)>256*1024||strings.ContainsRune(string(content),0){
+  return nil,errors.New("startup script must be text without NUL (maximum 256 KiB)")
+ }
+ return content,nil
 }
