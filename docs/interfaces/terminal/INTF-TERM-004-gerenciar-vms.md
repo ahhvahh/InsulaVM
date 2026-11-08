@@ -17,7 +17,7 @@ Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatu
 | --- | --- | --- |
 | `insula vm start` | `-profile` obrigatório; `-memory-mib`, `-vcpus` opcionais | Cria uma VM de perfil já instalado; [ARQ-003](../../arquitetura/ARQ-003-configuracao-perfis.md) |
 | `insula vm list` | Nenhum além de `-config` | Lista os registros com estados SQLite/Libvirt; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
-| `insula vm show` / `status` | `-id` obrigatório | Exibe identidade/SSH e estados; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
+| `insula vm status` | `-id` obrigatório | Exibe identidade/SSH e estados; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 | `insula vm shell` | `-id` obrigatório; `-directory` opcional | Abre shell SSH na VM gerenciada; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `insula vm exec` | `-id`, `-command` obrigatórios; `-workspace`, `-sudo` opcionais | Executa comando e retorna logs; [FLUX-003](../../fluxos/FLUX-003-execucao-sequencial-logs.md) |
 | `insula vm import` | `-id`, `-source` obrigatórios | Copia arquivo/diretório para `guest.destination`; [ARQ-005](../../arquitetura/ARQ-005-importacao-arquivos.md) |
@@ -74,7 +74,7 @@ A execução percorre **somente** os UUIDs do banco SQLite associado ao `config.
 
 | Ação | Origem dos dados | Destino exibido |
 | --- | --- | --- |
-| `list`/`show` | [PERS-001](../../persistencia/PERS-001-registro-instancias.md) + Libvirt | UUID, IP, estados, perfil e SSH |
+| `list`/`status` | [PERS-001](../../persistencia/PERS-001-registro-instancias.md) + Libvirt | UUID, IP, estados, perfil e SSH |
 | `start` | [Perfil QCOW2](../../arquitetura/ARQ-002-perfis-vm.md) + config global | UUIDv7, IP, MAC, usuário |
 | `freeze` | Registro SQLite + VM real + [FLUX-004](../../fluxos/FLUX-004-congelar-vm.md) | Nome e caminho do perfil, status da limpeza |
 | `stop-all` | Registros SQLite + estados Libvirt | Quantidade verificada, encerrada, ignorada e falhas |
