@@ -28,7 +28,7 @@ Um perfil instalado (`profile.yaml` + imagem-base QCOW2) pode ser reutilizado po
 ./insula vm start -profile debian13 -memory-mib 4096 -vcpus 4
 ```
 
-Na biblioteca Go, `StartVMWithOptions` aceita `VMStartOptions` com `Profile`, `MemoryMiB` e `VCPUs` (zero = usar os valores do perfil). Para gerenciamento do ciclo de vida, `StopOnContextDone` provoca limpeza **assíncrona e de melhor esforço** quando o contexto é cancelado, e `OnStopError` recebe erros dessa limpeza. Para aguardar e validar o encerramento, prefira chamar `StopVM` explicitamente.
+Na biblioteca Go, `StartVMWithOptions` aceita `VMStartOptions` com `Profile`, `MemoryMiB` e `VCPUs` (zero = usar os valores do perfil), além de **`StartupScriptPath`**. O script administrativo é incorporado ao Cloud-Init de primeira inicialização, executado como root e precisa terminar antes que a VM seja devolvida como pronta. O script é fornecido **no pedido de criação**, antes do envio de arquivos TAR.GZ, e não vem do repositório de testes. Para gerenciamento do ciclo de vida, `StopOnContextDone` provoca limpeza **assíncrona e de melhor esforço** quando o contexto é cancelado, e `OnStopError` recebe erros dessa limpeza. Para aguardar e validar o encerramento, prefira chamar `StopVM` explicitamente.
 
 ```go
 engine, err := insulavm.New("config.yaml")
