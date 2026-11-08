@@ -5,6 +5,7 @@ package cloudinit
 
 import (
  "context"
+ "encoding/base64"
  "errors"
  "fmt"
  "os"
@@ -27,6 +28,15 @@ type Seed struct{
 // guest host PRIVATE key to pin SSH host identity before first connection;
 // protect seed.iso and delete it together with the VM on cleanup.
 func Prepare(ctx context.Context,dir,id,user,sudoMode,clientPublic string,host identity.Keys)(Seed,error){
+ return PrepareWithStartupScript(ctx,dir,id,user,sudoMode,clientPublic,host,nil)
+}
+
+// PrepareWithStartupScript embeds an administrator-supplied script in the
+// first-boot Cloud-Init seed. The script runs as root during the first boot,
+// before consumers of StartVMWithOptions receive a ready instance.
+// The script must originate from trusted host configuration, never a workflow.
+func PrepareWithStartupScript(ctx context.Context,dir,id,user,sudoMode,clientPublic string,
+ host identity.Keys,startupScript []byte)(Seed,error){
  var result Seed
  if ctx==nil{return result,errors.New("context is required")}
  if !identity.ValidUser(user){return result,fmt.Errorf("invalid non-root SSH user %q",user)}
@@ -67,6 +77,19 @@ func Prepare(ctx context.Context,dir,id,user,sudoMode,clientPublic string,host i
   "  ed25519_private: |\n"+
   keyBlock.String()+
   "  ed25519_public: "+strconv.Quote(host.PublicAuthorized)+"\n"
+ if len(startupScript)>0{
+  if len(startupScript)>256*1024||strings.ContainsRune(string(startupScript),0){
+   return result,errors.New("invalid VM startup script: max 256 KiB, no NUL bytes")
+  }
+  userData+="write_files:\n"+
+   "  - path: /var/lib/insula/startup.sh\n"+
+   "    owner: root:root\n"+
+   "    permissions: '0700'\n"+
+   "    encoding: b64\n"+
+   "    content: "+base64.StdEncoding.EncodeToString(startupScript)+"\n"+
+   "runcmd:\n"+
+   "  - [/bin/bash, -ec, 'bash /var/lib/insula/startup.sh && touch /var/lib/insula/startup-success']\n"
+ }
  metaData:="instance-id: "+id+"\nlocal-hostname: insula-"+id[:8]+"\n"
  if err:=os.WriteFile(result.UserData,[]byte(userData),0600);err!=nil{return result,err}
  if err:=os.WriteFile(result.MetaData,[]byte(metaData),0600);err!=nil{return result,err}
