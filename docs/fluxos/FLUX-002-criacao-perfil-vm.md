@@ -13,6 +13,10 @@
 
 Criar um perfil de máquina Debian reutilizável por meio de ISO local, alocando RAM e núcleos de CPU definidos pelo usuário, permitindo manutenção manual e oferecendo salvamento da imagem configurada ao sair do terminal. Cada Action futura deve trabalhar sobre clone descartável do perfil salvo, não na imagem original.
 
+## Distinção entre criação por ISO e congelamento implementado
+
+Este documento descreve **somente o fluxo interativo proposto** de instalar um sistema a partir de uma ISO convencional. O InsulaVM já implementa um caminho diferente: iniciar uma VM de perfil QCOW2 existente, preparar o sistema e **congelar** a VM por um nome novo, em [FLUX-004 — Congelar VM](FLUX-004-congelar-vm.md). Esse fluxo implementado não produz ISO Live e não substitui o instalador da distribuição.
+
 ## Pré-condições
 
 - Aplicação InsulaVM com diretório de dados configurado e permissão de acesso ao Libvirt/KVM/QEMU.

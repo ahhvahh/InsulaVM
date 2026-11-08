@@ -106,6 +106,10 @@ pipelines:
 
 As importações são executadas antes dos jobs e sempre utilizam o destino global. `RunRequest.OnImportProgress` emite o acompanhamento para o consumidor Go, `RunResult.Imports` contém os resultados. Se o username opcional da Action for definido, ele será provisionado no novo convidado com a chave individual de SSH do InsulaVM. Para um host externo, a conta indicada precisa existir e estar autorizada a conectar com a chave configurada.
 
+## Deploy de arquivo e script
+
+O comando `vm deploy` combina duas importações e uma execução Bash, com extração TAR.GZ opcional e interrupção imediata se uma etapa falhar. O contrato completo do fluxo está em [FLUX-005](../fluxos/FLUX-005-deploy-arquivos.md), e as opções CLI estão em [INTF-TERM-005](../interfaces/terminal/INTF-TERM-005-deploy-vm.md). O destino padrão permanece `guest.destination`; esta operação não inicia uma nova VM.
+
 ## Referências
 
 - [Go archive/tar](https://pkg.go.dev/archive/tar)

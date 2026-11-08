@@ -84,6 +84,14 @@ go run . profile list -config config.yaml
 go run . profile show -config config.yaml -name debian-minimal
 ```
 
+## Instâncias independentes e perfis congelados
+
+O comando `vm start -profile NOME` usa o catálogo já registrado. As flags `-memory-mib` e `-vcpus`, assim como `Engine.StartVMWithOptions`, sobrescrevem os recursos somente para uma nova VM. O arquivo do perfil e seu QCOW2-base não são alterados.
+
+`vm freeze -id UUID -name NOVO_PERFIL` (implementado) captura a VM configurada como novo perfil QCOW2, sem ISO de instalação. Exige Cloud-Init, SSH gerenciado e sudo sem senha; o [FLUX-004](../fluxos/FLUX-004-congelar-vm.md) descreve desligamento, publicação e recuperação.
+
+O registro das VMs, seus estados históricos e a verificação conjunta SQLite/Libvirt estão documentados em [PERS-001](../persistencia/PERS-001-registro-instancias.md). As flags CLI estão em [INTF-TERM-004](../interfaces/terminal/INTF-TERM-004-gerenciar-vms.md).
+
 ## Prerrequisitos e segurança
 
 - Um host Linux com KVM/QEMU, `qemu-img` e `virsh`, acesso a `qemu:///system` (ou URI configurada) e uma rede Libvirt ativa com DHCP.

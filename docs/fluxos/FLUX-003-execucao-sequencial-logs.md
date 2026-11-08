@@ -3,16 +3,16 @@
 
 # FLUX-003 — Execução sequencial e logs SSH por job
 
-**Estado:** Implementado no executor de comandos e armazenamento local. **Provisionamento de VM e obtenção do repositório:** ainda propostos.
+**Estado:** implementado para comandos SSH, logs e execução por manifesto em VM gerenciada ou host externo. **Checkout Git automático:** não implementado.
 **Versão aprovada:** nenhuma.
 **Fontes de código:** [pkg/executor/ssh.go](../../pkg/executor/ssh.go), [pkg/storage/logger.go](../../pkg/storage/logger.go), [pkg/manifest/manifest.go](../../pkg/manifest/manifest.go) e [main.go](../../main.go).
-**Fluxo da Action completa (proposta):** [FLUX-001](FLUX-001-execucao-manifesto.md).
+**Fluxo da Action com manifesto (implementado):** [FLUX-001](FLUX-001-execucao-manifesto.md).
 
 ## Objetivo e entrada
 
 Para cada job definido em `insula.yaml`, gravar todos os comandos enviados e as linhas recebidas em arquivo físico, na máquina hospedeira. Executar somente **um comando por vez**, respeitando o resultado remoto antes de iniciar o seguinte.
 
-A CLI atual se conecta a uma VM Debian **já inicializada e acessível por SSH**. Ela **não** provisiona VM, cria overlay QCOW2 nem clona o repositório nesse ciclo. O diretório `workspace` já deve existir no convidado.
+A CLI pode iniciar uma VM descartável de um perfil QCOW2 via Libvirt e Cloud-Init, ou conectar-se a host SSH externo com credenciais preexistentes. Em VMs gerenciadas, o diretório `guest.destination` é preparado automaticamente; um `workspace` personalizado precisa existir e ser acessível. O checkout Git automático permanece não implementado.
 
 ## Localização dos logs
 
@@ -20,7 +20,7 @@ A CLI atual se conecta a uma VM Debian **já inicializada e acessível por SSH**
 <logs-root>/<repositorio>/<action-ou-pipeline>/<YYYYMMDD_HHMMSS>/<job>.log
 ```
 
-- `-logs-root` ou `INSULA_LOG_ROOT`: raiz configurada no hospedeiro, obrigatória.
+- `storage.logs` em `config.yaml`: raiz padrão de logs no hospedeiro; `run -logs-root` pode sobrescrever essa localização. Não há exigência de variável `INSULA_LOG_ROOT` no parser atual.
 - `repository.name`: nome validado e seguro para caminhos.
 - `action`: nome do agrupamento de execução. Quando ausente, usa `pipelines[0].name` se houver exatamente uma pipeline.
 - Data e hora: instante de início local, até os segundos. Colisões no mesmo segundo recebem sufixo `_001`, `_002` etc., sem sobrescrever uma execução anterior.
