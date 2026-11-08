@@ -48,11 +48,11 @@ flowchart LR
 ## Virtualização e ciclo de vida
 
 - **Hospedeiro:** Linux com KVM disponível, QEMU, Libvirt e permissões restritas para criar domínios e discos.
-- **Imagem base:** um perfil Debian já instalado é salvo como QCOW2 imutável; cada Action usa overlay QCOW2 descartável e preserva a imagem compartilhada. A criação inicial do perfil usa ISO local, console de instalação e posterior terminal de manutenção, conforme [ARQ-002](ARQ-002-perfis-vm.md).
-- **Libvirt:** construir XML do domínio com CPU, memória, disco, rede isolada/NAT e mídia de boot adequada à fase: ISO de instalação para criar perfil; imagem instalada com overlay para Actions, mais eventual ISO Cloud-Init. Criar/definir domínio, iniciar, consultar estado, encerrar e remover, incluindo falhas parciais.
+- **Imagem base:** um perfil Debian já instalado é salvo como QCOW2 imutável; cada Action usa overlay QCOW2 descartável e preserva a imagem compartilhada. O registro atual exige QCOW2 com Linux instalado; instalação por ISO local/console é **proposta**, conforme [ARQ-002](ARQ-002-perfis-vm.md).
+- **Libvirt implementado:** gerar XML do domínio transitório com CPU, memória, overlay QCOW2, rede Libvirt e ISO NoCloud, iniciar com `virsh create`, consultar estado e encerrar/remover domínio e temporários. **Proposto:** boot por ISO de instalação para instalar um novo sistema.
 - **Cloud-Init:** para convidados que tenham Cloud-Init habilitado, preparar ISO NoCloud com rótulo `CIDATA`, `user-data`, `meta-data` e eventual `network-config`, criando identidade/credenciais próprias por instância. **A ISO convencional do instalador Debian não é uma imagem Cloud-Init e precisa de instalação do SO**, manual ou automatizada por Preseed; isso não pode ser substituído por anexar somente a ISO NoCloud.
 - **Conectividade:** obter IP interno associado à instância (ex.: leases DHCP do Libvirt) e aguardar inicialização do SSH com prazo e tentativas limitados. IP atribuído não garante prontidão de Cloud-Init; confirmar inicialização antes dos jobs.
-- **Remoção:** após Action, fechar SSH, desligar/destruir VM quando necessário, indefinir domínio e remover ISO efêmera, overlay e credenciais temporárias — **preservando o perfil base**. Ao criar perfil, o usuário decide salvar imagem preparada ou descartar staging. Prever política explícita de retenção para diagnóstico futuro.
+- **Remoção:** após Action, fechar SSH, encerrar domínio transitório e remover ISO de configuração, overlay e credenciais temporárias — **preservando o perfil base**. **Implementado separadamente:** `vm freeze` publica um perfil QCOW2 nomeado e só então limpa a VM original. Pergunta interativa para salvar/descartar staging de instalação ISO é proposta.
 
 **Terminologia:** criar, iniciar, desligar e destruir são fases distintas. Destruir no Libvirt encerra a execução do domínio; a remoção de definição e arquivos de disco é uma ação adicional, que precisa ser tratada separadamente.
 
@@ -79,7 +79,7 @@ flowchart LR
 
 - **Remoto:** obter URL e referência solicitadas (branch/tag/commit) e materializar uma revisão identificável. Para repositórios privados, evitar gravar credenciais no disco ou na ISO da VM.
 - **Local:** compactar o conteúdo de trabalho autorizado no hospedeiro e transferir por canal autenticado (por exemplo, archive TAR via SSH); não pressupor que todo diretório local seja um repositório Git válido.
-- **Raiz de execução:** `guest.destination` de `config.yaml` define o destino padrão de todos os arquivos e o diretório de trabalho dos jobs. Exemplo: `/tmp/insulavm/workspace`. Comandos de `setup` têm contexto e elevação de privilégio definidos explicitamente no futuro contrato.
+- **Raiz de execução:** `guest.destination` de `config.yaml` define o destino dos imports e workspace padrão dos comandos, como `/tmp/insulavm/workspace`. `setup` roda como usuário SSH não-root, sem sudo automático; `workspace` do manifesto pode sobrescrever o diretório de trabalho.
 - **Ordem:** materialização do projeto antes de `setup`; execução de `setup` antes dos jobs, conforme [FLUX-001](../fluxos/FLUX-001-execucao-manifesto.md).
 
 ## Segurança e requisitos não funcionais
@@ -96,7 +96,7 @@ flowchart LR
 - Configurações globais do diretório de perfis, instalação de ISO, disco padrão e política de versões, conforme [ARQ-002](ARQ-002-perfis-vm.md).
 - Validação de ponta a ponta em hipervisor real da identidade SSH por instância, DHCP e bootstrap Cloud-Init; a estratégia de pinagem de host key e o handshake SSH estão implementados.
 - Acesso a repositórios privados, inclusão de arquivos locais ignorados, submódulos e tratamento de segredos.
-- Elevação de privilégios e diretório padrão do `setup`; política de retenção da VM em falhas.
+- Política de retenção/recuperação de VMs após falhas e autenticação de usuários que solicitam operações administrativas. `setup` já usa usuário SSH não-root e workspace do manifesto ou o destino global.
 - Destino persistente de logs/artifacts, ordem entre fluxos concorrentes e política de retomada de jobs.
 
 ## Referências externas
