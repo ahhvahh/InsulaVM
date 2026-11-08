@@ -12,6 +12,10 @@
 
 Pré-requisito: preparar uma imagem-base compatível, com cache do Cloud-Init limpo e DHCP habilitado. Ao iniciar, a VM precisa ter VirtIO, systemd/OpenRC ou init equivalente, suporte a cloud-init e SSH. Uma instalação comum sem cloud-init não aceita as credenciais geradas pelo novo fluxo.
 
+## Instalação administrativa na criação da VM
+
+A biblioteca oferece `StartVMWithOptions(ctx, VMStartOptions{Profile,StartupScriptPath}, onProgress)`: o arquivo de script deve estar no host, ser regular, absoluto e ter no máximo 256 KiB. O InsulaVM coloca seu conteúdo no `user-data` do seed NoCloud usando codificação Base64, gera `write_files` e `runcmd` e o executa **como root no primeiro boot**. A inicialização só retorna como pronta depois de `cloud-init status --wait --long` e do marcador de sucesso do script; caso contrário retorna erro e tenta descartar a VM. O script **não** é carregado do manifesto do repositório ou de um TAR.GZ de testes, somente de origem administrativa confiável. O perfil QCOW2 pode ser reutilizado com scripts distintos porque o script é específico da instância.
+
 ## Bootstrap automático
 
 1. Gerar **UUIDv7** exclusivo, MAC aleatório QEMU e dois pares de chaves Ed25519: chave do cliente e chave de identidade SSH do servidor convidado.
