@@ -38,12 +38,11 @@ func run(args []string) error {
 		case "import":
 			return importCommand(args[1:])
 		case "help", "-h", "--help":
-			fmt.Println("Usage: insula [run] -config config.yaml -manifest insula.yaml")
+			fmt.Println("Usage: insula run -config config.yaml -manifest insula.yaml")
 			fmt.Println("       insula import -config config.yaml -host 192.0.2.10:22 -source /host/project")
 			fmt.Println("       insula config check -config config.yaml")
 			fmt.Println("       insula vm start -config config.yaml -profile debian-minimal [-memory-mib 2048] [-vcpus 2]")
 			fmt.Println("       insula vm list -config config.yaml")
-			fmt.Println("       insula vm show -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm status -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm shell -config config.yaml -id UUIDv7 [-directory InsulaVM]")
 			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7")
@@ -58,7 +57,7 @@ func run(args []string) error {
 			return nil
 		}
 	}
-	return runAction(args)
+	return errors.New("usage: insula <config|profile|vm|run|import|help>; use insula run for pipelines")
 }
 
 func configCommand(args []string) error {

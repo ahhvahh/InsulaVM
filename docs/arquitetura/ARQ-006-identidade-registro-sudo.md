@@ -106,7 +106,6 @@ go run . vm start -config config.yaml -profile debian-minimal
 # Exibe UUIDv7, IP, MAC e estado registrados.
 go run . vm list -config config.yaml
 go run . vm status -config config.yaml -id <UUIDv7>
-go run . vm show -config config.yaml -id <UUIDv7>
 
 # Executa comando como usuário insula.
 go run . vm exec -config config.yaml -id <UUIDv7> -command "id -un"

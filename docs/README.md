@@ -13,6 +13,7 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 | --- | --- | --- |
 | [CONTR-001 — Operações canônicas](interfaces/CONTR-001-operacoes-canonicas.md) | Contrato normativo | Nomes e semântica compartilhados entre CLI e biblioteca Go, parâmetros, retornos, mapeamento legado e estados de implementação |
 | [CONTR-002 — STDIO fiel](interfaces/CONTR-002-transporte-stdio.md) | Contrato normativo | Transporte binário de stdin/stdout/stderr, exit code, callbacks, erros e testes de equivalência |
+| [CONTR-003 — Inventário de operações](interfaces/CONTR-003-inventario-operacoes.md) | Inventário | Mapa CLI/Go, redundâncias reais e plano de consolidação |
 | [GUIA-001 — Operar VMs](guias/GUIA-001-operar-insulavm.md) | Guia operacional | Como iniciar, configurar, congelar, importar e executar rotinas em VMs |\n| [GUIA-002 — Permissões Libvirt](guias/GUIA-002-permissoes-libvirt.md) | Diagnóstico | UID do QEMU, ACLs e segurança dos discos QCOW2 |\n| [ARQ-001 — Arquitetura do motor](arquitetura/ARQ-001-motor-insulavm.md) | Explicação/arquitetura | Componentes, dependências Go futuras, provisionamento, autenticação, segurança e decisões pendentes |
 | [ARQ-002 — Perfis de VM](arquitetura/ARQ-002-perfis-vm.md) | Arquitetura | Instalação inicial proposta, metadados QCOW2 e overlays descartáveis |
 | [ARQ-003 — Configuração e catálogo](arquitetura/ARQ-003-configuracao-perfis.md) | Arquitetura implementada | Config global, `guest.destination` compartilhado, perfis e Libvirt |
@@ -38,7 +39,7 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 
 | Prefixo | Finalidade | Documentos atuais |
 | --- | --- | --- |
-| `CONTR` | Contrato público canônico da CLI e biblioteca | [CONTR-001](interfaces/CONTR-001-operacoes-canonicas.md), [CONTR-002](interfaces/CONTR-002-transporte-stdio.md) |
+| `CONTR` | Contrato público canônico da CLI e biblioteca | [CONTR-001](interfaces/CONTR-001-operacoes-canonicas.md), [CONTR-002](interfaces/CONTR-002-transporte-stdio.md), [CONTR-003](interfaces/CONTR-003-inventario-operacoes.md) |
 | `GUIA` | Procedimentos e resolução de problemas | [GUIA-001](guias/GUIA-001-operar-insulavm.md), [GUIA-002](guias/GUIA-002-permissoes-libvirt.md) |\n| `ARQ` | Arquitetura | [ARQ-001](arquitetura/ARQ-001-motor-insulavm.md), [ARQ-002](arquitetura/ARQ-002-perfis-vm.md), [ARQ-003](arquitetura/ARQ-003-configuracao-perfis.md), [ARQ-004](arquitetura/ARQ-004-biblioteca-go.md), [ARQ-005](arquitetura/ARQ-005-importacao-arquivos.md), [ARQ-006](arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `FLUX` | Fluxos de execução | [FLUX-001](fluxos/FLUX-001-execucao-manifesto.md), [FLUX-002](fluxos/FLUX-002-criacao-perfil-vm.md), [FLUX-003](fluxos/FLUX-003-execucao-sequencial-logs.md), [FLUX-004](fluxos/FLUX-004-congelar-vm.md), [FLUX-005](fluxos/FLUX-005-deploy-arquivos.md) |
 | `INTF-TERM` | Interface de terminal | [INTF-TERM-001](interfaces/terminal/INTF-TERM-001-criar-perfil-vm.md), [INTF-TERM-002](interfaces/terminal/INTF-TERM-002-executar-manifesto.md), [INTF-TERM-003](interfaces/terminal/INTF-TERM-003-configuracao-perfis.md), [INTF-TERM-004](interfaces/terminal/INTF-TERM-004-gerenciar-vms.md), [INTF-TERM-005](interfaces/terminal/INTF-TERM-005-deploy-vm.md) |
