@@ -65,8 +65,11 @@ output="$(insula vm deploy -id "$vmid" -source "$TMP/payload.tar.gz" -script "$R
 echo "$output"
 grep -q INSULA_TEST_OK <<<"$output"
 echo "[integration] infinite loop with 5-second sleeps and shutdown escalation"
-output="$(insula vm exec -id "$vmid" -command "nohup sh -c 'while :; do sleep 5; done' >/tmp/insula-test-loop.log 2>&1 </dev/null & echo INSULA_LOOP_STARTED")"
-grep -q INSULA_LOOP_STARTED <<<"$output"
+insula vm import -id "$vmid" -source "$ROOT/scripts/tests/guest/loop.sh"
+output="$(insula vm exec -id "$vmid" -command "nohup bash loop.sh >/tmp/insula-test-loop.log 2>&1 </dev/null & echo INSULA_LOOP_LAUNCHED")"
+grep -q INSULA_LOOP_LAUNCHED <<<"$output"
+output="$(insula vm exec -id "$vmid" -command "test -s /tmp/insula-test-loop.log && grep -q INSULA_LOOP_STARTED /tmp/insula-test-loop.log && echo INSULA_LOOP_READY")"
+grep -q INSULA_LOOP_READY <<<"$output"
 insula vm stop -id "$vmid" -grace-timeout 30s -force-after-timeout=true
 insula vm status -id "$vmid" | grep -q 'status_libvirt=absent'
 echo "[integration] freeze a second VM into a named profile"
