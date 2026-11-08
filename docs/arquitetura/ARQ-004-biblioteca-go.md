@@ -8,6 +8,10 @@
 **Exemplo compilável:** [examples/go-library/main.go](../../examples/go-library/main.go).
 **CLI:** [main.go](../../main.go), que agora utiliza o mesmo motor da biblioteca.
 
+## Contrato-alvo canônico
+
+A correspondência obrigatória entre CLI e API Go e a semântica futura de seus oito métodos estão definidas em [CONTR-001](../interfaces/CONTR-001-operacoes-canonicas.md). O transporte transparente de stdin/stdout/stderr, sem prefixos ou mistura de eventos, está em [CONTR-002](../interfaces/CONTR-002-transporte-stdio.md). **Esta página descreve a API atualmente implementada**; assinaturas propostas na especificação canônica ainda não estão disponíveis, a menos que aqui apareçam como código efetivo. Operações legadas devem permanecer compatíveis durante a migração.
+
 ## Objetivo
 
 Permitir que outro módulo Go controle o InsulaVM **diretamente em processo**, sem `os/exec`, sockets UDS, HTTP ou um processo daemon. CLI e bibliotecas utilizam o mesmo mecanismo de configuração, perfil, VM, SSH e logs. Os arquivos `config.yaml`, `profile.yaml` e `insula.yaml` continuam disponíveis, mas o manifesto pode ser construído diretamente em memória no consumidor.
