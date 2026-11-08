@@ -34,6 +34,8 @@ O registro de perfil é necessário apenas se ele ainda não existir. Consulte [
 ./insula vm start -profile debian13-go-testes -memory-mib 4096 -vcpus 4
 ```
 
+Para instalar dependências administrativas durante a primeira inicialização, a API Go oferece `VMStartOptions.StartupScriptPath`: caminho absoluto de script confiável, incluído no Cloud-Init e executado como root antes de a VM ficar pronta. Veja [ARQ-004](docs/arquitetura/ARQ-004-biblioteca-go.md).
+
 O congelamento **encerra e remove a VM original** após consolidar seu overlay em um QCOW2 autônomo. Não execute `vm stop` antes de congelar, pois isso apaga o overlay temporário. Leia [FLUX-004](docs/fluxos/FLUX-004-congelar-vm.md).
 
 ## Deploy, execução e encerramento
