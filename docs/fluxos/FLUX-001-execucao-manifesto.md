@@ -85,14 +85,14 @@ O diagrama acima representa **sucesso**. Em caso de erro, timeout ou cancelament
 4. **Provisionar instância:** gerar automaticamente metadados Cloud-Init NoCloud para o convidado preparado, com UUIDv7, chaves SSH específicas e política sudo. Limpar identidades clonadas com método seguro conforme [ARQ-002](../arquitetura/ARQ-002-perfis-vm.md). Criar domínio Libvirt usando o disco overlay e iniciar pelo sistema já instalado, **sem boot pela ISO de instalação**.
 5. **Aguardar prontidão:** descobrir IP interno, validar host key SSH usando fonte confiável, conectar e aguardar a conclusão do bootstrap necessário com limite de tempo.
 6. **Preparar destino:** criar `guest.destination` da configuração global via SSH, como usuário comum; importar fontes `imports[].source` do hospedeiro via TAR.GZ se configuradas. Checkout Git remoto ainda é proposto. Repositórios privados não devem expor tokens em logs, ISO ou arquivos da VM.
-7. **Executar `setup`:** executar comandos sequenciais antes dos jobs; permissões, contexto do diretório e privilégios são decisões a registrar no futuro contrato.
+7. **Executar `setup`:** enviar os comandos sequencialmente via SSH como usuário não-root escolhido, no diretório `workspace` do manifesto ou `guest.destination` por padrão; não há elevação automática para root.
 8. **Executar pipelines:** uma sessão SSH por comando/job, com diretório contextualizado como `cd <guest.destination> && <comando>` (salvo `workspace` legado explicitamente definido); usar `StdoutPipe()` e `StderrPipe()` antes de `Start()`, leitores concorrentes com buffer ajustável, streaming de linhas prefixadas (`[run-tests]`) enquanto processo executa e `Wait()` para obter retorno. Proteger concatenação do caminho.
 9. **Consolidar resultado:** informar etapa/job, status do processo e causa da falha. Conteúdo em stderr isoladamente não caracteriza falha; não há ordem total garantida entre stdout e stderr.
 10. **Finalizar sempre:** fechar sessões/SSH, encerrar VM, remover domínio, disco overlay e ISO de bootstrap temporária; **nunca apagar nem alterar a imagem-base ou os metadados do perfil**. Reportar falhas de limpeza sem suprimir o erro principal.
 
 ## Resultados observáveis
 
-| Evento | Saída planejada |
+| Evento | Saída/resultado esperado da implementação |
 | --- | --- |
 | Início de uma etapa/job | Identificador e início da execução |
 | Linha em stdout | Linha emitida imediatamente com prefixo do job |
@@ -113,7 +113,7 @@ Métodos como `Output()` e `CombinedOutput()` não cumprem o requisito de stream
 
 ## Falhas e exceções
 
-| Situação | Ação planejada |
+| Situação | Tratamento |
 | --- | --- |
 | YAML inválido ou perfil inexistente | Rejeitar sem subir VM |
 | Perfil corrompido/versão indisponível ou host sem recursos | Bloquear provisionamento |
@@ -126,7 +126,7 @@ Métodos como `Output()` e `CombinedOutput()` não cumprem o requisito de stream
 | Timeout, saída extensa ou cancelamento | Interromper trabalho remoto, drenar ou encerrar leitores e limpar |
 | Falha na limpeza | Registrar erro secundário, sem alterar perfil original |
 
-## Critérios de aceite futuro
+## Critérios verificáveis e cobertura pendente
 
 - Instância é iniciada de perfil previamente salvo, sem iniciar instalador Debian.
 - A imagem-base não recebe escritas; múltiplas Actions podem trabalhar com overlays independentes segundo limites de recursos do hospedeiro.
