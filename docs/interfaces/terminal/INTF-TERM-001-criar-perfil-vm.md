@@ -22,6 +22,10 @@ insula vm profile create
 
 Nenhum nome de binário/subcomando, flag, código de saída ou parâmetro de configuração foi validado em código. A forma final será aprovada antes da implementação.
 
+## Fluxo já implementado para preservar VMs preparadas
+
+A criação interativa **a partir de ISO instaladora** descrita aqui permanece proposta. Para uma VM já iniciada a partir de perfil QCOW2, existe atualmente `insula vm freeze -id UUID -name PERFIL`. Sua interface e limitações estão em [INTF-TERM-004](INTF-TERM-004-gerenciar-vms.md), e a sequência em [FLUX-004](../../fluxos/FLUX-004-congelar-vm.md). Não confundir os dois fluxos.
+
 ## Perguntas ao usuário
 
 | Ordem | Entrada | Validação pretendida |
