@@ -3,7 +3,7 @@
 
 # ARQ-001 — Arquitetura do motor InsulaVM
 
-**Estado:** arquitetura integral proposta; executor SSH, parser YAML e persistência de logs implementados.
+**Estado:** motor de execução, perfis QCOW2, Libvirt, Cloud-Init, SQLite, importação, deploy, congelamento de perfil e gerenciamento de VMs implementados. **Propostos:** instalação interativa do SO a partir de ISO instaladora e checkout Git automático.
 **Escopo:** motor local em Go, hospedeiro Linux e VM convidada Debian.
 **Fluxos:** [FLUX-001 — Executar Action](../fluxos/FLUX-001-execucao-manifesto.md) e [FLUX-002 — Criar perfil](../fluxos/FLUX-002-criacao-perfil-vm.md).
 **Persistência das VMs:** [ARQ-002 — Perfis e overlays](ARQ-002-perfis-vm.md).
@@ -17,7 +17,7 @@
 
 O InsulaVM é uma ferramenta CLI open-source que permite preparar perfis persistentes de VM Debian e, depois, lê `insula.yaml` para executar `setup` e pipelines em instâncias descartáveis derivadas desses perfis. O hospedeiro controla virtualização, transferência do projeto, comunicação SSH, logs e encerramento; o convidado não recebe agente próprio do InsulaVM.
 
-A arquitetura completa continua **planejada**; os componentes básicos de execução SSH e logs agora têm implementação verificável. Na revisão inicial da branch `main` existiam apenas `README.md`, `.gitignore` e `LICENSE`.
+A CLI e a biblioteca Go compartilham o motor atual; alguns recursos futuros permanecem planejados. Consulte [ARQ-004 — Biblioteca Go](ARQ-004-biblioteca-go.md) e [FLUX-004 — Congelamento](../fluxos/FLUX-004-congelar-vm.md) para as operações de ciclo de vida já disponíveis.
 
 ## Contexto e componentes
 
@@ -35,7 +35,7 @@ flowchart LR
     CLI --> G
 ```
 
-| Componente planejado | Responsabilidade | Tecnologia |
+| Componente | Responsabilidade | Tecnologia |
 | --- | --- | --- |
 | CLI/orquestrador | Criar perfis interativamente, validar manifesto, coordenar etapas, cancelamento e resultado | Go |
 | Gerenciador de perfis | Salvar imagem-base QCOW2 imutável, metadados e overlays por Action | Libvirt/QEMU; [ARQ-002](ARQ-002-perfis-vm.md) |
@@ -68,7 +68,7 @@ flowchart LR
 ## Comunicação, execução e telemetria
 
 1. Gerar par de chaves SSH **no hospedeiro**, proteger a chave privada e injetar somente a pública via Cloud-Init; não transmitir senhas em logs.
-2. Validar a chave de identidade do **servidor SSH convidado** por material de confiança obtido por canal confiável. `InsecureIgnoreHostKey` não é aceitável para a implementação final. A estratégia de distribuição/verificação da chave do servidor ainda precisa ser definida.
+2. **Implementado:** gerar a chave SSH Ed25519 do servidor por instância, incluir a chave privada no seed protegido e gravar a pública confiável em `known_hosts` no hospedeiro antes da conexão. A validação não utiliza `InsecureIgnoreHostKey`; ver [ARQ-006](ARQ-006-identidade-registro-sudo.md).
 3. Criar sessão SSH para cada comando/job; montar o contexto do diretório da pipeline na raiz do checkout, por exemplo `cd <guest.destination> && <comando>`. Escapar o caminho de forma segura e não concatenar valores arbitrários sem validação.
 4. Configurar `StdoutPipe()` e `StderrPipe()` antes de `Start()`. Consumir os dois fluxos concorrentemente, linha a linha, com buffers dimensionados para linhas longas. Depois aguardar `Wait()` e registrar status de saída.
 5. Mostrar mensagens com prefixo identificador do job, como `[run-tests] Instalando pacotes...`. Preservar a ordem **dentro de cada fluxo**; a interleaving de stdout e stderr não garante ordem global. Incluir origem do fluxo no registro interno quando pertinente.
@@ -94,7 +94,7 @@ flowchart LR
 
 - Schema versionado do `insula.yaml`: referência/versão do perfil, origem do projeto, branch/commit, recursos, `setup`, pipelines, jobs, política de falhas e timeout.
 - Configurações globais do diretório de perfis, instalação de ISO, disco padrão e política de versões, conforme [ARQ-002](ARQ-002-perfis-vm.md).
-- Estratégia concreta de confiança na host key SSH, descoberta do IP e confirmação de término do Cloud-Init.
+- Validação de ponta a ponta em hipervisor real da identidade SSH por instância, DHCP e bootstrap Cloud-Init; a estratégia de pinagem de host key e o handshake SSH estão implementados.
 - Acesso a repositórios privados, inclusão de arquivos locais ignorados, submódulos e tratamento de segredos.
 - Elevação de privilégios e diretório padrão do `setup`; política de retenção da VM em falhas.
 - Destino persistente de logs/artifacts, ordem entre fluxos concorrentes e política de retomada de jobs.
