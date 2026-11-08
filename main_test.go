@@ -7,6 +7,20 @@ import (
  "testing"
 )
 
+func TestRunSubcommandRequired(t *testing.T) {
+ for _, args := range [][]string{nil, {"-config", "config.yaml"}, {"-manifest", "insula.yaml"}} {
+  err := run(args)
+  if err == nil || !strings.Contains(err.Error(), "usage: insula") {
+   t.Fatalf("expected explicit subcommand error for %v, got %v", args, err)
+  }
+ }
+ // Explicit run should be dispatched to manifest parsing instead of usage fallback.
+ err := run([]string{"run", "-config", "nonexistent.yaml", "-manifest", "nonexistent.yaml"})
+ if err == nil || strings.Contains(err.Error(), "usage: insula <") {
+  t.Fatalf("explicit run must remain available; got: %v", err)
+ }
+}
+
 func TestRedundantVMShowAliasRemoved(t *testing.T) {
  dir := t.TempDir()
  configFile := filepath.Join(dir, "config.yaml")
