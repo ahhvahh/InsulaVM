@@ -62,7 +62,14 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(*Instance,er
 // StartWithProgress creates the VM, reports stages, and checks actual Libvirt
 // state during boot. A VM is returned only after SSH (and sudo, if enabled)
 // is ready and the SQLite record was updated.
-func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,onProgress func(Progress))(instance *Instance,runErr error){
+func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,onProgress func(Progress))(*Instance,error){
+ return StartWithStartupScript(ctx,c,p,nil,onProgress)
+}
+
+// StartWithStartupScript configures the guest during its initial Cloud-Init
+// provisioning. It returns a ready VM only after the startup script succeeds.
+func StartWithStartupScript(ctx context.Context,c *config.Config,p *profile.Profile,
+ startupScript []byte,onProgress func(Progress))(instance *Instance,runErr error){
  var progressID string
  emit:=func(stage,message string){
   if onProgress==nil{return}
@@ -134,7 +141,7 @@ func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,o
  hostKeys,err:=identity.GenerateKey()
  if err!=nil{return nil,err}
  instance.SSHHostFingerprint=identity.Fingerprint(hostKeys.Public)
- seed,err:=cloudinit.Prepare(ctx,dir,id,instance.SSHUser,instance.SudoMode,clientKeys.PublicAuthorized,hostKeys)
+ seed,err:=cloudinit.PrepareWithStartupScript(ctx,dir,id,instance.SSHUser,instance.SudoMode,clientKeys.PublicAuthorized,hostKeys,startupScript)
  if err!=nil{return nil,err}
  emit("cloud-init","Chaves SSH e ISO NoCloud criadas; perfil de sudo: "+instance.SudoMode)
 
@@ -243,9 +250,45 @@ func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,o
  updateErr:=store.SetRunning(ctx,id,instance.IPAddress)
  _=store.Close()
  if updateErr!=nil{return nil,fmt.Errorf("persist started VM: %w",updateErr)}
+ if len(startupScript)>0{
+  emit("startup","Aguardando Cloud-Init concluir o script de instalacao da instancia")
+  if err:=waitStartupScript(ctx,instance);err!=nil{return nil,fmt.Errorf("VM startup script failed: %w",err)}
+  emit("startup-ok","Script de instalacao concluido; VM pronta para receber o pacote")
+ }
  emit("ready","VM pronta: SSH validado; IP "+instance.IPAddress)
  success=true
  return instance,nil
+}
+
+// Cloud-Init runs the startup script as root in the first-boot final phase.
+// Merely accepting SSH is not sufficient evidence that provisioning finished.
+// A per-instance success sentinel is emitted ONLY after the script succeeds.
+func waitStartupScript(ctx context.Context,instance *Instance)error{
+ readyCtx,cancel:=context.WithTimeout(ctx,20*time.Minute)
+ defer cancel()
+ client,err:=executor.Dial(executor.DialConfig{
+  Address:instance.Address,User:instance.SSHUser,
+  PrivateKeyPath:instance.SSHPrivateKeyPath,
+  KnownHostsPath:instance.SSHKnownHostsPath,Timeout:15*time.Second,
+ })
+ if err!=nil{return err}
+ defer client.Close()
+ session,err:=client.NewSession()
+ if err!=nil{return err}
+ defer session.Close()
+ done:=make(chan error,1)
+ go func(){
+  output,err:=session.CombinedOutput("cloud-init status --wait --long && test -f /var/lib/insula/startup-success")
+  if err!=nil{done<-fmt.Errorf("cloud-init initialization did not confirm success: %w: %s",err,strings.TrimSpace(string(output)));return}
+  done<-nil
+ }()
+ select{
+ case err:=<-done:return err
+ case <-readyCtx.Done():
+  _=client.Close()
+  <-done
+  return fmt.Errorf("cloud-init startup deadline exceeded: %w",readyCtx.Err())
+ }
 }
 
 func virsh(ctx context.Context,uri string,args ...string)([]byte,error){
