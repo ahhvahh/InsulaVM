@@ -22,7 +22,7 @@ O comando `profile register` aceita adicionalmente `-os`, `-iso` (metadado infor
 
 ## Operações de VM e automação
 
-A interface de **instâncias** tem referência própria em [INTF-TERM-004 — Gerenciar VMs](INTF-TERM-004-gerenciar-vms.md). Abrange `vm start` com `-memory-mib`/`-vcpus`, `vm stop-all [-dry-run]`, `vm freeze -id ... -name ...`, `vm list/status/show/shell/exec/import/stop`. O envio de pacote e script nativo está em [INTF-TERM-005 — Deploy](INTF-TERM-005-deploy-vm.md). Consulte também [FLUX-004 — Congelamento](../../fluxos/FLUX-004-congelar-vm.md) e [FLUX-005 — Deploy](../../fluxos/FLUX-005-deploy-arquivos.md).
+A interface de **instâncias** tem referência própria em [INTF-TERM-004 — Gerenciar VMs](INTF-TERM-004-gerenciar-vms.md). Abrange `vm start` com `-memory-mib`/`-vcpus`, `vm stop-all [-dry-run]`, `vm freeze -id ... -name ...`, `vm list/status/shell/exec/import/stop`. O envio de pacote e script nativo está em [INTF-TERM-005 — Deploy](INTF-TERM-005-deploy-vm.md). Consulte também [FLUX-004 — Congelamento](../../fluxos/FLUX-004-congelar-vm.md) e [FLUX-005 — Deploy](../../fluxos/FLUX-005-deploy-arquivos.md).
 
 ## Configuração mínima
 
