@@ -141,3 +141,17 @@ O `ExecuteScript` compartilha os mesmos streams e retorno de `ExecuteCommand`; a
 - [FLUX-002 — Instalação por ISO (proposta)](../fluxos/FLUX-002-criacao-perfil-vm.md)
 - [FLUX-004 — Freeze existente](../fluxos/FLUX-004-congelar-vm.md)
 - [ARQ-005 — Importação existente](../arquitetura/ARQ-005-importacao-arquivos.md)
+
+## Extensões de perfil, ISO Live e encerramento (código experimental)
+
+Este conjunto amplia os oito métodos de referência, preservando a compatibilidade legada. A execução real em KVM ainda não foi verificada.
+
+| Método | Entradas | Resultado | Condições |
+| --- | --- | --- | --- |
+| `CloneProfile` | nome origem e destino | perfil independente QCOW2 | não altera imagem original |
+| `ExportProfileLiveISO` | nome do perfil | caminho ISO Live | exige Debian com live-boot/initramfs e libguestfs/GRUB no host |
+| `StartVMFromISO` | perfil, ISO Live opcional, RAM, CPU, script administrativo opcional | UUID/IP/SSH e erro | não instala ISO netinst; exige Cloud-Init no Live |
+| `OpenConsole` | UUID, stdin, stdout e stderr | console Libvirt serial bloqueante | verifica propriedade no registro |
+| `StopVMWithOptions` | UUID, período de graça e force no timeout | `VMStopResult` (Graceful, Forced, TimedOut) | padrão 30 s; só força em deadline, não em erro Libvirt |
+
+A CLI expõe `profile clone`, `profile export-iso`, `vm start-iso`, `vm console` e `vm stop -grace-timeout/-force-after-timeout`. A biblioteca preserva `StopVM` legado (destruição imediata) para compatibilidade; **a CLI `vm stop` usa a nova política graciosa**. Não confundir `StartVMFromISO` (Live pronta) com `CreateProfileFromISO` (instaladora Debian ainda pendente). Consulte [INTF-TERM-006](terminal/INTF-TERM-006-iso-live.md) e [FLUX-006](../fluxos/FLUX-006-teste-integral-iso-vm.md).

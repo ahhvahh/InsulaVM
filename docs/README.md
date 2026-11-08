@@ -3,9 +3,11 @@
 
 # Documentação — InsulaVM
 
-**Estado geral:** configuração, perfis QCOW2, criação de VMs transitórias, Cloud-Init NoCloud, SQLite, importação, deploy, congelamento de VM e execução SSH com logs estão implementados. Instalação a partir de ISO instaladora, exportação de ISO Live e checkout Git automático continuam não implementados.
+**Estado geral:** configuração, perfis QCOW2, criação de VMs transitórias, Cloud-Init NoCloud, SQLite, importação, deploy, congelamento de VM e execução SSH com logs estão implementados. Instalação automática a partir de ISO instaladora e checkout Git automático continuam não implementados. A branch de trabalho acrescenta operações de ISO Live e testes integrais, ainda sem validação em KVM real.
 
 O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perfil selecionado em `insula.yaml`, pode importar arquivos/pastas locais em TAR.GZ antes dos jobs, inicia uma VM descartável usando overlay QCOW2 ou usa uma VM SSH existente, e grava logs por job. A CLI e outros projetos Go podem usar o mesmo motor através do pacote importável `insulavm`. O Linux deve estar instalado em uma imagem com Cloud-Init; a ISO NoCloud de configuração já é gerada, mas a instalação do sistema a partir de ISO instaladora permanece pendente. O InsulaVM registra as VMs em SQLite.
+
+**Novos fluxos e testes:** [FLUX-006 — Testes integrais VM/ISO Live](fluxos/FLUX-006-teste-integral-iso-vm.md), [GUIA-003 — Testes](guias/GUIA-003-testes.md), [INTF-TERM-006 — ISO Live](interfaces/terminal/INTF-TERM-006-iso-live.md).
 
 ## Mapa de leitura
 

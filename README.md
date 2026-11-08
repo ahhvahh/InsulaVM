@@ -4,7 +4,7 @@ Ferramenta em **Go** para criar e gerenciar VMs Linux descartáveis com **QEMU/K
 
 **Implementado:** perfis QCOW2 reutilizáveis, identidade por VM com Cloud-Init NoCloud, registro SQLite, criação e encerramento de instâncias, importação, deploy, execução de pipelines, congelamento de uma VM preparada em novo perfil nomeado e encerramento em lote de VMs gerenciadas.
 
-**Ainda não implementado:** instalar Linux automaticamente a partir de ISO instaladora, exportar ISO Live e checkout automático de repositórios Git. A imagem-base QCOW2 deve ter um sistema Linux previamente instalado e preparado com Cloud-Init, SSH, rede DHCP e, para congelamento, sudo sem senha.
+**Ainda não implementado:** instalar Linux automaticamente a partir de ISO instaladora e checkout automático de repositórios Git. **Novo, sem validação KVM real:** clonagem independente de perfis, exportação de ISO Live Debian com live-boot, boot da ISO Live e desligamento gracioso com escalada. A imagem-base QCOW2 deve ter um sistema Linux previamente instalado e preparado com Cloud-Init, SSH, rede DHCP e, para congelamento, sudo sem senha.
 
 ## Contrato canônico CLI / biblioteca Go
 
@@ -66,6 +66,12 @@ O congelamento **encerra e remove a VM original** após consolidar seu overlay e
 - [Índice completo da documentação](docs/README.md).
 
 A API ainda é experimental, sem compromisso de compatibilidade de versão estável. O projeto utiliza a convenção [A-Bioma Doc Standard](docs/README.md) para organizar a documentação, sem alegar certificação formal.
+
+## ISO Live e testes de integração
+
+Para preparar uma ISO Live, instalar `live-boot` e reconstruir o initramfs **dentro da VM antes de `freeze`**. Depois executar `insula profile export-iso -name PERFIL` e `insula vm start-iso -profile PERFIL`. ISO Debian netinst comum **não** é suportada por `start-iso`; consulte [INTF-TERM-006](docs/interfaces/terminal/INTF-TERM-006-iso-live.md).
+
+O teste unitário está em `bash scripts/tests/unit.sh`. O integral real (VMs, scripts, loop infinito, timeout, clone, freeze e ISO Live) está em [GUIA-003](docs/guias/GUIA-003-testes.md). **Não executado no hipervisor aqui.**
 
 ## Testes
 

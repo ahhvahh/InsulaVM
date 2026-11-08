@@ -177,3 +177,9 @@ O método `DeployToVM` aceita nativamente `.tar.gz` com `Extract:true`, executan
 - Módulos: https://go.dev/doc/modules/developing
 - Layout de módulos: https://go.dev/doc/modules/layout
 - Uso de `context.Context`: https://pkg.go.dev/context
+
+## Extensões de ISO e perfis (experimentais)
+
+O pacote expõe `CloneProfile(ctx, origem, destino)`, `ExportProfileLiveISO(ctx, nome)`, `StartVMFromISO(ctx, LiveISOStartOptions)`, `OpenConsole(ctx, id, stdin, stdout, stderr)` e `StopVMWithOptions(ctx, VMStopOptions)`. Consulte [CONTR-001](../interfaces/CONTR-001-operacoes-canonicas.md) para as pré-condições e [FLUX-006](../fluxos/FLUX-006-teste-integral-iso-vm.md) para o teste integral.
+
+**Limite:** `ExportProfileLiveISO` cria ISO Live somente de guest Debian previamente preparado com `live-boot`, não transforma arbitrariamente ISO netinst em ambiente instalado. `StartVMFromISO` espera guest com Cloud-Init/SSH. Testes em KVM real ainda pendentes.

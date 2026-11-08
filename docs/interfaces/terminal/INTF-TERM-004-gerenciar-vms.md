@@ -80,3 +80,9 @@ A execução percorre **somente** os UUIDs do banco SQLite associado ao `config.
 | `stop-all` | Registros SQLite + estados Libvirt | Quantidade verificada, encerrada, ignorada e falhas |
 
 **Limite de validação:** exemplos são correspondentes ao parser Go; a execução completa em hipervisor KVM real ainda não está comprovada nesta revisão.
+
+## Desligamento com timeout (novo)
+
+A CLI `insula vm stop -id UUID -grace-timeout 30s -force-after-timeout=true` tenta `virsh shutdown` e espera até 30 segundos; apenas ao expirar o prazo usa destruição imediata e limpa o overlay. `-force-after-timeout=false` mantém a VM quando o prazo expira. Falhas de Libvirt diferentes de timeout não autorizam forçar. A biblioteca legada `StopVM` permanece com destruição imediata; usar `StopVMWithOptions` para a nova política. Consulte [INTF-TERM-006](INTF-TERM-006-iso-live.md) e [FLUX-006](../../fluxos/FLUX-006-teste-integral-iso-vm.md).
+
+**Estado:** código novo não validado em hipervisor real.

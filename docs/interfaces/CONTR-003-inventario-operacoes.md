@@ -80,3 +80,15 @@ Além destes, `insula help`, `insula -h` e `insula --help` exibem a ajuda. O ata
 - Verificar que nenhum guia público sugere `vm show`.
 - Validar que `vm shell`, `vm exec`, `vm import`, `vm deploy` e `run` seguem distintos e não foram removidos.
 - Executar `go test ./...` para verificar regressões; execução real KVM/Libvirt requer host apropriado.
+
+## Extensões experimentais adicionadas
+
+| Ação | CLI | Go | Evidência |
+| --- | --- | --- | --- |
+| Clonar perfil por nome | `profile clone` | `CloneProfile` | `insulavm/profile_clone.go` |
+| Exportar Debian Live | `profile export-iso` | `ExportProfileLiveISO` | `insulavm/export_iso.go` |
+| Iniciar guest por ISO Live | `vm start-iso` | `StartVMFromISO` | `insulavm/live_iso.go`, `pkg/vm/live_iso.go` |
+| Console serial | `vm console` | `OpenConsole` | `insulavm/console.go` |
+| Shutdown 30 s e força após timeout | `vm stop` | `StopVMWithOptions` | `insulavm/stop_policy.go` |
+
+Implementação no código da branch de trabalho; **compilação e teste real KVM ainda não comprovados**. Instalador ISO netinst permanece pendente. [Fluxo de testes integrais](../fluxos/FLUX-006-teste-integral-iso-vm.md).

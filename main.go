@@ -54,6 +54,8 @@ func run(args []string) error {
 			fmt.Println("       insula profile list -config config.yaml")
 			fmt.Println("       insula profile show -config config.yaml -name debian-go")
 			fmt.Println("       insula profile register -config config.yaml -name debian-go -image installed.qcow2 -memory-mib 1024 -vcpus 1 -disk-gb 8")
+			fmt.Println("       insula profile clone -source debian-go -name debian-go-copy")
+			fmt.Println("       insula profile export-iso -name debian-go")
 			return nil
 		}
 	}
@@ -84,12 +86,13 @@ func configCommand(args []string) error {
 
 func profileCommand(args []string) error {
 	if len(args) == 0 {
-		return errors.New("expected profile list, show or register")
+		return errors.New("expected profile list, show, register, clone or export-iso")
 	}
 	cmd := args[0]
 	fs := flag.NewFlagSet("profile "+cmd, flag.ContinueOnError)
 	cfgPath := fs.String("config", "config.yaml", "global config")
 	name := fs.String("name", "", "profile name")
+	sourceProfile := fs.String("source", "", "source profile name for cloning")
 	image := fs.String("image", "", "fully installed QCOW2 source path")
 	memory := fs.Int("memory-mib", 0, "guest RAM (MiB)")
 	cpus := fs.Int("vcpus", 0, "guest vCPUs")
@@ -145,8 +148,18 @@ func profileCommand(args []string) error {
 		}
 		c := engine.Configuration()
 		fmt.Printf("Profile registered: %s\n", localPathForCLI(filepath.Join(c.Storage.Profiles, p.Name, "profile.yaml")))
+	case "clone":
+		if *sourceProfile == "" || *name == "" { return errors.New("profile clone requires -source and -name") }
+		p, err := engine.CloneProfile(context.Background(),*sourceProfile,*name)
+		if err != nil { return err }
+		fmt.Printf("PROFILE CLONE OK: source=%s name=%s\n",*sourceProfile,p.Name)
+	case "export-iso":
+		if *name == "" { return errors.New("profile export-iso requires -name") }
+		path, err := engine.ExportProfileLiveISO(context.Background(),*name)
+		if err != nil { return err }
+		fmt.Printf("LIVE ISO OK: %s\n",localPathForCLI(path))
 	default:
-		return errors.New("expected profile list, show or register")
+		return errors.New("expected profile list, show, register, clone or export-iso")
 	}
 	return nil
 }
