@@ -44,11 +44,15 @@ Usar `@main` traz a revisão da branch na resolução inicial; a versão efetiva
 | Listar perfis | `Engine.ListProfiles()` | Nomes dos perfis válidos |
 | Obter perfil | `Engine.GetProfile(name)` | Metadados de configuração sem executar VM |
 | Registrar perfil | `Engine.RegisterProfile(profile, sourceQCOW2)` | Cópia imagem QCOW2 existente, sem instalar SO |
-| Iniciar VM | `Engine.StartVM(ctx, profileName)` | Cria overlay, inicia VM e retorna instância para cleanup explícito |
+| Iniciar VM | `Engine.StartVM(ctx, profileName)` / `StartVMWithProgress` | Inicia instância do perfil e informa progresso opcional; encerramento explícito |
+| Iniciar com recursos específicos | `Engine.StartVMWithOptions(ctx, VMStartOptions, callback)` | Reutiliza um perfil com RAM/vCPUs por instância, política opcional de limpeza no cancelamento |
 | Executar Action | `Engine.Run(ctx, RunRequest)` | Perfil/host, imports locais, SSH, setup, jobs, logs e cleanup |
 | Importar arquivos | `Engine.ImportPath(ctx, ImportRequest)` | Compactar arquivo/pasta, enviar SSH, extrair na VM e acompanhar o progresso |
 | Importar por UUID | `Engine.ImportToVM(ctx, VMImportRequest)` | Resolve automaticamente IP, porta e credenciais SSH do registro SQLite |
-| Gerenciar VMs | `Engine.StartVM/GetVM/ListVMs/StopVM` | SQLite UUIDv7, MAC, IP e credenciais SSH da instância |
+| Gerenciar VMs | `Engine.GetVM/ListVMs/GetVMStatus/ListVMStatus/StopVM` | SQLite UUIDv7 + estado real no Libvirt; encerra por ID |
+| Encerrar em lote | `Engine.StopAllVMs(ctx, VMStopAllOptions)` | Trata somente VMs registradas, com `DryRun`, retorno parcial e erros agregados |
+| Deploy de arquivo+script | `Engine.DeployToVM(ctx, VMDeployRequest)` | Transfere arquivo e script, extrai opcionalmente, executa Bash e devolve progresso parcial |
+| Congelar VM preparada | `Engine.FreezeVM(ctx, VMFreezeRequest)` | Publica um novo perfil QCOW2 autônomo com nome exclusivo, após desligar VM de origem |
 | Executar por ID | `Engine.ExecVM(ctx, ExecRequest)` | Comando como usuário comum ou elevação explícita por `sudo -n` |
 
 O `RunRequest` também oferece `OnImportProgress func(ImportProgress)` para informar estágios de transferência. O resultado `RunResult.Imports` contém as importações concluídas. Mais detalhes em [ARQ-005](ARQ-005-importacao-arquivos.md).
@@ -58,6 +62,26 @@ O `RunRequest` oferece `ManifestPath` **ou** `Manifest *insulavm.Manifest` (excl
 O `RunResult` retorna `SSHUser`, `Profile`, `Host`, `VMID`, `VMName`, `LogDirectory`, `CompletedJobs`, `StartedAt` e `FinishedAt`. Em caso de erro depois de iniciar a execução, `Run` devolve, quando disponível, **resultado parcial e erro**. O erro de cleanup não substitui o original.
 
 `Run` é **bloqueante** até a conclusão dos jobs. O orquestrador pode chamá-lo em goroutine se desejar concorrência e controlar cancelamento/timeouts com `context.Context`. Não há fila, banco de estados ou `GetStatus` dentro da biblioteca neste ciclo. Para streaming, o consumidor fornece um `io.Writer`; o motor continua salvando os logs físicos. O consumidor deve sincronizar um writer compartilhado por execuções concorrentes.
+
+## Contratos de ciclo de vida acrescentados
+
+### `StartVMWithOptions`
+
+`VMStartOptions` contém `Profile` (nome registrado), `MemoryMiB` e `VCPUs` (zero mantém o padrão do perfil), `StopOnContextDone` e `OnStopError`. A função devolve `*vm.Instance` (inclui `ID`, `Name`, `IPAddress`, credenciais SSH) e `error`. Sem `StopOnContextDone`, a VM permanece ativa até `StopVM`/`Cleanup`. Quando habilitada, a limpeza ao cancelar o contexto é **assíncrona e de melhor esforço**; use `StopVM` para aguardar a operação e observar erros.
+
+### `StopAllVMs`
+
+`VMStopAllOptions` aceita `DryRun` e `OnProgress`; `VMStopAllResult` oferece `Checked`, `Targets`, `Stopped`, `Skipped` e `Failed`. Em falhas pontuais retorna um resultado parcial e erro agregado. A implementação consulta somente instâncias cadastradas no SQLite deste motor e confere o Libvirt; não encerra domínios externos. Veja [PERS-001](../persistencia/PERS-001-registro-instancias.md).
+
+### `DeployToVM`
+
+`VMDeployRequest` contém `VMID`, `SourcePath`, `ScriptPath`, `Extract`, `Sudo`, `Output` e `CommandTimeout`. `VMDeployResult` registra as etapas de importação e execução, arquivo, script, destino e caminho de logs. `error == nil` indica sucesso completo; em falha, etapas concluídas podem permanecer no resultado. Veja [FLUX-005](../fluxos/FLUX-005-deploy-arquivos.md).
+
+### `FreezeVM`
+
+`VMFreezeRequest` contém `VMID`, `Name`, `ShutdownTimeout` e `OnProgress`. `VMFreezeResult` devolve `VMID`, `ProfileName`, `ImagePath`, `SourceStopped` e `SourceCleaned`; é possível receber resultado **parcial e erro**, inclusive após a imagem já ter sido publicada. O processo exige sudo sem senha e gera **QCOW2**, não ISO. Veja [FLUX-004](../fluxos/FLUX-004-congelar-vm.md).
+
+As operações acima são síncronas, exceto a política `StopOnContextDone` que dispara cleanup em goroutine. API ainda experimental e sem contrato de compatibilidade estável.
 
 ## Exemplo: outro projeto Go
 
