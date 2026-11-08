@@ -45,7 +45,7 @@ Usar `@main` traz a revisão da branch na resolução inicial; a versão efetiva
 | Obter perfil | `Engine.GetProfile(name)` | Metadados de configuração sem executar VM |
 | Registrar perfil | `Engine.RegisterProfile(profile, sourceQCOW2)` | Cópia imagem QCOW2 existente, sem instalar SO |
 | Iniciar VM | `Engine.StartVM(ctx, profileName)` / `StartVMWithProgress` | Inicia instância do perfil e informa progresso opcional; encerramento explícito |
-| Iniciar com recursos específicos | `Engine.StartVMWithOptions(ctx, VMStartOptions, callback)` | Reutiliza um perfil com RAM/vCPUs por instância, política opcional de limpeza no cancelamento |
+| Iniciar com recursos específicos e script de bootstrap | `Engine.StartVMWithOptions(ctx, VMStartOptions, callback)` | Reutiliza perfil, ajusta RAM/vCPUs, inclui `StartupScriptPath` opcional para instalação administrativa no Cloud-Init de primeiro boot, e controla limpeza no cancelamento |
 | Executar Action | `Engine.Run(ctx, RunRequest)` | Perfil/host, imports locais, SSH, setup, jobs, logs e cleanup |
 | Importar arquivos | `Engine.ImportPath(ctx, ImportRequest)` | Compactar arquivo/pasta, enviar SSH, extrair na VM e acompanhar o progresso |
 | Importar por UUID | `Engine.ImportToVM(ctx, VMImportRequest)` | Resolve automaticamente IP, porta e credenciais SSH do registro SQLite |
@@ -67,7 +67,7 @@ O `RunResult` retorna `SSHUser`, `Profile`, `Host`, `VMID`, `VMName`, `LogDirect
 
 ### `StartVMWithOptions`
 
-`VMStartOptions` contém `Profile` (nome registrado), `MemoryMiB` e `VCPUs` (zero mantém o padrão do perfil), `StopOnContextDone` e `OnStopError`. A função devolve `*vm.Instance` (inclui `ID`, `Name`, `IPAddress`, credenciais SSH) e `error`. Sem `StopOnContextDone`, a VM permanece ativa até `StopVM`/`Cleanup`. Quando habilitada, a limpeza ao cancelar o contexto é **assíncrona e de melhor esforço**; use `StopVM` para aguardar a operação e observar erros.
+`VMStartOptions` contém `Profile` (nome registrado), `MemoryMiB` e `VCPUs` (zero mantém o padrão do perfil), `StartupScriptPath` (script administrativo confiável, opcional), `StopOnContextDone` e `OnStopError`. A função devolve `*vm.Instance` (inclui `ID`, `Name`, `IPAddress`, credenciais SSH) e `error`. Sem `StopOnContextDone`, a VM permanece ativa até `StopVM`/`Cleanup`. Quando habilitada, a limpeza ao cancelar o contexto é **assíncrona e de melhor esforço**; use `StopVM` para aguardar a operação e observar erros.
 
 ### `StopAllVMs`
 
@@ -134,6 +134,30 @@ flowchart TD
 ```
 
 O pacote `insulavm` é o ponto de entrada recomendado. Os pacotes em `pkg/` continuam acessíveis, mas não devem ser tratados como uma superfície pública estável até o versionamento e a revisão de compatibilidade.
+
+## Script de instalação enviado na criação da VM
+
+O campo `VMStartOptions.StartupScriptPath` recebe o **caminho absoluto de um script administrativo no host**. O InsulaVM valida que seja um arquivo regular, não symlink, com 1 a 256 KiB e sem bytes NUL, e incorpora o conteúdo no **Cloud-Init NoCloud da instância**.
+
+```go
+engine, err := insulavm.New("/etc/insulavm/config.yaml")
+if err != nil { return err }
+guest, err := engine.StartVMWithOptions(ctx, insulavm.VMStartOptions{
+    Profile: "ci-go",
+    StartupScriptPath: "/etc/gitmaster/bootstrap/ci-go.sh",
+}, func(event insulavm.VMProgress) {
+    fmt.Println(event.Stage, event.Message)
+})
+if err != nil { return err }
+defer engine.StopVM(context.Background(), guest.ID)
+// Apenas agora transfira o TAR.GZ por DeployToVM e inicie ExecVM.
+```
+
+O script roda **como root durante o primeiro boot** e configura pacotes, ferramentas e ambiente do guest. A chamada espera `cloud-init status --wait --long` e o arquivo de confirmação criado apenas após a execução bem-sucedida. Se falhar ou exceder o prazo, o InsulaVM devolve erro e tenta limpar a VM. As credenciais de SSH do guest permanecem gerenciadas pelo InsulaVM.
+
+**Segurança:** somente scripts confiáveis definidos pelo administrador devem ser fornecidos. Nunca utilizar como `StartupScriptPath` arquivos vindos de um repositório, manifesto de testes ou `git archive`. A configuração `profile.yaml` **não** armazena o script: o chamador passa o caminho ao criar cada VM, permitindo reutilizar o mesmo perfil para inicializações distintas. É possível omitir o campo quando o QCOW2 já está pronto.
+
+O método `DeployToVM` aceita nativamente `.tar.gz` com `Extract:true`, executando `tar -xzf` dentro do guest. Scripts administrativos de instalação pertencem a `StartVMWithOptions`; scripts de pós-transferência podem continuar em `DeployToVM` e steps isolados em `ExecVM`.
 
 ## Limites atuais e condições de operação
 
