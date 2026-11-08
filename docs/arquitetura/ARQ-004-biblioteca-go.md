@@ -10,7 +10,7 @@
 
 ## Contrato-alvo canônico
 
-A correspondência obrigatória entre CLI e API Go e a semântica futura de seus oito métodos estão definidas em [CONTR-001](../interfaces/CONTR-001-operacoes-canonicas.md). O transporte transparente de stdin/stdout/stderr, sem prefixos ou mistura de eventos, está em [CONTR-002](../interfaces/CONTR-002-transporte-stdio.md). **Esta página descreve a API atualmente implementada**; assinaturas propostas na especificação canônica ainda não estão disponíveis, a menos que aqui apareçam como código efetivo. Operações legadas devem permanecer compatíveis durante a migração.
+A correspondência obrigatória entre CLI e API Go e a semântica futura de seus oito métodos estão definidas em [CONTR-001](../contratos/CONTR-001-operacoes-canonicas.md). O transporte transparente de stdin/stdout/stderr, sem prefixos ou mistura de eventos, está em [CONTR-002](../contratos/CONTR-002-transporte-stdio.md). **Esta página descreve a API atualmente implementada**; assinaturas propostas na especificação canônica ainda não estão disponíveis, a menos que aqui apareçam como código efetivo. Operações legadas devem permanecer compatíveis durante a migração.
 
 ## Objetivo
 

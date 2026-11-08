@@ -9,7 +9,7 @@
 
 ## Correspondência com contratos canônicos
 
-Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatura de referência de operações e a exigência de paridade entre CLI e biblioteca constam em [CONTR-001](../CONTR-001-operacoes-canonicas.md). Os futuros `vm command` e `vm run-script` devem obedecer a [CONTR-002](../CONTR-002-transporte-stdio.md), sem alterar silenciosamente os formatos legados de `vm exec`/`vm deploy`.
+Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatura de referência de operações e a exigência de paridade entre CLI e biblioteca constam em [CONTR-001](../../contratos/CONTR-001-operacoes-canonicas.md). Os futuros `vm command` e `vm run-script` devem obedecer a [CONTR-002](../../contratos/CONTR-002-transporte-stdio.md), sem alterar silenciosamente os formatos legados de `vm exec`/`vm deploy`.
 
 ## Comandos e parâmetros
 

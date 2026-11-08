@@ -8,7 +8,7 @@ Ferramenta em **Go** para criar e gerenciar VMs Linux descartáveis com **QEMU/K
 
 ## Contrato canônico CLI / biblioteca Go
 
-O padrão de integração para **ambas** as interfaces está em [CONTR-001 — Operações canônicas](docs/interfaces/CONTR-001-operacoes-canonicas.md) e [CONTR-002 — Transporte STDIO](docs/interfaces/CONTR-002-transporte-stdio.md). Os oito métodos de referência são `CreateProfileFromISO`, `CreateVM`, `UploadArchive`, `ExecuteScript`, `ExecuteCommand`, `StopVM`, `StopAllVMs` e `FreezeVM`.
+O padrão de integração para **ambas** as interfaces está em [CONTR-001 — Operações canônicas](docs/contratos/CONTR-001-operacoes-canonicas.md) e [CONTR-002 — Transporte STDIO](docs/contratos/CONTR-002-transporte-stdio.md). Os oito métodos de referência são `CreateProfileFromISO`, `CreateVM`, `UploadArchive`, `ExecuteScript`, `ExecuteCommand`, `StopVM`, `StopAllVMs` e `FreezeVM`.
 
 **Atenção:** esta padronização define a API-alvo. O pacote atual implementa apenas parte dela; consulte a matriz de situação nos contratos antes de integrar. Métodos legados da CLI e biblioteca permanecem documentados como implementados. Nenhum método inexistente deve ser considerado disponível apenas por constar na especificação.
 

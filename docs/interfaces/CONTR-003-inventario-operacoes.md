@@ -1,5 +1,7 @@
-<!-- A-BIOMA-DOC-STANDARD -->
-<!-- A-BIOMA-DOC-REVISADO -->
+<!-- A-BIOMA-DOC-OBSOLETO -->
+<!-- A-BIOMA-DOC-MIGRADO -->
+
+> **Conteúdo lido e migrado para:** [REF-001-inventario-operacoes.md](../referencia/REF-001-inventario-operacoes.md). Este arquivo é mantido para rastreabilidade histórica; use o destino como fonte canônica.
 
 # CONTR-003 — Inventário de operações e redução de redundâncias
 

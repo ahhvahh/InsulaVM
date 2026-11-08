@@ -1,5 +1,7 @@
-<!-- A-BIOMA-DOC-STANDARD -->
-<!-- A-BIOMA-DOC-REVISADO -->
+<!-- A-BIOMA-DOC-OBSOLETO -->
+<!-- A-BIOMA-DOC-MIGRADO -->
+
+> **Conteúdo lido e migrado para:** [CONTR-001-operacoes-canonicas.md](../contratos/CONTR-001-operacoes-canonicas.md). Este arquivo é mantido para rastreabilidade histórica; use o destino como fonte canônica.
 
 # CONTR-001 — Contrato canônico de operações InsulaVM (CLI e biblioteca Go)
 
