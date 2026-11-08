@@ -60,6 +60,8 @@ Além destes, `insula help`, `insula -h` e `insula --help` exibem a ajuda. O ata
 | `insula import` versus `vm import` | **não redundante**: host externo versus UUID gerenciado | preservar até existir contrato separado de host externo |
 | `insula run` versus `vm exec` | **não redundante**: pipeline/manifesto e VM transitória versus comando numa VM existente | preservar |
 | `vm list` versus `vm status` | **não redundante**: coleção versus detalhe de um UUID | preservar |
+| `GetVM` versus `GetVMStatus` | **não redundante**: somente registro persistido versus registro + consulta ao estado Libvirt | preservar; documentar distinção |
+| `ListVMs` versus `ListVMStatus` | **não redundante**: históricos SQLite versus históricos + estado Libvirt | preservar; documentar distinção |
 | `profile show` versus `vm status` | **não redundante**: perfil de imagem versus instância | preservar |
 | `vm stop` versus `vm stop-all` | **não redundante**: alvo único versus conjunto | preservar |
 
