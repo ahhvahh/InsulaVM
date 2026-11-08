@@ -59,7 +59,7 @@ Se a Action for executada numa VM SSH **externa**, não gerenciada pelo InsulaVM
 
 A CLI e as aplicações Go importadoras usam a mesma configuração `config.yaml`. O caminho-padrão de banco é `<storage.root>/insula.db`, ajustável com `storage.database`.
 
-Tabela `vm_instances`: `id`, `libvirt_uuid`, `name`, `profile`, `ip`, `mac`, `host_fingerprint`, `ssh_user`, `ssh_port`, `sudo_mode`, `private_key_path`, `known_hosts_path`, `instance_dir`, `status`, `created_at`, `updated_at`, `finished_at`.
+A tabela `vm_instances` mantém UUIDs, perfil, identidade e endereços SSH, caminhos dos temporários, estados e datas. Os **campos e tipos canônicos** estão em [PERS-001 — Registro SQLite](../persistencia/PERS-001-registro-instancias.md), derivados de [`pkg/registry/sqlite.go`](../../pkg/registry/sqlite.go).
 
 Estados persistidos: `creating`, `running`, `failed`, `destroyed`. Porta SSH padrão: `22`, também registrada para suportar destinos com porta diferente. Banco WAL e timeout de espera; histórico permanece após limpeza dos discos e chaves. A chave privada **não é armazenada no SQLite**. Cada instância mantém os dados sensíveis em um diretório próprio e restrito dentro de `storage.runs`.
 
@@ -146,6 +146,11 @@ return engine.StopVM(ctx, instance.ID)
 ```
 
 `Engine.Run` também utiliza o mesmo bootstrap de credenciais quando cria uma VM descartável. O modo `Host` que conecta a uma VM existente continua exigindo credenciais SSH configuradas previamente.
+
+## Encerramento em lote e congelamento
+
+- `StopAllVMs` e `vm stop-all [-dry-run]` consultam **apenas registros gerenciados** e verificam o estado de cada domínio no Libvirt antes da limpeza. Não devem atingir VMs externas. Ver [INTF-TERM-004](../interfaces/terminal/INTF-TERM-004-gerenciar-vms.md) e [PERS-001](../persistencia/PERS-001-registro-instancias.md).
+- `FreezeVM`, via `vm freeze -id ... -name ...`, limpa cache de Cloud-Init e chaves SSH do convidado, aguarda seu desligamento e registra uma imagem QCOW2 reutilizável. Ver [FLUX-004](../fluxos/FLUX-004-congelar-vm.md). A remoção da chave de identidade SSH **não cobre tokens ou dados de aplicações**.
 
 ## Requisitos de host
 
