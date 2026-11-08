@@ -2,6 +2,7 @@ package cloudinit
 
 import (
  "context"
+ "encoding/base64"
  "os"
  "path/filepath"
  "strings"
@@ -60,4 +61,29 @@ func TestDisabledSudoAndRejectRoot(t *testing.T){
  if !strings.Contains(string(data),"sudo: false"){t.Fatal("sudo was not disabled")}
  if _,err:=Prepare(context.Background(),t.TempDir(),id,"root","passwordless",client.PublicAuthorized,host);err==nil{t.Fatal("root SSH account accepted")}
  if _,err:=Prepare(context.Background(),t.TempDir(),id,"!bad","passwordless",client.PublicAuthorized,host);err==nil{t.Fatal("invalid username accepted")}
+}
+
+func TestCloudInitEmbedsFirstBootInstallationScript(t *testing.T){
+ fakeISOBuilder(t)
+ client,err:=identity.GenerateKey();if err!=nil{t.Fatal(err)}
+ host,err:=identity.GenerateKey();if err!=nil{t.Fatal(err)}
+ id,err:=identity.UUIDv7();if err!=nil{t.Fatal(err)}
+ install:=[]byte("#!/bin/bash\nset -euo pipefail\necho 'setup: ready'\n")
+ seed,err:=PrepareWithStartupScript(context.Background(),t.TempDir(),id,
+  "insula","disabled",client.PublicAuthorized,host,install)
+ if err!=nil{t.Fatal(err)}
+ raw,err:=os.ReadFile(seed.UserData);if err!=nil{t.Fatal(err)}
+ text:=string(raw)
+ for _,need:=range []string{
+  "write_files:","/var/lib/insula/startup.sh","encoding: b64",
+  base64.StdEncoding.EncodeToString(install),
+  "runcmd:","/var/lib/insula/startup-success",
+ }{
+  if !strings.Contains(text,need){t.Fatalf("missing %q in first-boot Cloud-Init",need)}
+ }
+ if strings.Contains(text,"setup: ready"){t.Fatal("startup shell was not encoded in cloud-init")}
+ if _,err:=PrepareWithStartupScript(context.Background(),t.TempDir(),id,
+  "insula","disabled",client.PublicAuthorized,host,[]byte{0});err==nil{
+  t.Fatal("accepted NUL startup payload")
+ }
 }
