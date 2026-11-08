@@ -147,6 +147,23 @@ if [[ "$LIVE_TEST" == 1 ]]; then
   grep -q INSULA_TEST_OK <<<"$output"
   insula vm stop -id "$isoid" -grace-timeout 30s -force-after-timeout=true
 fi
+if [[ "$LIVE_TEST" == 1 ]]; then
+  echo "[integration] export a Live ISO directly from a managed VM via the CLI"
+  output="$(insula vm start -profile "$base")"
+  directid="$(extract_id "$output")"
+  VM_IDS="$VM_IDS $directid"
+  output="$(insula vm export-iso -id "$directid" -name "${tag}-direct-live" -prepare-live-boot -command-timeout 30m)"
+  echo "$output"
+  grep -q "VM ISO OK" <<<"$output"
+  direct_iso="$(printf '%s\n' "$output" | sed -nE 's/^VM ISO OK: profile=[^ ]+ iso=(.*) source=[0-9a-f-]{36}$/\1/p')"
+  [[ -s "$direct_iso" ]] || { echo "[integration] vm export-iso did not create a file" >&2; exit 1; }
+  output="$(insula vm start-iso -profile "${tag}-direct-live" -iso "$direct_iso")"
+  directisoid="$(extract_id "$output")"
+  VM_IDS="$VM_IDS $directisoid"
+  output="$(insula vm exec -id "$directisoid" -command "echo INSULA_VM_EXPORT_ISO_OK")"
+  grep -q INSULA_VM_EXPORT_ISO_OK <<<"$output"
+  insula vm stop -id "$directisoid" -grace-timeout 30s -force-after-timeout=true
+fi
 if [[ "$GO_API_TEST" == 1 ]]; then
   echo "[integration] public Go Engine API end-to-end"
   INSULA_TEST_CONFIG="$CONFIG" INSULA_TEST_QCOW2="$BASE_IMAGE" INSULA_TEST_LIVE_ISO="$LIVE_TEST" INSULA_TEST_INSTALLER_ISO="$INSTALLER_ISO" \

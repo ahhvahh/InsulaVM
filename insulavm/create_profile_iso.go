@@ -127,8 +127,18 @@ func (e *Engine) CreateProfileFromISO(ctx context.Context,req CreateProfileFromI
  if err:=checkInstallerStopped(ctx,e.config.Virtualization.LibvirtURI,domain);err!=nil{
   return nil,fmt.Errorf("installer did not finish safely; disk preserved until domain cleanup: %w",err)
  }
+ // Disassociate the stopped installer before touching its filesystem or
+ // publishing the disk, so it cannot be restarted while we copy the image.
+ cleanupCtx,stopCleanup:=context.WithTimeout(context.Background(),40*time.Second)
+ cleanupErr:=cleanupISOInstallerDomain(cleanupCtx,e.config.Virtualization.LibvirtURI,domain)
+ stopCleanup()
+ if cleanupErr!=nil{return nil,fmt.Errorf("cannot remove stopped installer domain before verification: %w",cleanupErr)}
+ createdDomain=false
  notify("verification","Installer exited; validating Debian 13, SSH, sudo, cloud-init and live-boot on disk")
- if err:=verifyDebianInstalledDisk(ctx,disk,stage);err!=nil{return nil,err}
+ if err:=verifyDebianInstalledDisk(ctx,disk,stage);err!=nil{
+  if errors.Is(err,errInstallerUnmount){safeRemove=false}
+  return nil,err
+ }
  if err:=verifyStandaloneQCOW2(ctx,disk);err!=nil{return nil,err}
  notify("publishing","Registering independent QCOW2 profile")
  p:=Profile{
@@ -276,6 +286,8 @@ func cleanupISOInstallerDomain(ctx context.Context,uri,name string)error{
  if out,err:=installerVirsh(ctx,uri,"undefine",name);err!=nil{return fmt.Errorf("remove installer domain: %w: %s",err,out)}
  return nil
 }
+var errInstallerUnmount=errors.New("guest filesystem remains mounted")
+
 func verifyDebianInstalledDisk(ctx context.Context,disk,stage string)error{
  mount:=filepath.Join(stage,"root")
  if err:=os.MkdirAll(mount,0700);err!=nil{return err}
@@ -299,7 +311,7 @@ func verifyDebianInstalledDisk(ctx context.Context,disk,stage string)error{
  unmountCtx,cancel:=context.WithTimeout(context.Background(),40*time.Second)
  defer cancel()
  unmountOutput,unmountErr:=exec.CommandContext(unmountCtx,"guestunmount",mount).CombinedOutput()
- if unmountErr!=nil{return errors.Join(checkErr,fmt.Errorf("guestunmount failed (staging must be retained): %w: %s",unmountErr,strings.TrimSpace(string(unmountOutput))))}
+ if unmountErr!=nil{return errors.Join(checkErr,fmt.Errorf("%w: guestunmount failed; staging must be retained: %v: %s",errInstallerUnmount,unmountErr,strings.TrimSpace(string(unmountOutput))))}
  return checkErr
 }
 func verifyStandaloneQCOW2(ctx context.Context,disk string)error{

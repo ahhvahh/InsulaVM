@@ -136,3 +136,31 @@ func TestExportVMToLiveISORejectsInvalidRequest(t *testing.T){
  if _,err:=e.ExportVMToLiveISO(context.Background(),VMExportISORequest{VMID:"unknown",Name:"export",CommandTimeout:-time.Second});err==nil{t.Fatal("negative timeout accepted")}
  if _,err:=e.ExportVMToLiveISO(context.Background(),VMExportISORequest{VMID:"unknown",Name:"export"});err==nil{t.Fatal("unknown VM accepted")}
 }
+
+
+func TestCreateProfileFromISOFailedInstallerNeverPublishes(t *testing.T){
+ e,iso,_:=installerFixture(t)
+ bin:=strings.Split(os.Getenv("PATH"),string(os.PathListSeparator))[0]
+ if err:=os.WriteFile(filepath.Join(bin,"virt-install"),[]byte("#!/bin/sh\nexit 55\n"),0700);err!=nil{t.Fatal(err)}
+ result,err:=e.CreateProfileFromISO(context.Background(),CreateProfileFromISORequest{
+  Name:"failed-installer",ISOPath:iso,MemoryMiB:2048,VCPUs:2,DiskGB:12,
+ })
+ if err==nil||result!=nil{t.Fatalf("failure was published: %+v %v",result,err)}
+ if _,err:=e.GetProfile("failed-installer");err==nil{t.Fatal("incomplete installation created a usable profile")}
+ temps,err:=filepath.Glob(filepath.Join(e.config.Storage.Runs,"insula-install-*"))
+ if err!=nil||len(temps)!=0{t.Fatalf("installer cleanup failed: %v %v",temps,err)}
+}
+
+func TestCreateProfileFromISOUnmountFailureRetainsStaging(t *testing.T){
+ e,iso,_:=installerFixture(t)
+ bin:=strings.Split(os.Getenv("PATH"),string(os.PathListSeparator))[0]
+ if err:=os.WriteFile(filepath.Join(bin,"guestunmount"),[]byte("#!/bin/sh\nexit 71\n"),0700);err!=nil{t.Fatal(err)}
+ result,err:=e.CreateProfileFromISO(context.Background(),CreateProfileFromISORequest{
+  Name:"unsafe-unmount",ISOPath:iso,MemoryMiB:2048,VCPUs:2,DiskGB:12,
+ })
+ if !errors.Is(err,errInstallerUnmount)||result!=nil{t.Fatalf("unmount problem not reported: %+v %v",result,err)}
+ if _,err:=e.GetProfile("unsafe-unmount");err==nil{t.Fatal("mounted guest disk published as profile")}
+ temps,err:=filepath.Glob(filepath.Join(e.config.Storage.Runs,"insula-install-*"))
+ if err!=nil||len(temps)!=1{t.Fatalf("mounted staging not retained: %v %v",temps,err)}
+ t.Cleanup(func(){_ = os.RemoveAll(temps[0])}) // safe: fake guestmount only
+}
