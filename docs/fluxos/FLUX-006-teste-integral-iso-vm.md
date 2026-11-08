@@ -92,3 +92,11 @@ sequenceDiagram
 - [stop_policy.go](../../insulavm/stop_policy.go), [profile_clone.go](../../insulavm/profile_clone.go), [export_iso.go](../../insulavm/export_iso.go)
 - [live_iso.go](../../insulavm/live_iso.go), [vm/live_iso.go](../../pkg/vm/live_iso.go)
 - [integration.sh](../../scripts/tests/integration.sh) e [unit.sh](../../scripts/tests/unit.sh)
+
+## Cenário obrigatório: shutdown forçado de VM resistente
+
+O teste `guest/ignore-shutdown.sh` configura `systemd-logind` para ignorar ACPI power button e mascara `poweroff.target` durante a sessão descartável. O `loop.sh` executa `while :; do sleep 5; done`. A CLI envia shutdown gracioso com 30 segundos e somente após o timeout pode usar `virsh destroy`. O aceite exige `forced=true`, `timed_out=true`, domínio `absent`, e pelo menos 29 segundos medidos pelo Bash; shutdown gracioso precoce **não** é aceito nesse cenário. O unitário `insulavm/stop_adapter_test.go` confirma ordem real de comandos sob Libvirt simulado e SQLite real com prazo abreviado.
+
+## Integração direta da biblioteca Go
+
+Por padrão, o teste integral executa também `tests/integration/engine_test.go`, com build tag `integration`, validando a API pública in-processo, incluindo operações de VM, importação/deploy, freeze, exportação de ISO e boot. Em CI sem KVM esse teste é apenas compilado, não executado. `--skip-go-api` limita a suíte ao transporte CLI.
