@@ -28,7 +28,7 @@
 | Parar VM | `insula vm stop` | `StopVM` | implementado |
 | Parar todas | `insula vm stop-all` | `StopAllVMs` | implementado |
 
-Além destes, `insula help` exibe ajuda e a CLI sem verbo explícito executa `run` por compatibilidade histórica. Nenhum dos dois constitui operação de VM independente.
+Além destes, `insula help`, `insula -h` e `insula --help` exibem a ajuda. O atalho implícito de pipeline (`insula` sem o subcomando `run`) foi removido nesta revisão: pipelines exigem `insula run` explícito. A biblioteca mantém `Run` normalmente.
 
 ## Operações canônicas alvo ainda ausentes ou parciais
 
@@ -50,6 +50,7 @@ Além destes, `insula help` exibe ajuda e a CLI sem verbo explícito executa `ru
 | Par atual | Avaliação | Ação |
 | --- | --- | --- |
 | `vm show` e `vm status` | comandos equivalentes, mesma implementação | retirar alias `vm show` da CLI e manter `vm status` |
+| `insula` implícito versus `insula run` | mesma execução de manifesto; acesso implícito via parser de argumentos da raiz | eliminar atalho implícito; exigir `insula run` |
 | `StartVM`, `StartVMWithProgress`, `StartVMWithOptions` | wrappers de configuração/feedback do mesmo runtime | quando `CreateVM` estiver funcional, tornar os antigos compatíveis/deprecados antes de remoção versionada |
 | `vm start` versus futuro `vm create` | sobreposição parcial | implementar `CreateVM` uma vez no Engine; migrar sem quebrar CLI atual |
 | `vm exec` versus futuro `vm command` | sobreposição parcial | motor único; não alterar formato de STDIO da CLI legada sem versionamento |
@@ -64,7 +65,7 @@ Além destes, `insula help` exibe ajuda e a CLI sem verbo explícito executa `ru
 
 ## Política de consolidação
 
-1. Remover **somente aliases comprovadamente idênticos**, como `vm show`, nesta revisão.
+1. Remover **somente aliases comprovadamente idênticos**, como `vm show` e o atalho de `run` sem subcomando, nesta revisão.
 2. Não remover/exportar API Go existente prematuramente; os nomes canônicos ainda são em grande parte especificações não implementadas.
 3. Implementar os contratos canônicos como fachadas sobre o **mesmo** núcleo de VM/SSH/transferência já usado pela CLI.
 4. Após a paridade e testes de compatibilidade, marcar wrappers legados como deprecados e removê-los em versão de quebra explicitamente aprovada.
@@ -73,6 +74,7 @@ Além destes, `insula help` exibe ajuda e a CLI sem verbo explícito executa `ru
 ## Validação
 
 - CLI `vm show` deve responder uso inválido; `vm status` continua aceito.
+- CLI `insula` e `insula -manifest ...` sem `run` devem informar uso inválido; `insula run -manifest ...` continua roteado para `Run`.
 - Verificar que nenhum guia público sugere `vm show`.
 - Validar que `vm shell`, `vm exec`, `vm import`, `vm deploy` e `run` seguem distintos e não foram removidos.
 - Executar `go test ./...` para verificar regressões; execução real KVM/Libvirt requer host apropriado.
