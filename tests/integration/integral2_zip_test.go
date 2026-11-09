@@ -23,7 +23,7 @@ import (
 	"github.com/ahhvahh/InsulaVM/insulavm"
 )
 
-// TestIntegral2ZipTransferAndCommand verifies one real Debian VM through the
+// TestIntegral2ZipTransferAndCommand verifies one real Debian 12 Cloud VM through the
 // public Go API and CLI, not by directly copying files into guest storage.
 // The runner supplies a trusted cloud-init-ready QCOW2 and isolated config.
 func TestIntegral2ZipTransferAndCommand(t *testing.T) {
