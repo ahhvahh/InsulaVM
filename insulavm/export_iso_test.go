@@ -4,6 +4,7 @@ import (
  "os"
  "path/filepath"
  "testing"
+ "strings"
 )
 
 func TestSelectLiveKernel(t *testing.T){
@@ -23,4 +24,21 @@ func TestSelectLiveKernelMissingInitrd(t *testing.T){
  if err:=os.WriteFile(filepath.Join(root,"boot","vmlinuz-1"),[]byte("x"),0600);err!=nil{t.Fatal(err)}
  _,_,err:=selectLiveKernel(root)
  if err==nil{t.Fatal("expected error when no matching initramfs exists")}
+}
+
+func TestLiveISOGrubSerialAndKernelConsole(t *testing.T){
+ cfg:=liveISOGrubConfig()
+ for _,entry:=range []string{
+  "serial --unit=0 --speed=115200",
+  "terminal_input serial console",
+  "terminal_output serial console",
+  "set timeout=2",
+  "linux /live/vmlinuz boot=live components console=tty0 console=ttyS0,115200n8",
+  "initrd /live/initrd.img",
+ }{
+  if !strings.Contains(cfg,entry){t.Errorf("missing %q from ISO GRUB config:\n%s",entry,cfg)}
+ }
+ if strings.Index(cfg,"terminal_output serial console")>strings.Index(cfg,"menuentry "){
+  t.Fatal("GRUB serial terminal must be configured before menuentry")
+ }
 }
