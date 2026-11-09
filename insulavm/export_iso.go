@@ -66,7 +66,7 @@ func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string
  if err:=copyISOFile(kernel,filepath.Join(stage,"live","vmlinuz"));err!=nil{return "",err}
  if err:=copyISOFile(initrd,filepath.Join(stage,"live","initrd.img"));err!=nil{return "",err}
  if err:=runISOTool(ctx,"mksquashfs",mount,filepath.Join(stage,"live","filesystem.squashfs"),"-noappend","-comp","xz");err!=nil{return "",err}
- grub:="set timeout=2\nset default=0\nmenuentry 'InsulaVM Debian Live' {\n linux /live/vmlinuz boot=live components console=tty0 console=ttyS0,115200n8\n initrd /live/initrd.img\n}\n"
+ grub:=liveISOGrubConfig()
  if err:=os.WriteFile(filepath.Join(stage,"boot","grub","grub.cfg"),[]byte(grub),0600);err!=nil{return "",err}
  if err:=os.MkdirAll(filepath.Dir(dest),0700);err!=nil{return "",err}
  // Always recheck after building the SquashFS: a second process may have
@@ -112,6 +112,23 @@ func checkISODestinationVacant(path string)error{
  if err==nil{return fmt.Errorf("ISO destination already exists (will not overwrite): %s",path)}
  if !errors.Is(err,os.ErrNotExist){return fmt.Errorf("inspect ISO output: %w",err)}
  return nil
+}
+
+
+// liveISOGrubConfig emits early-boot diagnostics to both VGA and ttyS0.
+// The kernel's console=ttyS0 alone is insufficient: GRUB has its own
+// terminal configuration and may stop before loading the kernel.
+func liveISOGrubConfig()string{
+ return "set timeout_style=menu\n"+
+  "set timeout=2\n"+
+  "set default=0\n"+
+  "serial --unit=0 --speed=115200 --word=8 --parity=no --stop=1\n"+
+  "terminal_input serial console\n"+
+  "terminal_output serial console\n"+
+  "menuentry 'InsulaVM Debian Live' {\n"+
+  " linux /live/vmlinuz boot=live components console=tty0 console=ttyS0,115200n8\n"+
+  " initrd /live/initrd.img\n"+
+  "}\n"
 }
 
 func runISOTool(ctx context.Context,name string,args ...string)error{

@@ -181,3 +181,37 @@ usa esse QCOW2 sem a cadeia Debian Live/GRUB/SquashFS. Não é um boot
 pela ISO; é a forma recomendada de reutilizar ambiente configurado.
 A causa de um erro de boot de ISO só é determinada após examinar
 `serial.log` ou `vm console`, não apenas pelo timeout de DHCP.
+
+## Serial de GRUB (diagnóstico antes do kernel)
+
+A ISO Live gerada anteriormente passava `console=ttyS0,115200n8`
+somente ao kernel, mas não habilitava saída serial no GRUB. Logo,
+`vm console` e `-serial-log` podiam ficar vazios se o boot parasse
+no carregador, mesmo com o domínio Libvirt em estado `running`.
+
+A exportação nova configura, **antes** da entrada do menu:
+`serial --unit=0 --speed=115200`,
+`terminal_input serial console` e `terminal_output serial console`.
+Essas diretivas são documentadas pelo manual do GNU GRUB. São válidas
+para o boot da próxima ISO exportada; não corrigem retroativamente
+arquivos ISO já existentes.
+
+Para recriar a ISO a partir do QCOW2 congelado, sem destruir ou
+sobrescrever a original:
+
+```bash
+./insula profile export-iso -config ./config.yaml \
+  -name deb13-abioma-tests-final \
+  -output ./deb13-abioma-tests-final-serial.iso
+
+./insula vm start-iso -config ./config.yaml \
+  -profile deb13-abioma-tests-final \
+  -iso ./deb13-abioma-tests-final-serial.iso \
+  -memory-mib 2048 -vcpus 2 -serial-log
+```
+
+O log de GRUB pode revelar travamento no carregador e mensagens
+anteriores ao kernel. Se o domínio não apresentar saída serial,
+ainda será preciso analisar firmware/VGA e os arquivos persistidos
+em `storage.logs/live-iso/<UUID>/`. A configuração serial melhora a
+observabilidade, mas não comprova que a ISO inicializa com sucesso.
