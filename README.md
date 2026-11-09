@@ -170,3 +170,24 @@ go vet ./...
 ```
 
 Testes automatizados não substituem validação de ciclo completo em um hipervisor KVM/Libvirt real.
+
+## Diagnóstico de ISO Live que não obtém IP
+
+`vm start-iso` aceita o timeout configurável `-ssh-ready-timeout` (padrão 5m).
+Quando a ISO não conclui DHCP/SSH, preserve a VM para inspecionar o console
+sem recorrer diretamente ao `virsh`:
+
+```bash
+./insula vm start-iso -config ./config.yaml \
+  -profile deb13-abioma-tests-final -iso ./deb13-abioma-tests-final.iso \
+  -memory-mib 2048 -vcpus 2 \
+  -ssh-ready-timeout 8m -preserve-on-failure
+
+# A falha imprime um UUID de diagnóstico; use-o nos comandos seguintes:
+./insula vm status -config ./config.yaml -id UUID_DA_VM
+./insula vm console -config ./config.yaml -id UUID_DA_VM
+```
+
+O `start-iso` não garante automaticamente que a ISO esteja inicializável;
+a saída serial preservada é necessária para descobrir problemas de boot.
+`vm stop` remove a VM descartável após o diagnóstico.
