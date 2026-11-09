@@ -65,9 +65,19 @@ func TestIntegral2ZipTransferAndCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("register Debian cloud profile: %v", err)
 	}
+	var managedVMID string
 	t.Cleanup(func() {
-		// Never remove test profile while a VM still uses its backing image.
-		// The VM cleanup is registered later so it executes before this step.
+		// Preserve the backing image if Libvirt cannot confirm the managed VM
+		// has been removed. The runtime cleanup executes before this callback.
+		if managedVMID != "" {
+			checkCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			live, checkErr := engine.GetVMStatus(checkCtx, managedVMID)
+			if checkErr != nil || live.LibvirtState != "absent" {
+				t.Errorf("retaining profile because VM status is uncertain or still active: %+v %v", live, checkErr)
+				return
+			}
+		}
 		if err := os.RemoveAll(filepath.Join(cfg.Storage.Profiles, profileName)); err != nil {
 			t.Errorf("remove disposable test profile: %v", err)
 		}
@@ -88,6 +98,7 @@ func TestIntegral2ZipTransferAndCommand(t *testing.T) {
 		t.Fatalf("real Debian cloud boot/Cloud-Init/DHCP/SSH failed: %v", err)
 	}
 	vmID := instance.ID
+	managedVMID = vmID
 	stopped := false
 	t.Cleanup(func() {
 		if stopped {
