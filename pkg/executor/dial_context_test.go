@@ -1,7 +1,9 @@
 package executor
 
 import (
+ "bytes"
  "context"
+ "fmt"
  "net"
  "os"
  "path/filepath"
@@ -10,6 +12,8 @@ import (
  "time"
 
  "github.com/ahhvahh/InsulaVM/pkg/identity"
+ "golang.org/x/crypto/ssh"
+ "golang.org/x/crypto/ssh/knownhosts"
 )
 
 func TestDialContextCancelsHangingSSHHandshake(t *testing.T){
@@ -46,4 +50,46 @@ func TestDialContextCancelsHangingSSHHandshake(t *testing.T){
 
 func TestDialContextRejectsNilContext(t *testing.T){
  if _,err:=DialContext(nil,DialConfig{});err==nil{t.Fatal("nil context accepted")}
+}
+
+func TestDialContextAuthenticatesWithPinnedHostKey(t *testing.T) {
+ host,err:=identity.GenerateKey()
+ if err!=nil{t.Fatal(err)}
+ clientKeys,err:=identity.GenerateKey()
+ if err!=nil{t.Fatal(err)}
+ hostSigner,err:=ssh.ParsePrivateKey(host.PrivatePEM)
+ if err!=nil{t.Fatal(err)}
+ serverConfig:=&ssh.ServerConfig{PublicKeyCallback:func(_ ssh.ConnMetadata,key ssh.PublicKey)(*ssh.Permissions,error){
+  if bytes.Equal(key.Marshal(),clientKeys.Public.Marshal()){return &ssh.Permissions{},nil}
+  return nil,fmt.Errorf("unrecognized key")
+ }}
+ serverConfig.AddHostKey(hostSigner)
+ listener,err:=net.Listen("tcp","127.0.0.1:0")
+ if err!=nil{t.Fatal(err)}
+ defer listener.Close()
+ ready:=make(chan struct{})
+ go func(){
+  raw,e:=listener.Accept()
+  if e!=nil{close(ready);return}
+  defer raw.Close()
+  session,chans,reqs,e:=ssh.NewServerConn(raw,serverConfig)
+  close(ready)
+  if e!=nil{return}
+  defer session.Close()
+  go ssh.DiscardRequests(reqs)
+  for ch:=range chans{_ = ch.Reject(ssh.UnknownChannelType,"not supported")}
+ }()
+ root:=t.TempDir()
+ key:=filepath.Join(root,"client_ed25519")
+ if err:=identity.SavePrivateKey(key,clientKeys.PrivatePEM);err!=nil{t.Fatal(err)}
+ known:=filepath.Join(root,"known_hosts")
+ address:=listener.Addr().String()
+ line:=knownhosts.Line([]string{"["+strings.Split(address,":")[0]+"]:"+strings.Split(address,":")[1]},host.Public)+"\n"
+ if err:=os.WriteFile(known,[]byte(line),0600);err!=nil{t.Fatal(err)}
+ ctx,cancel:=context.WithTimeout(context.Background(),2*time.Second)
+ defer cancel()
+ connected,err:=DialContext(ctx,DialConfig{Address:address,User:"insula",PrivateKeyPath:key,KnownHostsPath:known,Timeout:time.Second})
+ if err!=nil{t.Fatal(err)}
+ _=connected.Close()
+ <-ready
 }
