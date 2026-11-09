@@ -228,6 +228,12 @@ func TestAlpineISOConsoleLifecycle(t *testing.T) {
 			break
 		}
 		select {
+		case chunk, ok := <-chunks:
+			if ok {
+				if _, err := serialFile.WriteString(chunk); err != nil {
+					t.Fatal(err)
+				}
+			}
 		case <-stopCtx.Done():
 			t.Fatalf("guest poweroff timed out; domain still present; serial=%s", serialPath)
 		case <-time.After(500 * time.Millisecond):
@@ -288,8 +294,12 @@ func alpineHasConsoleLine(transcript, line string) bool {
 
 func alpineHasConsoleExit(transcript, prefix string) bool {
 	for _, part := range strings.Split(strings.ReplaceAll(transcript, "\r", ""), "\n") {
-		if strings.HasPrefix(strings.TrimSpace(part), prefix) {
-			return true
+		line := strings.TrimSpace(part)
+		if strings.HasPrefix(line, prefix) && len(line) > len(prefix) {
+			exitCode := strings.TrimPrefix(line, prefix)
+			if regexp.MustCompile("^[0-9]+$").MatchString(exitCode) {
+				return true
+			}
 		}
 	}
 	return false
