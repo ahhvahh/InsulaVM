@@ -82,35 +82,41 @@ func TestIntegral2ZipTransferAndCommand(t *testing.T) {
 			t.Errorf("remove disposable test profile: %v", err)
 		}
 	})
-
-	var startupEvents []insulavm.VMProgress
-	instance, err := engine.StartVMWithOptions(ctx, insulavm.VMStartOptions{
-		Profile: profileName, MemoryMiB: 1024, VCPUs: 1,
-		SSHReadyTimeout: 4 * time.Minute,
-		// Preserve a failed guest for troubleshooting when startup reaches
-		// Libvirt. Host runner is ephemeral; no other VM may be touched.
-		PreserveOnFailure: false,
-	}, func(progress insulavm.VMProgress) {
-		startupEvents = append(startupEvents, progress)
-		t.Logf("[boot:%s] %s", progress.Stage, progress.Message)
-	})
-	if err != nil {
-		t.Fatalf("real Debian cloud boot/Cloud-Init/DHCP/SSH failed: %v", err)
-	}
-	vmID := instance.ID
-	managedVMID = vmID
 	stopped := false
 	t.Cleanup(func() {
-		if stopped {
+		if stopped || managedVMID == "" {
 			return
 		}
 		cleanupCtx, done := context.WithTimeout(context.Background(), 50*time.Second)
 		defer done()
 		result, stopErr := engine.StopVMWithOptions(cleanupCtx, insulavm.VMStopOptions{
-			VMID: vmID, GracePeriod: 10 * time.Second, ForceAfterTimeout: true,
+			VMID: managedVMID, GracePeriod: 10 * time.Second, ForceAfterTimeout: true,
 		})
-		t.Errorf("Test Integral 2 did not finish normally, emergency cleanup result=%+v error=%v", result, stopErr)
+		t.Errorf("Integral 2 did not finish normally; emergency cleanup: %+v %v", result, stopErr)
 	})
+
+	var startupEvents []insulavm.VMProgress
+	instance, err := engine.StartVMWithOptions(ctx, insulavm.VMStartOptions{
+		Profile: profileName, MemoryMiB: 1024, VCPUs: 1,
+		SSHReadyTimeout: 4 * time.Minute,
+		// Preserve a failed guest for real diagnosis; it will be cleaned only
+		// after host/Libvirt evidence is captured below.
+		PreserveOnFailure: true,
+	}, func(progress insulavm.VMProgress) {
+		startupEvents = append(startupEvents, progress)
+		if progress.ID != "" {
+			managedVMID = progress.ID
+		}
+		t.Logf("[boot:%s] %s", progress.Stage, progress.Message)
+	})
+	if err != nil {
+		if managedVMID != "" {
+			integral2CaptureFailure(t, cfg.Storage.Logs, cfg.Virtualization.LibvirtURI, cfg.Virtualization.Network, managedVMID)
+		}
+		t.Fatalf("real Debian cloud boot/Cloud-Init/DHCP/SSH failed: %v", err)
+	}
+	vmID := instance.ID
+	managedVMID = vmID
 	if vmID == "" || instance.IPAddress == "" || len(startupEvents) == 0 {
 		t.Fatalf("VM not ready or progress missing: id=%s ip=%s events=%d", vmID, instance.IPAddress, len(startupEvents))
 	}
@@ -298,6 +304,50 @@ func integral2GuestCommands(p integral2Archive) []integral2Check {
 			Marker: "INSULA_IT2_BINARY_SHA=" + p.BinSHA,
 		},
 	}
+}
+
+// Capture the last proven host stage before changing network or guest boot
+// behavior. Preserve the transient guest until these read-only probes complete.
+func integral2CaptureFailure(t *testing.T, logDir, uri, network, vmID string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)
+	defer cancel()
+	var out strings.Builder
+	commands := [][]string{
+		{"domstate", vmID},
+		{"dominfo", vmID},
+		{"domiflist", vmID},
+		{"domifaddr", vmID, "--source", "lease"},
+		{"domblklist", vmID},
+		{"net-info", network},
+		{"net-dhcp-leases", network},
+		{"dumpxml", vmID},
+	}
+	for _, args := range commands {
+		cmd := exec.CommandContext(ctx, "virsh", append([]string{"-c", uri}, args...)...)
+		result, err := cmd.CombinedOutput()
+		fmt.Fprintf(&out, "virsh %s\n%s\nerror=%v\n\n", strings.Join(args, " "), result, err)
+	}
+	// Even if the shell is stuck after boot, querying an existing serial
+	// console may recover a login prompt or kernel message. Never claim that
+	// an empty console proves a DHCP failure.
+	consoleCtx, done := context.WithTimeout(context.Background(), 6*time.Second)
+	defer done()
+	cmd := exec.CommandContext(consoleCtx, "script", "-q", "-c",
+		"virsh -c "+uri+" console "+vmID, "/dev/null")
+	cmd.Stdin = strings.NewReader("\r")
+	serial, err := cmd.CombinedOutput()
+	fmt.Fprintf(&out, "guest serial console (bounded):\n%s\nerror=%v\n", serial, err)
+	if err := os.MkdirAll(logDir, 0700); err != nil {
+		t.Errorf("diagnostic log directory: %v", err)
+		return
+	}
+	path := filepath.Join(logDir, "integral-2-boot-"+vmID+".log")
+	if err := os.WriteFile(path, []byte(out.String()), 0600); err != nil {
+		t.Errorf("write boot diagnostics: %v", err)
+		return
+	}
+	t.Logf("boot failure diagnostics: %s", path)
 }
 
 func integral2HasStage(events []insulavm.ImportProgress, stage string) bool {
