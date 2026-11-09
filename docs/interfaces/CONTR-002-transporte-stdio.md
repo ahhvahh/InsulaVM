@@ -1,5 +1,7 @@
-<!-- A-BIOMA-DOC-STANDARD -->
-<!-- A-BIOMA-DOC-REVISADO -->
+<!-- A-BIOMA-DOC-OBSOLETO -->
+<!-- A-BIOMA-DOC-MIGRADO -->
+
+> **Conteúdo lido e migrado para:** [CONTR-002-transporte-stdio.md](../contratos/CONTR-002-transporte-stdio.md). Este arquivo é mantido para rastreabilidade histórica; use o destino como fonte canônica.
 
 # CONTR-002 — Transporte STDIO fiel para comandos e scripts
 
