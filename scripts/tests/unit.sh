@@ -21,16 +21,8 @@ trap 'rm -rf -- "$TMP"' EXIT
 go test -race -coverprofile="$TMP/coverage.out" ./...
 go tool cover -func="$TMP/coverage.out" | tail -n 1
 # Compile integration-tagged Go tests without running any real VM in CI.
-go test -tags integration -run '^TestAlpineISO(XMLContract|TranscriptContract)
-go build -o "$TMP/insula" .
-"$TMP/insula" help >/dev/null
-echo "INSULA_UNIT_OK"
- ./tests/integration
-go test -tags integration -run '^
-go build -o "$TMP/insula" .
-"$TMP/insula" help >/dev/null
-echo "INSULA_UNIT_OK"
- ./tests/integration
+go test -tags integration -run '^TestAlpineISO(XMLContract|TranscriptContract)$' ./tests/integration
+go test -tags integration -run '^$' ./tests/integration
 go build -o "$TMP/insula" .
 "$TMP/insula" help >/dev/null
 echo "INSULA_UNIT_OK"
