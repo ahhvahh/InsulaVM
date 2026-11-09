@@ -20,12 +20,12 @@ Sem download, com QCOW2 Debian Cloud de origem confiável:
 ~~~bash
 bash scripts/tests/integral-2-zip.sh \
   --config /etc/insulavm/test-config.yaml \
-  --qcow2 /var/lib/insulavm-test/debian-13-generic-amd64.qcow2
+  --qcow2 /var/lib/insulavm-test/debian-12-generic-amd64.qcow2
 ~~~
 
 Quando --config não é informado, o script cria uma configuração privada em data/integral-2-ci/config.yaml, usando data/integral-2-ci/state como armazenamento isolado. Não reaproveita VM de produção e não altera perfis existentes.
 
-Por padrão o runner obtém a imagem oficial Debian 13 generic QCOW2 de https://cloud.debian.org/images/cloud/trixie/latest/ e valida SHA-512 pelo manifesto SHA512SUMS oficial. Uma imagem local fornecida com --qcow2 é confiada ao operador.
+Por padrão o runner obtém a imagem oficial Debian 12 generic QCOW2 de https://cloud.debian.org/images/cloud/bookworm/latest/ e valida SHA-512 pelo manifesto SHA512SUMS oficial. Uma imagem local fornecida com --qcow2 é confiada ao operador.
 
 ## Verificações
 
@@ -55,3 +55,7 @@ Para bloquear merge quando o teste falhar, adicionar integral-2-zip-upload-comma
 - Stop forçado: o teste não passa, mesmo que recursos sejam limpos posteriormente.
 
 **Limitação importante:** ImportToVM transfere o ZIP como um arquivo único envolto em TAR.GZ temporário, que é extraído automaticamente pela ferramenta. Quem extrai o conteúdo ZIP é um comando posterior enviado à VM; isso é intencional e respeita o contrato atual.
+
+## Motivo do Debian 12 neste teste
+
+A imagem Debian 13 Cloud original exibiu apenas "Booting Debian GNU/Linux" em loop no console do QEMU, sem chegar ao kernel, impedindo testar SSH e upload. Essa observação corresponde ao [Debian bug #1111240](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1111240), que descreve o problema do GRUB quando a saída gráfica e serial estão habilitadas em determinados dispositivos virtuais. O Teste Integral 2 usa Debian 12 Cloud para testar exclusivamente a transferência e execução sem alterar o motor de boot nem adulterar a imagem original.
