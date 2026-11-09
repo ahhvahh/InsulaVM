@@ -35,7 +35,7 @@ jobs:
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             libvirt-daemon-system libvirt-clients qemu-system-x86 qemu-utils \
-            genisoimage acl curl ca-certificates
+            genisoimage acl curl ca-certificates dnsmasq-base
           sudo systemctl start libvirtd.service
           sudo setfacl -m "u:$(id -un):rw" /run/libvirt/libvirt-sock
           if ! virsh -c qemu:///system net-info default | grep -Eq 'Active:[[:space:]]+yes'; then
