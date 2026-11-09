@@ -32,6 +32,16 @@ go build -o insula .
 
 O registro de perfil é necessário apenas se ele ainda não existir. Consulte [GUIA-001](docs/guias/GUIA-001-operar-insulavm.md) para instalação de dependências, acesso SSH, importações e execução.
 
+## Teste Integral 3 — ISO, congelamento e /tmp/workspace
+
+Para PRs destinadas à **main**, o [workflow Integral 3](.github/workflows/integral-3-iso-workspace.yml) instala Debian 13 a partir da **mini.iso (~64 MB)** em um QCOW2 de **10 GiB**, inicia uma VM de **1 vCPU e 500 MiB**, cria um arquivo em `/tmp/workspace` através de `ExecVM`, congela e exporta uma ISO Live, inicializa outra VM pela ISO gerada e confirma o **mesmo SHA-256 do arquivo** sem novo upload. Por fim encerra a segunda VM graciosamente. A instalação inicial usa **1 GiB**, mínimo exigido por `CreateProfileFromISO`; ambas as VMs gerenciadas usam 500 MiB.
+
+~~~bash
+bash scripts/tests/integral-3-iso-persistence.sh
+~~~
+
+**Status de CI:** `integral-3-iso-workspace-persistence`. Para bloquear merges em falha, exigir esse check nas regras de proteção de `main`, após o workflow estar incorporado à branch-base. O caminho `/tmp` não é inerentemente persistente: o teste falha se os dados não sobreviverem. Ver [FLUX-008](docs/fluxos/FLUX-008-teste-integral-iso-persistencia.md) e [GUIA-007](docs/guias/GUIA-007-teste-integral-3-iso-persistencia.md).
+
 ## Instalar um perfil a partir da ISO Debian 13
 
 O comando cria uma VM instaladora temporária, instala Debian 13 em QCOW2 com Preseed, valida os componentes do sistema e registra o perfil. **Requer internet no instalador** para os pacotes de Cloud-Init/SSH/sudo/live-boot; não foi validado em host KVM real.
