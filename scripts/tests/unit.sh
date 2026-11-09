@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "$ROOT"
 bash -n scripts/baixar-debian.sh scripts/tests/test-baixar-debian.sh \
+  scripts/preparar-deb13-abioma-tests.sh \
   scripts/tests/manual-debian-mini-iso.sh \
   scripts/tests/integration.sh \
   scripts/tests/guest/verify.sh \
@@ -12,6 +13,7 @@ bash -n scripts/baixar-debian.sh scripts/tests/test-baixar-debian.sh \
   scripts/tests/guest/ignore-shutdown.sh
 bash scripts/tests/test-baixar-debian.sh
 bash scripts/tests/manual-debian-mini-iso.sh help >/dev/null
+bash scripts/preparar-deb13-abioma-tests.sh help >/dev/null
 go vet ./...
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
