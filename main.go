@@ -106,6 +106,7 @@ func profileCommand(args []string) error {
 	disk := fs.Int("disk-gb", 0, "virtual disk capacity in GiB")
 	distro := fs.String("os", "debian", "OS label")
 	iso := fs.String("iso", "", "local installer ISO path for create-from-iso; other commands store metadata only")
+	outputISO := fs.String("output", "", "optional Live ISO destination (absolute or relative to current directory)")
 	installTimeout := fs.Duration("install-timeout", 90*time.Minute, "Debian ISO installer maximum duration")
 	address := fs.String("address", "", "existing guest SSH address (optional)")
 	user := fs.String("user", "", "guest SSH user (optional)")
@@ -181,7 +182,7 @@ func profileCommand(args []string) error {
 		fmt.Printf("PROFILE ISO OK: name=%s image=%s sha256=%s\n",result.Profile.Name,localPathForCLI(result.ImagePath),result.ISOChecksumSHA256)
 	case "export-iso":
 		if *name == "" { return errors.New("profile export-iso requires -name") }
-		path, err := engine.ExportProfileLiveISO(context.Background(),*name)
+		path, err := engine.ExportProfileLiveISOTo(context.Background(),*name,*outputISO)
 		if err != nil { return err }
 		fmt.Printf("LIVE ISO OK: %s\n",localPathForCLI(path))
 	default:

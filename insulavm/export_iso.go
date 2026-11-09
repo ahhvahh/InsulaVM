@@ -11,6 +11,8 @@ import (
  "sort"
  "strings"
  "time"
+
+ "github.com/ahhvahh/InsulaVM/pkg/storage"
 )
 
 // ExportProfileLiveISO builds a BIOS/UEFI Debian Live ISO from a saved QCOW2.
@@ -91,6 +93,7 @@ func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string
 // Relative output paths use the caller's working directory (not config.yaml).
 func(e *Engine)liveISODestination(name,outputPath string)(string,error){
  if e==nil{return "",errors.New("engine is required")}
+ if err:=storage.ValidateName(name);err!=nil{return "",fmt.Errorf("invalid ISO profile name: %w",err)}
  if strings.TrimSpace(outputPath)==""{
   p,err:=e.GetProfile(name)
   if err!=nil{return "",err}
