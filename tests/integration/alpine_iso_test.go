@@ -229,10 +229,12 @@ func TestAlpineISOConsoleLifecycle(t *testing.T) {
 		}
 		select {
 		case chunk, ok := <-chunks:
-			if ok {
-				if _, err := serialFile.WriteString(chunk); err != nil {
-					t.Fatal(err)
-				}
+			if !ok {
+				chunks = nil
+				continue
+			}
+			if _, err := serialFile.WriteString(chunk); err != nil {
+				t.Fatal(err)
 			}
 		case <-stopCtx.Done():
 			t.Fatalf("guest poweroff timed out; domain still present; serial=%s", serialPath)
