@@ -28,6 +28,11 @@ type VMStartOptions struct {
  // InsulaVM embeds it in the first-boot Cloud-Init seed as root. This is NOT
  // a path to a script supplied by an untrusted repository or workflow YAML.
  StartupScriptPath string
+ // SSHReadyTimeout is independent of DHCP; zero defaults to five minutes.
+ SSHReadyTimeout time.Duration
+ // PreserveOnFailure keeps a failed VM, overlay and generated SSH keys for debugging.
+ // The caller must explicitly stop it with StopVM after investigation.
+ PreserveOnFailure bool
  StopOnContextDone bool
  OnStopError func(error)
 }
@@ -56,6 +61,9 @@ func(e *Engine)resolveVMStartProfile(opts VMStartOptions)(*Profile,error){
 func(e *Engine)StartVMWithOptions(ctx context.Context,opts VMStartOptions,onProgress func(VMProgress))(*vm.Instance,error){
  if ctx==nil{return nil,errors.New("context is required")}
  if err:=ctx.Err();err!=nil{return nil,err}
+ if opts.SSHReadyTimeout<0||opts.SSHReadyTimeout>time.Hour{
+  return nil,errors.New("SSHReadyTimeout must be 0..1h")
+ }
  if opts.StopOnContextDone&&ctx.Done()==nil{
   return nil,errors.New("StopOnContextDone requires a cancelable context")
  }
@@ -67,7 +75,7 @@ func(e *Engine)StartVMWithOptions(ctx context.Context,opts VMStartOptions,onProg
   if err!=nil{return nil,err}
  }
  if err:=e.config.EnsureDirectories();err!=nil{return nil,err}
- instance,err:=vm.StartWithStartupScript(ctx,&e.config,p,startupScript,onProgress)
+ instance,err:=vm.StartWithStartupOptions(ctx,&e.config,p,startupScript,vm.StartupOptions{SSHReadyTimeout:opts.SSHReadyTimeout,PreserveOnFailure:opts.PreserveOnFailure},onProgress)
  if err!=nil{return nil,err}
  if opts.StopOnContextDone {
   // Do not use ctx after cancellation; cleanup needs its own timeout.

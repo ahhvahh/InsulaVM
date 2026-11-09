@@ -22,6 +22,8 @@ func vmCommand(args []string)error{
  startupScript:=fs.String("startup-script","","absolute path to trusted first-boot script (Live ISO only)")
  memoryMiB:=fs.Int("memory-mib",0,"override guest RAM in MiB for this VM only; 0 keeps profile default")
  vcpus:=fs.Int("vcpus",0,"override guest vCPUs for this VM only; 0 keeps profile default")
+ sshReadyTimeout:=fs.Duration("ssh-ready-timeout",5*time.Minute,"wait for SSH after DHCP; default 5m")
+ preserveOnFailure:=fs.Bool("preserve-on-failure",false,"retain failed guest and SSH credentials for diagnosis; stop it manually")
  prepareLiveBoot:=fs.Bool("prepare-live-boot",false,"install live-boot inside managed Debian before freezing for ISO export")
  graceTimeout:=fs.Duration("grace-timeout",30*time.Second,"VM graceful shutdown deadline before escalation")
  forceAfterTimeout:=fs.Bool("force-after-timeout",true,"use hard destroy after graceful shutdown deadline")
@@ -56,6 +58,7 @@ func vmCommand(args []string)error{
   }
   instance,err:=engine.StartVMWithOptions(ctx,insulavm.VMStartOptions{
    Profile:*profileName,MemoryMiB:*memoryMiB,VCPUs:*vcpus,
+    SSHReadyTimeout:*sshReadyTimeout,PreserveOnFailure:*preserveOnFailure,
   },func(p insulavm.VMProgress){
    fmt.Fprintf(os.Stderr,"[InsulaVM][vm:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
   })

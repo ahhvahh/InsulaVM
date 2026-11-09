@@ -7,7 +7,7 @@
 
 O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perfil selecionado em `insula.yaml`, pode importar arquivos/pastas locais em TAR.GZ antes dos jobs, inicia uma VM descartável usando overlay QCOW2 ou usa uma VM SSH existente, e grava logs por job. A CLI e outros projetos Go podem usar o mesmo motor através do pacote importável `insulavm`. O Linux deve estar instalado em uma imagem com Cloud-Init; a ISO NoCloud de configuração já é gerada, mas a instalação do sistema via ISO instaladora Debian 13 está disponível como operação não interativa ainda sem validação no hipervisor real. O InsulaVM registra as VMs em SQLite.
 
-**Instalar Debian por ISO:** [INTF-TERM-007 — Criar perfil Debian via ISO instaladora](interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md). **Novos fluxos e testes:** [FLUX-006 — Testes integrais VM/ISO Live](fluxos/FLUX-006-teste-integral-iso-vm.md), [GUIA-003 — Testes](guias/GUIA-003-testes.md), [INTF-TERM-006 — ISO Live](interfaces/terminal/INTF-TERM-006-iso-live.md).
+**Testes guiados:** [GUIA-004 — CLI test, SSH e ISO Live](guias/GUIA-004-testes-guiados.md). **Instalar Debian por ISO:** [INTF-TERM-007 — Criar perfil Debian via ISO instaladora](interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md). **Novos fluxos e testes:** [FLUX-006 — Testes integrais VM/ISO Live](fluxos/FLUX-006-teste-integral-iso-vm.md), [GUIA-003 — Testes](guias/GUIA-003-testes.md), [INTF-TERM-006 — ISO Live](interfaces/terminal/INTF-TERM-006-iso-live.md).
 
 ## Mapa de leitura
 
