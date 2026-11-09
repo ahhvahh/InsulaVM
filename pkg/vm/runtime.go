@@ -266,6 +266,7 @@ func StartWithStartupOptions(ctx context.Context,c *config.Config,p *profile.Pro
    Address:instance.Address,User:instance.SSHUser,
    PrivateKeyPath:instance.SSHPrivateKeyPath,
    KnownHostsPath:instance.SSHKnownHostsPath,Timeout:10*time.Second,
+   HostKeyAlgorithms:[]string{"ssh-ed25519"},
   })
   if err==nil{
    if instance.SudoMode=="passwordless"{
@@ -317,6 +318,7 @@ func waitStartupScript(ctx context.Context,instance *Instance)error{
   Address:instance.Address,User:instance.SSHUser,
   PrivateKeyPath:instance.SSHPrivateKeyPath,
   KnownHostsPath:instance.SSHKnownHostsPath,Timeout:15*time.Second,
+  HostKeyAlgorithms:[]string{"ssh-ed25519"},
  })
  if err!=nil{return err}
  defer client.Close()

@@ -34,6 +34,8 @@ type DialConfig struct {
 	PrivateKeyPath string
 	KnownHostsPath string
 	Timeout        time.Duration
+	// HostKeyAlgorithms selects host key types; empty uses defaults for external hosts.
+	HostKeyAlgorithms []string
 }
 
 // Dial keeps the original API for callers without a cancellation context.
@@ -73,6 +75,7 @@ func DialContext(ctx context.Context, config DialConfig) (*ssh.Client, error) {
   User:config.User,
   Auth:[]ssh.AuthMethod{ssh.PublicKeys(signer)},
   HostKeyCallback:hostKeyCallback,
+  HostKeyAlgorithms:config.HostKeyAlgorithms,
  })
  stopCancel()
  if err != nil {

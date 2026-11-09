@@ -3,6 +3,9 @@ package executor
 import (
  "bytes"
  "context"
+ "crypto/ecdsa"
+ "crypto/elliptic"
+ "crypto/rand"
  "fmt"
  "net"
  "os"
@@ -63,6 +66,13 @@ func TestDialContextAuthenticatesWithPinnedHostKey(t *testing.T) {
   if bytes.Equal(key.Marshal(),clientKeys.Public.Marshal()){return &ssh.Permissions{},nil}
   return nil,fmt.Errorf("unrecognized key")
  }}
+ // Simulates Debian sshd offering multiple host key algorithms.
+ // Default Go preference chooses ECDSA, whereas managed VM pins ED25519.
+ ecdsaKey,err:=ecdsa.GenerateKey(elliptic.P256(),rand.Reader)
+ if err!=nil{t.Fatal(err)}
+ ecdsaSigner,err:=ssh.NewSignerFromKey(ecdsaKey)
+ if err!=nil{t.Fatal(err)}
+ serverConfig.AddHostKey(ecdsaSigner)
  serverConfig.AddHostKey(hostSigner)
  listener,err:=net.Listen("tcp","127.0.0.1:0")
  if err!=nil{t.Fatal(err)}
@@ -88,7 +98,8 @@ func TestDialContextAuthenticatesWithPinnedHostKey(t *testing.T) {
  if err:=os.WriteFile(known,[]byte(line),0600);err!=nil{t.Fatal(err)}
  ctx,cancel:=context.WithTimeout(context.Background(),2*time.Second)
  defer cancel()
- connected,err:=DialContext(ctx,DialConfig{Address:address,User:"insula",PrivateKeyPath:key,KnownHostsPath:known,Timeout:time.Second})
+ connected,err:=DialContext(ctx,DialConfig{Address:address,User:"insula",PrivateKeyPath:key,
+  KnownHostsPath:known,Timeout:time.Second,HostKeyAlgorithms:[]string{ssh.KeyAlgoED25519}})
  if err!=nil{t.Fatal(err)}
  _=connected.Close()
  <-ready

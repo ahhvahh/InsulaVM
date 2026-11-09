@@ -118,6 +118,7 @@ func StartLiveISO(ctx context.Context,c *config.Config,profileName,isoPath strin
   client,err:=executor.Dial(executor.DialConfig{
    Address:instance.Address,User:instance.SSHUser,
    PrivateKeyPath:instance.SSHPrivateKeyPath,KnownHostsPath:instance.SSHKnownHostsPath,Timeout:8*time.Second,
+  HostKeyAlgorithms:[]string{"ssh-ed25519"},
   })
   if err==nil{
    if instance.SudoMode=="passwordless"{

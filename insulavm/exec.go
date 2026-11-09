@@ -66,6 +66,7 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
   PrivateKeyPath:vm.PrivateKeyPath,
   KnownHostsPath:vm.KnownHostsPath,
   Timeout:connectTimeout,
+  HostKeyAlgorithms:[]string{"ssh-ed25519"},
  },connectTimeout)
  if err!=nil{return nil,err}
  defer client.Close()
