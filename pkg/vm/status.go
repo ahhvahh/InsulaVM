@@ -82,3 +82,15 @@ func ActiveDomainState(ctx context.Context,uri,uuid string) (string,error) {
  }
  return state,nil
 }
+
+// LeaseIPv4 obtains a managed guest's Libvirt DHCP lease before SSH readiness.
+// The registry intentionally does not store the IP until startup succeeds.
+func LeaseIPv4(ctx context.Context,uri,domain string)(string,error){
+ if ctx==nil{return "",errors.New("context required")}
+ if strings.TrimSpace(domain)==""{return "",errors.New("domain name required")}
+ out,err:=virsh(ctx,uri,"domifaddr",domain,"--source","lease")
+ if err!=nil{return "",fmt.Errorf("read Libvirt DHCP lease: %w: %s",err,strings.TrimSpace(string(out)))}
+ ip:=parseIPv4(string(out))
+ if ip==""{return "",errors.New("Libvirt DHCP lease has no IPv4 address")}
+ return ip,nil
+}

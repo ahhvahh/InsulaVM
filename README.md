@@ -12,6 +12,31 @@ O padrão de integração para **ambas** as interfaces está em [CONTR-001 — O
 
 **Atenção:** esta padronização define a API-alvo. O pacote atual implementa apenas parte dela; consulte a matriz de situação nos contratos antes de integrar. Métodos legados da CLI e biblioteca permanecem documentados como implementados. Nenhum método inexistente deve ser considerado disponível apenas por constar na especificação.
 
+## Testes guiados da VM e diagnóstico SSH
+
+A CLI `test` permite instalar, preparar, diagnosticar e exportar uma VM,
+sem depender de GitHub Actions.
+
+```bash
+go build -o insula .
+./insula test doctor
+./insula test download
+./insula test install -profile debian13-mini
+./insula test boot -profile debian13-mini
+./insula test ssh -id UUID_DA_VM
+./insula test shell -id UUID_DA_VM
+./insula test iso -id UUID_DA_VM -name debian13-preparado -confirm
+
+# Do início ao fim, sem interação, usando script confiável:
+./insula test cycle -profile debian13-mini -name debian13-pronto \
+  -startup-script /caminho/preparar.sh -confirm
+```
+
+Erros de autenticação agora informam tentativas e limites independentes de DHCP
+e SSH. `test boot` preserva a VM após falha para diagnóstico.
+A `main` não é modificada e os workflows permanecem desativados.
+Veja [GUIA-004](docs/guias/GUIA-004-testes-guiados.md).
+
 ## Começar
 
 Requisitos: **Go 1.23+**, Linux com KVM/QEMU/Libvirt, `virsh`, `qemu-img`, rede Libvirt com DHCP, permissões para operar o hipervisor e geração de ISO NoCloud (`genisoimage` ou `xorriso`). O `config.yaml` é opcional na linha de comando, mas o arquivo precisa existir no local esperado.

@@ -236,6 +236,12 @@ d-i debian-installer/exit/poweroff boolean true
 `,user,hash,late)
 }
 func debianVirtInstallArgs(uri,network,name,disk,preseed string,req CreateProfileFromISORequest)[]string{
+ // Debian netboot mini.iso has /linux and /initrd.gz. virt-install may
+ // not auto-detect them from an ISO; provide documented explicit paths.
+ location:=req.ISOPath
+ if filepath.Base(req.ISOPath)=="mini.iso"{
+  location+=",kernel=linux,initrd=initrd.gz"
+ }
  return []string{
   "--connect",uri,"--name",name,
   "--memory",strconv.Itoa(req.MemoryMiB),"--vcpus",strconv.Itoa(req.VCPUs),
@@ -243,7 +249,7 @@ func debianVirtInstallArgs(uri,network,name,disk,preseed string,req CreateProfil
   "--disk","path="+disk+",format=qcow2,bus=virtio",
   "--network","network="+network+",model=virtio",
   "--osinfo","detect=on,require=off",
-  "--location",req.ISOPath,
+  "--location",location,
   "--initrd-inject",preseed,
   "--extra-args","auto=true priority=critical locale=en_US.UTF-8 console=ttyS0,115200n8 interface=auto netcfg/dhcp_timeout=60 preseed/file=/preseed.cfg",
   "--graphics","none","--console","pty,target_type=serial",
