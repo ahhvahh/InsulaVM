@@ -345,7 +345,7 @@ func TestAlpineISOXMLContract(t *testing.T) {
 	spec := alpineISODomainXML("insula-alpine-test", "/tmp/iso's & name.iso", 15999)
 	for _, fragment := range []string{
 		"<domain type='kvm'>", "<memory unit='MiB'>500</memory>",
-		"<vcpu>1</vcpu>", "<boot dev='cdrom'/>", "iso&apos;s &amp; name.iso",
+		"<vcpu>1</vcpu>", "<boot dev='cdrom'/>", "iso&#39;s &amp; name.iso",
 		"host='127.0.0.1'", "service='15999'", "<readonly/>",
 	} {
 		if !strings.Contains(spec, fragment) {
