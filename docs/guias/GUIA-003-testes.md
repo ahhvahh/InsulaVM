@@ -17,6 +17,14 @@ bash scripts/tests/unit.sh
 
 O script executa `bash -n`, `go vet ./...`, `go test -race` com relatório de cobertura, compilação do executável, verificação de `help` e compilação da suíte com build tag `integration` **sem executar VMs**. Os testes unitários incluem a matriz da CLI, métodos públicos Go, adaptadores Libvirt/SQLite simulados, escalada de desligamento, exportação ISO simulada, SSH e deploy.
 
+## Integral 2 — ZIP e resposta da VM via Go e CLI
+
+~~~bash
+bash scripts/tests/integral-2-zip.sh
+~~~
+
+A suíte independente cria uma VM Debian 13 Cloud gerenciada por InsulaVM, importa dois ZIPs com 12 arquivos cada pelas interfaces Go e CLI, executa comandos SSH reais para comparar SHA-256 e contagens antes/depois da extração e exige parada graciosa. O workflow de PR é **integral-2-zip-upload-command**; habilite esse check nas regras de merge. Veja [GUIA-006](GUIA-006-teste-integral-2-zip.md).
+
 ## Integrais
 
 **Executar somente em host dedicado** com Libvirt/KVM, rede DHCP, configuração e imagem Debian preparadas. O teste cria e destrói instâncias reais; os perfis criados ficam no storage configurado para inspeção.
