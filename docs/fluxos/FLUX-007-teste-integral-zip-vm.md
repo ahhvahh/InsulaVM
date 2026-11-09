@@ -16,7 +16,7 @@ Provar que o InsulaVM gerencia uma VM real, transfere um ZIP local pelo transpor
 ## Dependências e entradas
 
 - Host Linux amd64 com KVM/Libvirt, rede default ativa e DHCP, Go 1.23+, qemu-img, genisoimage, virsh e ACL de acesso ao UID QEMU.
-- QCOW2 Debian 13 Cloud com Cloud-Init, SSH e Python 3: obtido do espelho oficial e validado por SHA-512 pelo runner, ou fornecido pelo operador.
+- QCOW2 Debian 12 Cloud com Cloud-Init, SSH e Python 3: obtido do espelho oficial e validado por SHA-512 pelo runner, ou fornecido pelo operador.
 - Configuração e SQLite isolados, diretório de workspace configurado em guest.destination.
 - Sem credenciais pré-compartilhadas: o InsulaVM gera SSH/host keys por VM no NoCloud seed.
 
@@ -79,3 +79,7 @@ O workflow independente usa pull_request (opened, synchronize, reopened, ready_f
 - A VM usa uma imagem Debian já instalada em QCOW2; não testa instalação do SO a partir de ISO (coberta por outros fluxos).
 - Em CI o download da imagem Cloud pode consumir centenas de MB; a referência é verificada com SHA-512 do repositório oficial.
 - Sem execução KVM real, apenas testes auxiliares podem ser declarados aprovados.
+
+## Compatibilidade da imagem de teste
+
+A configuração de teste utiliza Debian 12 Cloud (Bookworm) para validar transporte SSH e não o boot de imagens Debian 13. Uma tentativa real com Debian 13 Cloud falhou antes do kernel: o console repetiu "Booting Debian GNU/Linux", sem lease DHCP. O comportamento coincide com [bug Debian #1111240](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1111240), que relata interação entre GRUB terminal_output gfxterm serial e console QEMU/Libvirt. Não confundir essa falha de boot com erro de envio de arquivos ou de rede DHCP. O motor original não foi alterado neste teste; um teste próprio deve validar correções de boot do Debian 13.
