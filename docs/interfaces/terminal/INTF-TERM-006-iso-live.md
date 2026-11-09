@@ -63,3 +63,37 @@ O recurso de força requer aceite consciente: `destroy` não garante limpeza de 
 ```
 
 O argumento posicional final é o **caminho do arquivo ISO**, não o IP da VM. O UUID identifica a VM. Destinos `./...` são relativos ao diretório de execução e caminhos absolutos são aceitos. Quando o nome do perfil não é informado, é derivado do nome do arquivo. A ISO publicada não substitui arquivo existente. Somente após o `shutdown` ser confirmado no Libvirt, a VM é mapeada em modo leitura para montar a ISO. O QCOW2 e o overlay da origem permanecem em falhas de exportação.
+
+## Diagnóstico do boot da ISO sem DHCP ou SSH
+
+O `vm start-iso` aguarda o Debian Live obter um endereço pela rede Libvirt e
+subir o SSH. O limite antigo de três minutos era fixo e podia aparecer como
+`signal: killed`, pois o contexto do comando `virsh domstate` era cancelado.
+
+```bash
+./insula vm start-iso -config ./config.yaml \
+  -profile deb13-abioma-tests-final \
+  -iso ./deb13-abioma-tests-final.iso \
+  -memory-mib 2048 -vcpus 2 \
+  -ssh-ready-timeout 8m \
+  -preserve-on-failure
+
+# Em caso de falha, copie o UUID exibido na mensagem:
+./insula vm status -config ./config.yaml -id UUID_DA_VM
+./insula vm console -config ./config.yaml -id UUID_DA_VM
+
+# Após diagnosticar, se não for mais necessária:
+./insula vm stop -config ./config.yaml -id UUID_DA_VM
+```
+
+A biblioteca Go `LiveISOStartOptions` expõe `SSHReadyTimeout` e
+`PreserveOnFailure`, encaminhados para `vm.StartLiveISOWithOptions`.
+A função anterior `vm.StartLiveISO` continua aceita. O timeout padrão
+é 5 minutos para a prontidão conjunta DHCP/SSH, substituindo os 3 minutos
+fixos da implementação anterior. Um timeout agora informa a etapa
+(`DHCP` ou `SSH`) e mantém `context.DeadlineExceeded` como causa.
+
+A VM é preservada somente quando ela já foi criada e registrada pelo
+InsulaVM. Isso mantém o disco `scratch.qcow2`, o console e as chaves
+de diagnóstico. É necessário executar `vm stop` após a investigação,
+pois `-preserve-on-failure` deixa a VM ativa, consumindo memória.

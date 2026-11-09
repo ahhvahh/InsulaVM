@@ -20,11 +20,24 @@ import (
  "github.com/ahhvahh/InsulaVM/pkg/registry"
 )
 
-// StartLiveISO boots an already prepared Live ISO with a distinct NoCloud
-// seed, an isolated writable scratch disk and a managed SSH identity.
-// Installer ISOs are not supported by this function.
-func StartLiveISO(ctx context.Context,c *config.Config,profileName,isoPath string,memoryMiB,vcpus int,startupScript []byte)(instance *Instance,runErr error){
+// LiveISOStartupOptions controls a Live ISO boot's readiness and diagnostics.
+type LiveISOStartupOptions struct {
+ ReadinessTimeout time.Duration
+ PreserveOnFailure bool
+}
+
+// StartLiveISO keeps the original Go API. Existing integrations are unaffected.
+func StartLiveISO(ctx context.Context,c *config.Config,profileName,isoPath string,memoryMiB,vcpus int,startupScript []byte)(*Instance,error){
+ return StartLiveISOWithOptions(ctx,c,profileName,isoPath,memoryMiB,vcpus,startupScript,LiveISOStartupOptions{})
+}
+
+// StartLiveISOWithOptions boots a Debian Live ISO with a NoCloud seed and
+// isolated scratch disk. When requested, a failed boot is retained so its
+// serial console and Libvirt state can be diagnosed without losing evidence.
+func StartLiveISOWithOptions(ctx context.Context,c *config.Config,profileName,isoPath string,memoryMiB,vcpus int,startupScript []byte,opts LiveISOStartupOptions)(instance *Instance,runErr error){
  if ctx==nil||c==nil{return nil,errors.New("context and configuration required")}
+ if opts.ReadinessTimeout<0{return nil,errors.New("Live ISO readiness timeout must not be negative")}
+ if opts.ReadinessTimeout==0{opts.ReadinessTimeout=5*time.Minute}
  if err:=ctx.Err();err!=nil{return nil,err}
  if memoryMiB<128||vcpus<1{return nil,errors.New("invalid memory or vcpus")}
  stat,err:=os.Stat(isoPath)
@@ -43,12 +56,20 @@ func StartLiveISO(ctx context.Context,c *config.Config,profileName,isoPath strin
   if success{return}
   cleanupCtx,cancel:=context.WithTimeout(context.Background(),25*time.Second)
   defer cancel()
-  if cleanErr:=created.Cleanup(cleanupCtx);cleanErr!=nil{runErr=errors.Join(runErr,cleanErr)}
+  preserved:=opts.PreserveOnFailure&&registered&&created.active
+  if !preserved{
+   if cleanErr:=created.Cleanup(cleanupCtx);cleanErr!=nil{
+    runErr=errors.Join(runErr,fmt.Errorf("cleanup failed Live ISO VM: %w",cleanErr))
+   }
+  }
   if registered{
    if store,err:=registry.Open(created.registryPath);err==nil{
     _=store.SetFailed(cleanupCtx,created.ID)
     _=store.Close()
    }
+  }
+  if preserved{
+   runErr=errors.Join(runErr,fmt.Errorf("diagnostic Live ISO VM preserved: id=%s directory=%s; inspect with 'insula vm status -id %s' and 'insula vm console -id %s'; remove with 'insula vm stop -id %s'",created.ID,created.Directory,created.ID,created.ID,created.ID))
   }
  }()
  id,err:=identity.UUIDv7()
@@ -92,12 +113,16 @@ func StartLiveISO(ctx context.Context,c *config.Config,profileName,isoPath strin
  registered=true
  if out,err:=virsh(ctx,instance.uri,"create",xmlFile);err!=nil{return nil,fmt.Errorf("boot Live ISO: %w: %s",err,strings.TrimSpace(string(out)))}
  instance.active=true
- bootCtx,cancel:=context.WithTimeout(ctx,3*time.Minute)
+ bootCtx,cancel:=context.WithTimeout(ctx,opts.ReadinessTimeout)
  defer cancel()
  ticker:=time.NewTicker(2*time.Second)
  defer ticker.Stop()
  for {
-  if _,err:=ActiveDomainState(bootCtx,instance.uri,id);err!=nil{return nil,fmt.Errorf("Live ISO stopped before DHCP: %w",err)}
+  if bootCtx.Err()!=nil{return nil,liveISOReadinessError("DHCP",opts.ReadinessTimeout,bootCtx.Err())}
+  if _,err:=ActiveDomainState(bootCtx,instance.uri,id);err!=nil{
+   if bootCtx.Err()!=nil{return nil,liveISOReadinessError("DHCP",opts.ReadinessTimeout,bootCtx.Err())}
+   return nil,fmt.Errorf("Live ISO state check before DHCP failed: %w",err)
+  }
   out,err:=virsh(bootCtx,instance.uri,"domifaddr",instance.Name,"--source","lease")
   if err==nil{
    if ip:=parseIPv4(string(out));ip!=""{
@@ -108,13 +133,17 @@ func StartLiveISO(ctx context.Context,c *config.Config,profileName,isoPath strin
    }
   }
   select{
-  case <-bootCtx.Done():return nil,fmt.Errorf("Live ISO DHCP readiness: %w",bootCtx.Err())
+  case <-bootCtx.Done():return nil,liveISOReadinessError("DHCP",opts.ReadinessTimeout,bootCtx.Err())
   case <-ticker.C:
   }
  }
  var lastErr error
  for {
-  if _,err:=ActiveDomainState(bootCtx,instance.uri,id);err!=nil{return nil,fmt.Errorf("Live ISO stopped before SSH: %w",err)}
+  if bootCtx.Err()!=nil{return nil,liveISOReadinessError("SSH",opts.ReadinessTimeout,bootCtx.Err())}
+  if _,err:=ActiveDomainState(bootCtx,instance.uri,id);err!=nil{
+   if bootCtx.Err()!=nil{return nil,liveISOReadinessError("SSH",opts.ReadinessTimeout,bootCtx.Err())}
+   return nil,fmt.Errorf("Live ISO state check before SSH failed: %w",err)
+  }
   client,err:=executor.Dial(executor.DialConfig{
    Address:instance.Address,User:instance.SSHUser,
    PrivateKeyPath:instance.SSHPrivateKeyPath,KnownHostsPath:instance.SSHKnownHostsPath,Timeout:8*time.Second,
@@ -131,7 +160,7 @@ func StartLiveISO(ctx context.Context,c *config.Config,profileName,isoPath strin
   }
   lastErr=err
   select{
-  case <-bootCtx.Done():return nil,fmt.Errorf("Live ISO SSH readiness: %w: %v",bootCtx.Err(),lastErr)
+  case <-bootCtx.Done():return nil,fmt.Errorf("%w; last SSH error: %v",liveISOReadinessError("SSH",opts.ReadinessTimeout,bootCtx.Err()),lastErr)
   case <-ticker.C:
   }
  }
@@ -145,6 +174,13 @@ func StartLiveISO(ctx context.Context,c *config.Config,profileName,isoPath strin
  }
  success=true
  return instance,nil
+}
+
+func liveISOReadinessError(stage string,timeout time.Duration,err error)error{
+ if errors.Is(err,context.DeadlineExceeded){
+  return fmt.Errorf("Live ISO did not reach %s readiness within %s (the VM may still be booting, without DHCP or SSH; use -preserve-on-failure to inspect its console): %w",stage,timeout,err)
+ }
+ return fmt.Errorf("Live ISO %s readiness interrupted: %w",stage,err)
 }
 
 func liveISODomainXML(uuid,name string,memory,vcpus int,iso,seed,scratch,network,mac string)string{

@@ -78,7 +78,10 @@ func vmCommand(args []string)error{
   fmt.Println("Para encerrar: insula vm stop -id",instance.ID)
  case "start-iso":
   if *profileName==""{return errors.New("vm start-iso requires -profile")}
-  instance,err:=engine.StartVMFromISO(ctx,insulavm.LiveISOStartOptions{Profile:*profileName,ISOPath:*isoPath,MemoryMiB:*memoryMiB,VCPUs:*vcpus,StartupScriptPath:*startupScript})
+  instance,err:=engine.StartVMFromISO(ctx,insulavm.LiveISOStartOptions{
+   Profile:*profileName,ISOPath:*isoPath,MemoryMiB:*memoryMiB,VCPUs:*vcpus,
+   StartupScriptPath:*startupScript,SSHReadyTimeout:*sshReadyTimeout,PreserveOnFailure:*preserveOnFailure,
+  })
   if err!=nil{return presentCLIError(err,root)}
   fmt.Printf("VM LIVE pronta: id=%s profile=%s ip=%s user=%s\n",instance.ID,instance.Profile,instance.IPAddress,instance.SSHUser)
   fmt.Println("SSH:",sshCommandForCLI(instance.SSHPrivateKeyPath,instance.SSHKnownHostsPath,instance.SSHUser,instance.IPAddress))

@@ -3,6 +3,10 @@ package vm
 import (
  "strings"
  "testing"
+ "context"
+ "errors"
+ "time"
+ "github.com/ahhvahh/InsulaVM/pkg/config"
 )
 
 func TestLiveISODomainXML(t *testing.T){
@@ -19,4 +23,18 @@ func TestLiveISODomainHasGracefulShutdownDevices(t *testing.T){
  for _,want:=range []string{"<features><acpi/></features>","org.qemu.guest_agent.0"}{
   if !strings.Contains(spec,want){t.Fatalf("missing %s in XML: %s",want,spec)}
  }
+}
+
+func TestLiveISOReadinessErrorReportsTimeout(t *testing.T){
+ err:=liveISOReadinessError("DHCP",8*time.Minute,context.DeadlineExceeded)
+ if !errors.Is(err,context.DeadlineExceeded){t.Fatalf("missing original deadline: %v",err)}
+ for _,want:=range []string{"DHCP","8m0s","-preserve-on-failure"}{
+  if !strings.Contains(err.Error(),want){t.Fatalf("missing %s: %v",want,err)}
+ }
+ err=liveISOReadinessError("SSH",5*time.Minute,context.Canceled)
+ if !errors.Is(err,context.Canceled){t.Fatalf("lost cancel cause: %v",err)}
+}
+func TestLiveISOStartupRejectsNegativeReadinessTimeout(t *testing.T){
+ _,err:=StartLiveISOWithOptions(context.Background(),&config.Config{},"x","/not-an-iso",1024,1,nil,LiveISOStartupOptions{ReadinessTimeout:-time.Second})
+ if err==nil||!strings.Contains(err.Error(),"readiness timeout"){t.Fatalf("unexpected error: %v",err)}
 }
