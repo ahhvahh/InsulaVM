@@ -10,11 +10,20 @@
 
 ## CLI
 
+Baixe a ISO oficial Debian 13 netinst e valide o SHA256 antes de criar o perfil:
+
+```bash
+ISO="$(bash scripts/baixar-debian.sh)"
+# Opções: --output-dir /isos  e  --force (substituir arquivo com checksum inválido)
+```
+
+O script grava por padrão em `data/isos` (ignorado pelo Git), reutiliza arquivos válidos e escreve somente o caminho absoluto no stdout. Isso não instala o SO; a instalação é realizada pelo comando seguinte.
+
 ```bash
 insula profile create-from-iso \
   -config /etc/insulavm/config.yaml \
   -name debian13-build \
-  -iso /isos/debian-13-amd64-netinst.iso \
+  -iso "$ISO" \
   -memory-mib 2048 -vcpus 2 -disk-gb 12 \
   -install-timeout 90m
 
