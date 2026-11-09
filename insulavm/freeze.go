@@ -21,6 +21,15 @@ type VMFreezeRequest struct {
  VMID string
  Name string
  ShutdownTimeout time.Duration
+ // Explicit recovery controls. Never force shutdown or skip credential cleanup by default.
+ ForceShutdown bool
+ SkipGuestCleanup bool
+ // AllowStopped safely captures an existing overlay only if Libvirt confirms
+ // the old transient VM is absent AND the operator explicitly opts in.
+ AllowStopped bool
+ // ExportISO creates a Debian Live ISO after publishing the QCOW2.
+ // The QCOW2 always survives if ISO creation fails.
+ ExportISO bool
  OnProgress func(VMFreezeProgress)
 }
 
@@ -35,6 +44,8 @@ type VMFreezeResult struct {
  ImagePath string
  SourceStopped bool
  SourceCleaned bool
+ ForcedShutdown bool
+ ISOPath string
 }
 
 // FreezeVM captures a reusable QCOW2 base, not a bootable ISO.
@@ -61,10 +72,14 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
  if record.ID!=record.LibvirtUUID {
   return result,errors.New("registered VM UUID does not match Libvirt domain; refusing freeze")
  }
- if record.Status!="running"||!checked.IsRunning(){
-  return result,fmt.Errorf("VM must be running (SQLite=%s, Libvirt=%s)",record.Status,checked.LibvirtState)
+ // An already-stopped transient VM can be recovered without SSH only with
+ // explicit operator approval. A destroyed instance is never recoverable.
+ running:=record.Status=="running"&&checked.IsRunning()
+ stopped:=record.Status=="running"&&checked.LibvirtState=="absent"
+ if !running && !(stopped&&req.AllowStopped&&req.SkipGuestCleanup){
+  return result,fmt.Errorf("VM must be running or explicitly recoverable (SQLite=%s, Libvirt=%s)",record.Status,checked.LibvirtState)
  }
- if record.SudoMode!="passwordless" {
+ if !req.SkipGuestCleanup && record.SudoMode!="passwordless"{
   return result,errors.New("freeze requires passwordless sudo for cloud-init identity cleanup")
  }
  original,err:=e.GetProfile(record.Profile)
@@ -88,21 +103,29 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
   return result,fmt.Errorf("frozen profile %q already exists; choose another name",req.Name)
  }else if !errors.Is(err,os.ErrNotExist){return result,err}
 
- notify("clean","Resetting cloud-init and per-instance SSH identity before capture")
- // The original SSH connection remains valid after authorized_keys removal;
- // the new per-instance NoCloud seed will install new keys on next boot.
- guestCmd:="set -eu; command -v cloud-init >/dev/null; "+
-  "home_dir=$(getent passwd "+quoteGuest(record.SSHUser)+" | cut -d: -f6); "+
-  "test -n \"$home_dir\"; cloud-init clean --logs --machine-id --seed; "+
-  "rm -f -- \"$home_dir/.ssh/authorized_keys\"; rm -f /etc/ssh/ssh_host_*"
- _,err=e.ExecVM(ctx,ExecRequest{
-  VMID:req.VMID,Command:guestCmd,Sudo:true,CommandTimeout:2*time.Minute,
- })
- if err!=nil{return result,fmt.Errorf("prepare guest for cloning: %w",err)}
-
- notify("shutdown","Requesting graceful shutdown; source overlay is preserved")
- if err:=vm.ShutdownForFreeze(ctx,e.config.Virtualization.LibvirtURI,record.LibvirtUUID,req.ShutdownTimeout);err!=nil{
-  return result,err
+ if !req.SkipGuestCleanup{
+  notify("clean","Resetting cloud-init and per-instance SSH identity before capture")
+  // The existing SSH connection remains alive long enough to finish cleanup.
+  // On retry after a shutdown failure, an operator must set SkipGuestCleanup.
+  guestCmd:="set -eu; command -v cloud-init >/dev/null; "+
+   "home_dir=$(getent passwd "+quoteGuest(record.SSHUser)+" | cut -d: -f6); "+
+   "test -n \"$home_dir\"; cloud-init clean --logs --machine-id --seed; "+
+   "rm -f -- \"$home_dir/.ssh/authorized_keys\"; rm -f /etc/ssh/ssh_host_*"
+  _,err=e.ExecVM(ctx,ExecRequest{
+   VMID:req.VMID,Command:guestCmd,Sudo:true,CommandTimeout:2*time.Minute,
+  })
+  if err!=nil{return result,fmt.Errorf("prepare guest for cloning: %w",err)}
+ }else{
+  notify("clean","Guest cleanup skipped by explicit recovery option (verify identity was cleaned previously)")
+ }
+ if running{
+  notify("shutdown","Requesting graceful VM shutdown; source overlay preserved on failure")
+  forced,shutdownErr:=vm.ShutdownForFreezeWithOptions(ctx,e.config.Virtualization.LibvirtURI,record.LibvirtUUID,req.ShutdownTimeout,req.ForceShutdown)
+  result.ForcedShutdown=forced
+  if shutdownErr!=nil{return result,shutdownErr}
+  if forced{notify("shutdown","WARNING: forced power-off; captured disk may need filesystem recovery")}
+ }else{
+  notify("shutdown","VM already absent in Libvirt; recovering stopped overlay")
  }
  result.SourceStopped=true
 
@@ -120,6 +143,14 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
   return result,fmt.Errorf("profile %s is already saved, but source VM cleanup failed: %w",req.Name,err)
  }
  result.SourceCleaned=true
- notify("ready","Use insula vm start -profile "+req.Name)
+ if req.ExportISO{
+  notify("iso","Exporting Debian Live ISO from saved QCOW2")
+  iso,isoErr:=e.ExportProfileLiveISO(ctx,req.Name)
+  if isoErr!=nil{
+   return result,fmt.Errorf("QCOW2 profile %s saved; Live ISO export failed (retry: insula profile export-iso -name %s): %w",req.Name,req.Name,isoErr)
+  }
+  result.ISOPath=iso
+ }
+ notify("ready","Frozen QCOW2 profile ready: "+req.Name)
  return result,nil
 }

@@ -3,7 +3,7 @@
 
 # FLUX-004 — Congelar VM gerenciada como perfil reutilizável
 
-**Estado:** implementado para gerar um QCOW2 independente de uma VM já instalada; não produz ISO de instalação ou ISO Live.
+**Estado:** implementado para gerar QCOW2 independente; a CLI `vm freeze` também tenta produzir ISO Live Debian. Teste integral real ainda pendente.
 **Versão aprovada:** nenhuma.
 **Evidências:** [FreezeVM](../../insulavm/freeze.go), [ShutdownForFreeze](../../pkg/vm/freeze.go), [FreezeFromOverlay](../../pkg/profile/freeze.go) e [testes de conversão](../../pkg/profile/freeze_test.go).
 **Interface CLI:** [INTF-TERM-004](../interfaces/terminal/INTF-TERM-004-gerenciar-vms.md).
@@ -78,6 +78,16 @@ A imagem resultante ainda pode conter tokens, dados privados, arquivos temporár
 ## Resultado
 
 `FreezeVM(ctx, VMFreezeRequest)` retorna `VMFreezeResult` com `VMID`, `ProfileName`, `ImagePath`, `SourceStopped` e `SourceCleaned`, além de erro quando aplicável. A CLI usa código de saída `0` no sucesso e `1` em erro. Os testes automatizados empregam Libvirt/QEMU simulados; **boot e congelamento completo em KVM real não foram verificados aqui**.
+
+## Desligamento corrigido e ISO Live
+
+- A definição XML de novas VMs inclui `<features><acpi/></features>` e canal virtio `org.qemu.guest_agent.0` para o QEMU Guest Agent. Isso aumenta a confiabilidade do desligamento, mas não altera domínios já iniciados.
+- `ShutdownForFreezeWithOptions` tenta desligamento gracioso e verifica continuamente no Libvirt até o domínio transitório desaparecer. Só com `ForceShutdown=true` / CLI `-force-freeze-shutdown` o hipervisor executa `destroy` após exceder o prazo; neste caso há risco de inconsistência, pois equivale a desligamento abrupto.
+- Recuperação específica de falha anterior: `SkipGuestCleanup=true` / `-skip-guest-cleanup` pula a repetição do `cloud-init clean` quando a tentativa anterior já removeu as chaves SSH. O operador deve ter certeza de que a limpeza já ocorreu. `AllowStopped=true` / `-recover-stopped` permite captura de overlay quando a VM tem SQLite `running` e Libvirt `absent`, somente junto com o salto explícito da limpeza; VMs marcadas `destroyed` não são recuperáveis.
+- `VMFreezeRequest.ExportISO=true` e `vm freeze` (padrão `-export-iso=true`) criam ISO Live após registrar QCOW2. A CLI usa também `-prepare-live-boot=true` para instalar/atualizar `live-boot` antes da limpeza de identidade, quando há SSH disponível; em recuperação usar `-prepare-live-boot=false`.
+- Se a preparação do convidado falhar, a VM permanece intacta. Se o exportador Live ISO falhar depois do desligamento, a imagem QCOW2 já publicada **não é removida**: o resultado retorna `ImagePath` e erro com instrução de repetir `insula profile export-iso -name NOME`. `live-boot-initramfs-tools` e seus scripts no initramfs são pré-requisitos de uma **ISO Live inicializável**. O InsulaVM nunca renomeia um QCOW2 para `.iso`.
+- Para salvar apenas o disco use `vm freeze -export-iso=false`, mantendo o contrato de clonagem existente. Para copiar a ISO gerada a `/tmp`, copie o arquivo de `profiles/<nome>/exports/<nome>-live.iso`.
+- Enquanto não houver validação KVM real, não declarar que a ISO foi inicializada com sucesso.
 
 ## Referências
 

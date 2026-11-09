@@ -12,3 +12,11 @@ func TestLiveISODomainXML(t *testing.T){
  }
  if strings.Count(raw,"device='cdrom'")!=2{t.Fatalf("expected 2 read-only CDROMs: %s",raw)}
 }
+
+func TestLiveISODomainHasGracefulShutdownDevices(t *testing.T){
+ spec:=liveISODomainXML("01a11111-1111-7111-8111-111111111111","insula-live",1024,1,
+  "/tmp/live.iso","/tmp/seed.iso","/tmp/scratch.qcow2","default","52:54:00:aa:bb:cc")
+ for _,want:=range []string{"<features><acpi/></features>","org.qemu.guest_agent.0"}{
+  if !strings.Contains(spec,want){t.Fatalf("missing %s in XML: %s",want,spec)}
+ }
+}

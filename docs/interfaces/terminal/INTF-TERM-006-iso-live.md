@@ -12,7 +12,7 @@
 | CLI | Biblioteca Go | Entrada | Saída |
 | --- | --- | --- | --- |
 | insula profile clone -source ORIGEM -name NOVO | CloneProfile | Dois nomes de perfil | Perfil clonado |
-| insula profile export-iso -name PERFIL | ExportProfileLiveISO | Perfil QCOW2 Debian com live-boot | Caminho ISO em exports/ |
+| insula vm freeze -id UUID -name PERFIL [-prepare-live-boot=false] [-force-freeze-shutdown] | FreezeVM / ExportVMToLiveISO | VM gerenciada com overlay intacto; confirmação expressa para forçar | Perfil QCOW2 e, por padrão, ISO Live em exports/ |\n| insula profile export-iso -name PERFIL | ExportProfileLiveISO | Perfil QCOW2 Debian com live-boot | Caminho ISO em exports/ |
 | insula vm start-iso -profile PERFIL -iso ISO | StartVMFromISO | Perfil registrado e ISO Live com Cloud-Init; script inicial opcional | UUID, IP, SSH |
 | insula vm console -id UUID | OpenConsole | UUID e terminal de origem | Console serial no stdin/stdout/stderr |
 | insula vm stop -id UUID -grace-timeout 30s -force-after-timeout=true | StopVMWithOptions | UUID, timeout e escalada | graceful/forced/timed_out |
@@ -38,3 +38,16 @@ insula vm stop -id UUID -grace-timeout 30s -force-after-timeout=true
 
 
 O boot real ainda depende da infraestrutura do usuário e de teste integral aprovado. Consulte [GUIA-003](../../guias/GUIA-003-testes.md).
+
+## Recuperar falha de desligamento anterior
+
+```bash
+insula vm status -id UUID
+# A tentativa anterior já executou cloud-init clean e apagou authorized_keys.
+insula vm freeze -id UUID -name deb13-abioma-tests-final \
+  -skip-guest-cleanup -prepare-live-boot=false \
+  -force-freeze-shutdown -shutdown-timeout 20s
+# Se já não existir domínio ativo, adicionar -recover-stopped.
+```
+
+O recurso de força requer aceite consciente: `destroy` não garante limpeza de cache do convidado. Se não houver `live-boot` no QCOW2, a ISO Live falhará, **mas o perfil QCOW2 permanece salvo** para recuperação e nova preparação. Para formato somente QCOW2, usar `-export-iso=false`.

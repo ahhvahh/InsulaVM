@@ -24,7 +24,11 @@ func vmCommand(args []string)error{
  vcpus:=fs.Int("vcpus",0,"override guest vCPUs for this VM only; 0 keeps profile default")
  sshReadyTimeout:=fs.Duration("ssh-ready-timeout",5*time.Minute,"wait for SSH after DHCP; default 5m")
  preserveOnFailure:=fs.Bool("preserve-on-failure",false,"retain failed guest and SSH credentials for diagnosis; stop it manually")
- prepareLiveBoot:=fs.Bool("prepare-live-boot",false,"install live-boot inside managed Debian before freezing for ISO export")
+ prepareLiveBoot:=fs.Bool("prepare-live-boot",true,"prepare guest Live boot support before ISO export (disable for previously cleaned recovery)")
+ exportISO:=fs.Bool("export-iso",true,"make a Debian Live ISO after freezing; false saves only QCOW2")
+ forceFreeze:=fs.Bool("force-freeze-shutdown",false,"explicitly force-stop VM after graceful timeout; risks crash-consistent disk")
+ skipGuestCleanup:=fs.Bool("skip-guest-cleanup",false,"recovery only: guest identity was already cleaned by prior failed freeze")
+ allowStopped:=fs.Bool("recover-stopped",false,"recovery only: allow an already stopped transient VM with intact overlay")
  graceTimeout:=fs.Duration("grace-timeout",30*time.Second,"VM graceful shutdown deadline before escalation")
  forceAfterTimeout:=fs.Bool("force-after-timeout",true,"use hard destroy after graceful shutdown deadline")
  dryRun:=fs.Bool("dry-run",false,"list managed VMs that would be stopped by stop-all without changing them")
@@ -131,29 +135,54 @@ func vmCommand(args []string)error{
   return nil
  case "freeze":
   if *id==""||*freezeName==""{return errors.New("vm freeze requires -id and -name")}
+  if !*exportISO && *prepareLiveBoot{fmt.Fprintln(os.Stderr,"[InsulaVM] -prepare-live-boot ignored without -export-iso")}
+  if *exportISO && *prepareLiveBoot && (*skipGuestCleanup || *allowStopped){
+   return errors.New("recovery mode requires -prepare-live-boot=false; the VM cannot be accessed through SSH after prior identity cleanup")
+  }
+  onProgress:=func(p insulavm.VMFreezeProgress){
+   fmt.Fprintf(os.Stderr,"[InsulaVM][freeze:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
+  }
+  if *exportISO && *prepareLiveBoot{
+   exported,err:=engine.ExportVMToLiveISO(ctx,insulavm.VMExportISORequest{
+    VMID:*id,Name:*freezeName,PrepareLiveBoot:true,ShutdownTimeout:*shutdownTimeout,CommandTimeout:*cmdTimeout,
+    ForceShutdown:*forceFreeze,SkipGuestCleanup:*skipGuestCleanup,AllowStopped:*allowStopped,OnProgress:onProgress,
+   })
+   if exported!=nil&&exported.Freeze!=nil&&exported.Freeze.ImagePath!=""{
+    fmt.Printf("Perfil QCOW2 salvo: %s imagem=%s\n",exported.Freeze.ProfileName,localPathForCLI(exported.Freeze.ImagePath))
+   }
+   if err!=nil{return presentCLIError(err,root)}
+   fmt.Printf("FREEZE SUCCESS: name=%s iso=%s source=%s forced=%t\n",
+    exported.Freeze.ProfileName,localPathForCLI(exported.ISOPath),*id,exported.Freeze.ForcedShutdown)
+   return nil
+  }
   result,err:=engine.FreezeVM(ctx,insulavm.VMFreezeRequest{
    VMID:*id,Name:*freezeName,ShutdownTimeout:*shutdownTimeout,
-   OnProgress:func(p insulavm.VMFreezeProgress){
-    fmt.Fprintf(os.Stderr,"[InsulaVM][freeze:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
-   },
+   ForceShutdown:*forceFreeze,SkipGuestCleanup:*skipGuestCleanup,
+   AllowStopped:*allowStopped,ExportISO:*exportISO,OnProgress:onProgress,
   })
   if result!=nil&&result.ImagePath!=""{
-   fmt.Printf("Perfil congelado: %s imagem=%s origem_encerrada=%t\n",result.ProfileName,localPathForCLI(result.ImagePath),result.SourceCleaned)
+   fmt.Printf("Perfil QCOW2 salvo: %s imagem=%s origem_encerrada=%t forzado=%t\n",
+    result.ProfileName,localPathForCLI(result.ImagePath),result.SourceCleaned,result.ForcedShutdown)
   }
   if err!=nil{return presentCLIError(err,root)}
+  if result.ISOPath!=""{fmt.Printf("ISO Live criada: %s\n",localPathForCLI(result.ISOPath))}
   fmt.Printf("FREEZE SUCCESS: name=%s source=%s\n",result.ProfileName,result.VMID)
-  return nil
  case "export-iso":
   if *id==""||*freezeName==""{return errors.New("vm export-iso requires -id and -name")}
-  result,err:=engine.ExportVMToLiveISO(ctx,insulavm.VMExportISORequest{
+  exported,err:=engine.ExportVMToLiveISO(ctx,insulavm.VMExportISORequest{
    VMID:*id,Name:*freezeName,PrepareLiveBoot:*prepareLiveBoot,
    ShutdownTimeout:*shutdownTimeout,CommandTimeout:*cmdTimeout,
+   ForceShutdown:*forceFreeze,SkipGuestCleanup:*skipGuestCleanup,AllowStopped:*allowStopped,
    OnProgress:func(p insulavm.VMFreezeProgress){
     fmt.Fprintf(os.Stderr,"[InsulaVM][export-iso:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
    },
   })
+  if exported!=nil&&exported.Freeze!=nil&&exported.Freeze.ImagePath!=""{
+   fmt.Printf("Perfil QCOW2 salvo: %s imagem=%s\n",exported.Freeze.ProfileName,localPathForCLI(exported.Freeze.ImagePath))
+  }
   if err!=nil{return presentCLIError(err,root)}
-  fmt.Printf("VM ISO OK: profile=%s iso=%s source=%s\n",result.Freeze.ProfileName,localPathForCLI(result.ISOPath),*id)
+  fmt.Printf("VM ISO OK: profile=%s iso=%s source=%s forced=%t\n",
+   exported.Freeze.ProfileName,localPathForCLI(exported.ISOPath),*id,exported.Freeze.ForcedShutdown)
  case "stop-all":
   if *id!=""{return errors.New("vm stop-all does not accept -id; use vm stop -id UUID instead")}
   result,err:=engine.StopAllVMs(ctx,insulavm.VMStopAllOptions{

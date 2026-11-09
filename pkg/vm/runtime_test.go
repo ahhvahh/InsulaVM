@@ -24,6 +24,9 @@ func TestDomainXMLAttributesAreEscaped(t *testing.T){
  if !strings.Contains(result,"guest&#39;s.qcow2") && !strings.Contains(result,"guest&apos;s.qcow2"){t.Fatalf("unescaped attribute: %s",result)}
  if !strings.Contains(result,"<memory unit='MiB'>512</memory>"){t.Fatal("RAM not present")}
  if !strings.Contains(result,"<vcpu>1</vcpu>"){t.Fatal("vCPU not present")}
+ for _,want:=range []string{"<features><acpi/></features>","org.qemu.guest_agent.0"}{
+  if !strings.Contains(result,want){t.Fatalf("missing power management %q: %s",want,result)}
+ }
 }
 
 func TestCloudInitSeedIsAttachedToDomain(t *testing.T){

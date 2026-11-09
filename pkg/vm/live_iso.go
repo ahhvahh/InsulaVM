@@ -157,9 +157,10 @@ func liveISODomainXML(uuid,name string,memory,vcpus int,iso,seed,scratch,network
   return "<disk type='file' device='cdrom'><driver name='qemu' type='raw'/><source file='"+esc(source)+"'/><target dev='"+target+"' bus='sata'/><readonly/></disk>"
  }
  return fmt.Sprintf("<domain type='kvm'><name>%s</name><uuid>%s</uuid><memory unit='MiB'>%d</memory><vcpu>%d</vcpu>"+
-  "<os><type arch='x86_64'>hvm</type><boot dev='cdrom'/></os><devices>"+
+  "<os><type arch='x86_64'>hvm</type><boot dev='cdrom'/></os><features><acpi/></features><devices>"+
   "%s%s<disk type='file' device='disk'><driver name='qemu' type='qcow2'/><source file='%s'/><target dev='vda' bus='virtio'/></disk>"+
   "<interface type='network'><mac address='%s'/><source network='%s'/><model type='virtio'/></interface>"+
+  "<channel type='unix'><source mode='bind'/><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"+
   "<serial type='pty'><target port='0'/></serial><console type='pty'><target type='serial' port='0'/></console>"+
   "</devices></domain>",esc(name),esc(uuid),memory,vcpus,cdrom(iso,"sda"),cdrom(seed,"sdb"),esc(scratch),esc(mac),esc(network))
 }

@@ -2,6 +2,7 @@ package insulavm
 
 import (
  "context"
+ "bytes"
  "errors"
  "fmt"
  "strings"
@@ -14,6 +15,9 @@ type VMExportISORequest struct {
  VMID string
  Name string
  PrepareLiveBoot bool
+ ForceShutdown bool
+ SkipGuestCleanup bool
+ AllowStopped bool
  ShutdownTimeout time.Duration
  CommandTimeout time.Duration
  OnProgress func(VMFreezeProgress)
@@ -36,22 +40,28 @@ func(e *Engine)ExportVMToLiveISO(ctx context.Context,req VMExportISORequest)(*VM
  }
  if req.CommandTimeout<0{return nil,errors.New("command timeout must not be negative")}
  if req.CommandTimeout==0{req.CommandTimeout=30*time.Minute}
- cmd:="test -d /usr/share/initramfs-tools/scripts/live"
  if req.PrepareLiveBoot{
-  cmd="DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends live-boot && update-initramfs -u && test -d /usr/share/initramfs-tools/scripts/live"
- }
- _,err:=e.ExecVM(ctx,ExecRequest{
-  VMID:req.VMID,Command:cmd,Sudo:req.PrepareLiveBoot,CommandTimeout:req.CommandTimeout,
- })
- if err!=nil{
-  if !req.PrepareLiveBoot{return nil,fmt.Errorf("guest needs live-boot before ISO export; use PrepareLiveBoot or install it manually: %w",err)}
-  return nil,fmt.Errorf("prepare guest for ISO export: %w",err)
+  if req.SkipGuestCleanup||req.AllowStopped{
+   return nil,errors.New("cannot prepare live-boot via SSH in recovery mode; export existing QCOW2 then prepare a new VM separately")
+  }
+  // Avoid apt-get update when the Live boot scripts are already installed.
+  var output bytes.Buffer
+  cmd:="if test -f /usr/share/initramfs-tools/scripts/live; then update-initramfs -u; else DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends live-boot live-boot-initramfs-tools && update-initramfs -u; fi; test -f /usr/share/initramfs-tools/scripts/live"
+  run,err:=e.ExecVM(ctx,ExecRequest{
+   VMID:req.VMID,Command:cmd,Sudo:true,CommandTimeout:req.CommandTimeout,Output:&output,
+  })
+  if err!=nil{
+   logHint:=""
+   if run!=nil{logHint=run.LogDirectory}
+   return nil,fmt.Errorf("prepare guest live-boot failed before freeze (VM remains intact); logs=%s: %w: %s",logHint,err,output.String())
+  }
  }
  freeze,err:=e.FreezeVM(ctx,VMFreezeRequest{
-  VMID:req.VMID,Name:req.Name,ShutdownTimeout:req.ShutdownTimeout,OnProgress:req.OnProgress,
+  VMID:req.VMID,Name:req.Name,ShutdownTimeout:req.ShutdownTimeout,
+  ForceShutdown:req.ForceShutdown,SkipGuestCleanup:req.SkipGuestCleanup,
+  AllowStopped:req.AllowStopped,ExportISO:true,OnProgress:req.OnProgress,
  })
- if err!=nil{return &VMExportISOResult{Freeze:freeze},err}
- iso,err:=e.ExportProfileLiveISO(ctx,req.Name)
- if err!=nil{return &VMExportISOResult{Freeze:freeze},fmt.Errorf("profile saved but Live ISO export failed; retry profile export-iso -name %s: %w",req.Name,err)}
- return &VMExportISOResult{Freeze:freeze,ISOPath:iso},nil
+ result:=&VMExportISOResult{Freeze:freeze}
+ if freeze!=nil{result.ISOPath=freeze.ISOPath}
+ return result,err
 }
