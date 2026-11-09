@@ -17,6 +17,21 @@ bash scripts/tests/unit.sh
 
 O script executa `bash -n`, `go vet ./...`, `go test -race` com relatório de cobertura, compilação do executável, verificação de `help` e compilação da suíte com build tag `integration` **sem executar VMs**. Os testes unitários incluem a matriz da CLI, métodos públicos Go, adaptadores Libvirt/SQLite simulados, escalada de desligamento, exportação ISO simulada, SSH e deploy.
 
+## Teste integral obrigatório: Alpine Virtual ISO
+
+Para comprovar **boot de uma ISO oficial sem Cloud-Init ou SSH**, executar em host KVM/Libvirt:
+
+```bash
+bash scripts/tests/alpine-iso.sh --config /etc/insulavm/test-config.yaml
+# Alternativamente, utilizar ISO local confiável:
+bash scripts/tests/alpine-iso.sh --config /etc/insulavm/test-config.yaml \\
+  --iso /var/lib/libvirt/images/alpine-virt-3.24.4-x86_64.iso
+```
+
+A ISO Alpine Virtual 3.24.4 (~67 MB) é baixada do espelho oficial e validada via SHA-256. O teste inicia um domínio Libvirt **transitório** com **1 vCPU, 500 MiB**, abre o console serial ttyS0, efetua login root da mídia Live, executa `uname -m` e valida `/etc/alpine-release` por um marcador de saída e código zero. Envia `poweroff` dentro do guest e exige que o domínio desapareça do Libvirt. Um `virsh destroy` usado apenas para limpeza após falhas **não passa** no teste. Evidências: `storage.logs/alpine-iso-*/domain.xml` e `serial.log` (arquivos privados). Sem KVM real, este teste **falha**, não conta como sucesso.
+
+O runner `integration.sh` chama este teste obrigatoriamente, mesmo com `--skip-live-iso` ou `--skip-go-api`. `--alpine-iso /caminho/absoluto.iso` reutiliza uma ISO local. Este cenário isola a cadeia **ISO → firmware → bootloader → kernel → shell → shutdown**; não valida o provisionamento de SSH/Cloud-Init de `vm start-iso`, que continua coberto por cenários separados. Ver [GUIA-005](GUIA-005-alpine-iso.md).
+
 ## Integrais
 
 **Executar somente em host dedicado** com Libvirt/KVM, rede DHCP, configuração e imagem Debian preparadas. O teste cria e destrói instâncias reais; os perfis criados ficam no storage configurado para inspeção.
@@ -25,6 +40,7 @@ O script executa `bash -n`, `go vet ./...`, `go test -race` com relatório de co
 bash scripts/tests/integration.sh \
   --config /etc/insulavm/test-config.yaml \
   --base-qcow2 /var/lib/insulavm-test/debian13-cloud.qcow2
+# O teste Alpine roda primeiro e é obrigatório.
 ```
 
 
