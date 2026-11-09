@@ -124,3 +124,60 @@ IP quando existe uma concessão DHCP observável na rede Libvirt.
 
 **Teste KVM real:** pendente. O seed de rede melhora a determinação da
 interface de DHCP, mas não substitui a verificação de console/boot.
+
+## Diagnóstico persistente e recuperação sem apagar a VM
+
+Na inicialização por `start-iso`, o InsulaVM cria em `storage.logs`:
+`live-iso/<UUID>/events.log` (estágios, DHCP, SSH e falhas).
+Se a VM falhar, grava também `live-iso/<UUID>/diagnostic.log` com
+`virsh domstate`, `dominfo`, `domiflist`, `domifaddr --source lease`,
+estado da rede e concessão DHCP referente ao **MAC desta VM**.
+Os arquivos têm acesso privado (`0600` para logs, diretório `0700`)
+e sobrevivem à remoção do overlay, sem armazenar credenciais.
+
+O `start-iso` **agora preserva uma VM que já chegou a iniciar no Libvirt
+quando falha DHCP/SSH**, sem exigir `-preserve-on-failure`.
+Para restaurar a política anterior, use `-preserve-on-failure=false`.
+Falhas anteriores ao registro da VM continuam sujeitas a limpeza.
+A opção `-serial-log` inclui `<log file=...>` no console serial PTY do
+Libvirt e grava mensagens do kernel/GRUB em `serial.log`, caso o host tenha
+permissão para o arquivo e suporte a `virtlogd`. É **opt-in**, pois alguns
+hospedeiros têm política QEMU/SELinux/AppArmor que pode rejeitar gravação
+nessa localização. O campo `virtualization.qemu_uid` permite conceder ACL
+restrita ao usuário QEMU quando necessário.
+
+Exemplo completo, sem chamar o virsh diretamente:
+
+```bash
+./insula vm start-iso -config ./config.yaml \
+  -profile deb13-abioma-tests-final \
+  -iso ./deb13-abioma-tests-final.iso \
+  -memory-mib 1024 -vcpus 1 \
+  -ssh-ready-timeout 8m -serial-log
+
+# Se falhar, a mensagem inclui o UUID preservado.
+./insula vm diagnose -config ./config.yaml -id UUID_DA_VM
+./insula vm console -config ./config.yaml -id UUID_DA_VM
+```
+
+`vm diagnose` é uma consulta somente-leitura da VM e produz novo snapshot
+de Libvirt/rede; exibe os últimos 16 KiB de cada log e caminhos completos
+para os arquivos originais. Funciona também para um UUID histórico sem domínio,
+desde que ainda exista no SQLite. `vm console` só funciona se o domínio
+estiver rodando. Para sair do console do Libvirt use Ctrl+]; o comando não
+desliga a VM. Use `vm stop` **somente depois de concluir o diagnóstico**;
+`stop` remove o disco temporário. Logs de boot do QEMU/Libvirt também podem
+estar no journal do Linux:
+
+```bash
+journalctl -u virtqemud -u libvirtd -u virtlogd --since "30 minutes ago"
+# Registro específico de QEMU: /var/log/libvirt/qemu/<NOME_DA_VM>.log
+```
+
+**Recuperação da imagem preparada:** o `freeze` gera um QCOW2
+independente para recriar VMs persistindo as configurações do Debian.
+Se a ISO Live não iniciar, `vm start -profile deb13-abioma-tests-final`
+usa esse QCOW2 sem a cadeia Debian Live/GRUB/SquashFS. Não é um boot
+pela ISO; é a forma recomendada de reutilizar ambiente configurado.
+A causa de um erro de boot de ISO só é determinada após examinar
+`serial.log` ou `vm console`, não apenas pelo timeout de DHCP.
