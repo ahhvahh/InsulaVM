@@ -162,6 +162,16 @@ Para preparar uma ISO Live, instalar `live-boot` e reconstruir o initramfs **den
 
 O teste unitário está em `bash scripts/tests/unit.sh`. O integral real (VMs, scripts, loop infinito, timeout, clone, freeze e ISO Live) está em [GUIA-003](docs/guias/GUIA-003-testes.md). **Não executado no hipervisor aqui.**
 
+## Teste Integral 2 — enviar ZIP, executar comandos e encerrar VM
+
+O runner [integral-2-zip.sh](scripts/tests/integral-2-zip.sh) usa um QCOW2 Debian 13 Cloud verificado, inicializa uma VM por Cloud-Init/SSH, envia um ZIP via **API Go**, conta 12 itens no ZIP dentro da VM, descompacta e confirma 12 arquivos extraídos e hashes SHA-256. Repete o teste via **CLI** com outro ZIP, valida respostas de comandos e só aprova o encerramento gracioso (sem destroy). Não modifica o motor: ImportToVM utiliza TAR.GZ como transporte, preservando o ZIP para os comandos posteriores.
+
+~~~bash
+bash scripts/tests/integral-2-zip.sh
+~~~
+
+O [workflow Integral 2](.github/workflows/integral-2-zip.yml) é acionado na abertura e em novos commits de PRs para **develop**, **promolog** e **main**. Para bloquear merges, exigir o status **integral-2-zip-upload-command** nas regras dessas branches. A execução real deve ser verificada no GitHub Actions. Veja [GUIA-006](docs/guias/GUIA-006-teste-integral-2-zip.md).
+
 ## Testes
 
 ```bash
