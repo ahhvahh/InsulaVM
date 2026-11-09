@@ -121,7 +121,7 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
    // with broken ACPI/agent wiring. systemd-run schedules the request and
    // returns while the SSH command can still finish.
    "if command -v systemd-run >/dev/null 2>&1; then "+
-   "systemd-run --collect --on-active=10s /usr/bin/systemctl poweroff --no-wall >/dev/null 2>&1 || :; fi; "+
+   "systemd-run --collect --on-active=30s /usr/bin/systemctl poweroff --no-wall >/dev/null 2>&1 || :; fi; "+
    "home_dir=$(getent passwd "+quoteGuest(record.SSHUser)+" | cut -d: -f6); "+
    "test -n \"$home_dir\"; cloud-init clean --logs --machine-id --seed; "+
    "rm -f -- \"$home_dir/.ssh/authorized_keys\"; rm -f /etc/ssh/ssh_host_*"
