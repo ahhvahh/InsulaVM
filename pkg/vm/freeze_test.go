@@ -73,3 +73,26 @@ esac
  if err!=nil{t.Fatal(err)}
  if strings.Count(string(trace),"forced")!=1{t.Fatalf("incorrect force count: %s",trace)}
 }
+
+func TestShutdownForFreezeToleratesGuestAlreadyPoweredOffDuringRequest(t *testing.T){
+ bin:=t.TempDir()
+ const uuid="01a11111-1111-7111-8111-333333333333"
+ state:=filepath.Join(bin,"running")
+ if err:=os.WriteFile(state,[]byte("on"),0600);err!=nil{t.Fatal(err)}
+ script:=`#!/bin/sh
+set -eu
+case "$3" in
+ list) if [ -f "$MOCK_RUNNING" ]; then echo "$MOCK_UUID"; fi ;;
+ domstate) echo running ;;
+ shutdown) rm -f "$MOCK_RUNNING"; exit 27 ;;
+ *) exit 88 ;;
+esac
+`
+ if err:=os.WriteFile(filepath.Join(bin,"virsh"),[]byte(script),0700);err!=nil{t.Fatal(err)}
+ t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+ t.Setenv("MOCK_UUID",uuid)
+ t.Setenv("MOCK_RUNNING",state)
+ forced,err:=ShutdownForFreezeWithOptions(context.Background(),"qemu:///system",uuid,2*time.Second,false)
+ if err!=nil||forced{t.Fatalf("guest powered itself off; err=%v forced=%t",err,forced)}
+ if _,err:=os.Stat(state);!os.IsNotExist(err){t.Fatalf("domain still listed: %v",err)}
+}

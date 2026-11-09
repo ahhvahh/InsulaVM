@@ -50,6 +50,18 @@ printf fake-iso-for-unit-test > "$2"`,
  if _,err:=e.ExportProfileLiveISO(context.Background(),"iso-test");err==nil{
   t.Fatal("export unexpectedly overwrote existing image")
  }
+ custom:=filepath.Join(t.TempDir(),"imagens","ambiente-final.iso")
+ exported,err:=e.ExportProfileLiveISOTo(context.Background(),"iso-test",custom)
+ if err!=nil{t.Fatal(err)}
+ if exported!=custom{t.Fatalf("unexpected custom output %q != %q",exported,custom)}
+ data,err:=os.ReadFile(custom)
+ if err!=nil||string(data)!="fake-iso-for-unit-test"{t.Fatalf("invalid custom ISO %q: %v",string(data),err)}
+ if _,err:=e.ExportProfileLiveISOTo(context.Background(),"iso-test",custom);err==nil{
+  t.Fatal("custom ISO was overwritten")
+ }
+ if _,err:=e.ExportProfileLiveISOTo(context.Background(),"iso-test",filepath.Join(t.TempDir(),"not-iso.qcow2"));err==nil{
+  t.Fatal("invalid non-ISO output extension was accepted")
+ }
 }
 
 func TestExportProfileLiveISORejectsMissingLiveBoot(t *testing.T){

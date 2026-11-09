@@ -33,6 +33,13 @@ func ShutdownForFreezeWithOptions(ctx context.Context,uri,uuid string,timeout ti
  output,shutdownErr:=virsh(gracefulCtx,uri,"shutdown",uuid)
  var reason error
  if shutdownErr!=nil{
+  // The guest may have powered itself off between the initial status check
+  // and the virsh shutdown request. Only a verified absent domain is success.
+  final,checkErr:=InspectRegistered(ctx,uri,[]registry.Entry{{LibvirtUUID:uuid}})
+  if checkErr==nil&&len(final)==1&&final[0].LibvirtState=="absent"{
+   cancel()
+   return false,nil
+  }
   reason=fmt.Errorf("request graceful VM shutdown: %w: %s",shutdownErr,strings.TrimSpace(string(output)))
  }else{
   ticker:=time.NewTicker(time.Second)

@@ -34,6 +34,7 @@ func vmCommand(args []string)error{
  dryRun:=fs.Bool("dry-run",false,"list managed VMs that would be stopped by stop-all without changing them")
  id:=fs.String("id","","VM UUIDv7")
  freezeName:=fs.String("name","","unique name for a frozen VM profile")
+ freezeOutput:=fs.String("output","","ISO destination (.iso); absolute or relative to the current directory")
  shutdownTimeout:=fs.Duration("shutdown-timeout",3*time.Minute,"graceful guest shutdown deadline for freeze")
  commandText:=fs.String("command","","shell command inside the VM")
  workspace:=fs.String("workspace","","guest working directory; default: config.yaml guest.destination")
@@ -44,7 +45,11 @@ func vmCommand(args []string)error{
  extract:=fs.Bool("extract",false,"extract trusted .tar.gz/.tgz source in guest.destination before executing script")
  cmdTimeout:=fs.Duration("command-timeout",30*time.Minute,"timeout for each remote deploy step")
  if err:=fs.Parse(args[1:]);err!=nil{return err}
- if fs.NArg()!=0{return errors.New("unexpected vm arguments")}
+ if command=="freeze"||command=="export-iso"{
+  n,out,parseErr:=resolveFreezeTarget(*freezeName,*freezeOutput,fs.Args(),command=="export-iso"||*exportISO)
+  if parseErr!=nil{return parseErr}
+  *freezeName,*freezeOutput=n,out
+ }else if fs.NArg()!=0{return errors.New("unexpected vm arguments")}
  engine,err:=insulavm.New(*cfgPath)
  if err!=nil{return err}
  ctx,cancel:=signal.NotifyContext(context.Background(),os.Interrupt)
@@ -144,7 +149,7 @@ func vmCommand(args []string)error{
   }
   if *exportISO && *prepareLiveBoot{
    exported,err:=engine.ExportVMToLiveISO(ctx,insulavm.VMExportISORequest{
-    VMID:*id,Name:*freezeName,PrepareLiveBoot:true,ShutdownTimeout:*shutdownTimeout,CommandTimeout:*cmdTimeout,
+    VMID:*id,Name:*freezeName,OutputISOPath:*freezeOutput,PrepareLiveBoot:true,ShutdownTimeout:*shutdownTimeout,CommandTimeout:*cmdTimeout,
     ForceShutdown:*forceFreeze,SkipGuestCleanup:*skipGuestCleanup,AllowStopped:*allowStopped,OnProgress:onProgress,
    })
    if exported!=nil&&exported.Freeze!=nil&&exported.Freeze.ImagePath!=""{
@@ -158,7 +163,7 @@ func vmCommand(args []string)error{
   result,err:=engine.FreezeVM(ctx,insulavm.VMFreezeRequest{
    VMID:*id,Name:*freezeName,ShutdownTimeout:*shutdownTimeout,
    ForceShutdown:*forceFreeze,SkipGuestCleanup:*skipGuestCleanup,
-   AllowStopped:*allowStopped,ExportISO:*exportISO,OnProgress:onProgress,
+   AllowStopped:*allowStopped,ExportISO:*exportISO,OutputISOPath:*freezeOutput,OnProgress:onProgress,
   })
   if result!=nil&&result.ImagePath!=""{
    fmt.Printf("Perfil QCOW2 salvo: %s imagem=%s origem_encerrada=%t forzado=%t\n",
@@ -170,7 +175,7 @@ func vmCommand(args []string)error{
  case "export-iso":
   if *id==""||*freezeName==""{return errors.New("vm export-iso requires -id and -name")}
   exported,err:=engine.ExportVMToLiveISO(ctx,insulavm.VMExportISORequest{
-   VMID:*id,Name:*freezeName,PrepareLiveBoot:*prepareLiveBoot,
+   VMID:*id,Name:*freezeName,OutputISOPath:*freezeOutput,PrepareLiveBoot:*prepareLiveBoot,
    ShutdownTimeout:*shutdownTimeout,CommandTimeout:*cmdTimeout,
    ForceShutdown:*forceFreeze,SkipGuestCleanup:*skipGuestCleanup,AllowStopped:*allowStopped,
    OnProgress:func(p insulavm.VMFreezeProgress){
