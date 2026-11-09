@@ -462,11 +462,12 @@ func domainXMLWithBacking(uuid,name string,memoryMiB,vcpus int,disk,baseImage,se
  }
  return fmt.Sprintf(
   "<domain type='kvm'><name>%s</name>%s<memory unit='MiB'>%d</memory>"+
-   "<vcpu>%d</vcpu><os><type arch='x86_64'>hvm</type></os>"+
+   "<vcpu>%d</vcpu><os><type arch='x86_64'>hvm</type></os><features><acpi/></features>"+
    "<devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/>"+
    "<source file='%s'/>%s<target dev='vda' bus='virtio'/></disk>%s"+
    "<interface type='network'><mac address='%s'/><source network='%s'/>"+
    "<model type='virtio'/></interface>"+
+   "<channel type='unix'><source mode='bind'/><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"+
    "<serial type='pty'><target port='0'/></serial>"+
    "<console type='pty'><target type='serial' port='0'/></console>"+
    "</devices></domain>",
