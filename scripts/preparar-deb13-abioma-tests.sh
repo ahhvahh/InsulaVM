@@ -39,8 +39,20 @@ vmid() {
   [[ "$ID" =~ ^[a-f0-9-]{36}$ ]] || { echo "UUID invalido" >&2; return 1; }
 }
 download() {
-  echo "Baixando Debian 13 mini.iso oficial em $ISO_DIR"
-  insula test download -output-dir "$ISO_DIR"
+  echo "Baixando/verificando a ultima Debian 13 mini.iso oficial em $ISO_DIR"
+  local output backup
+  if output="$(insula test download -output-dir "$ISO_DIR" 2>&1)"; then
+    echo "$output"
+  elif [[ "$output" == *"mini.iso in cache has unexpected checksum"* ]] &&
+       [[ -f "$ISO" && ! -L "$ISO" ]]; then
+    backup="$ISO_DIR/mini.iso.anterior.$(date +%Y%m%d%H%M%S).$"
+    mv -n -- "$ISO" "$backup"
+    echo "Versao anterior preservada em $backup"
+    insula test download -output-dir "$ISO_DIR"
+  else
+    echo "$output" >&2
+    return 1
+  fi
 }
 install() {
   if details="$(insula profile show -name "$PROFILE" 2>/dev/null)"; then
