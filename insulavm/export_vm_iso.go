@@ -7,6 +7,8 @@ import (
  "fmt"
  "strings"
  "time"
+
+ "github.com/ahhvahh/InsulaVM/pkg/storage"
 )
 
 // VMExportISORequest freezes a running managed VM and exports its Debian Live
@@ -40,6 +42,7 @@ func(e *Engine)ExportVMToLiveISO(ctx context.Context,req VMExportISORequest)(*VM
  if strings.TrimSpace(req.VMID)==""||strings.TrimSpace(req.Name)==""{
   return nil,errors.New("VMID and frozen profile name are required")
  }
+ if err:=storage.ValidateName(req.Name);err!=nil{return nil,fmt.Errorf("invalid frozen profile name: %w",err)}
  if _,err:=e.liveISODestination(req.Name,req.OutputISOPath);err!=nil{return nil,err}
  if req.CommandTimeout<0{return nil,errors.New("command timeout must not be negative")}
  if req.CommandTimeout==0{req.CommandTimeout=30*time.Minute}

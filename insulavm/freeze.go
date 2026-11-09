@@ -65,7 +65,7 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
  if req.OutputISOPath!=""&&!req.ExportISO{return nil,errors.New("output ISO path requires ExportISO=true")}
  // Validate destination BEFORE touching guest identity, requesting shutdown,
  // or publishing a disk profile.
- if req.ExportISO{
+ if req.ExportISO&&req.OutputISOPath!=""{
   if _,err:=e.liveISODestination(req.Name,req.OutputISOPath);err!=nil{return nil,err}
  }
  if req.ShutdownTimeout<0{return nil,errors.New("shutdown timeout must not be negative")}
