@@ -1,0 +1,70 @@
+# Teste Integral 2 - Exercitar motor InsulaVM real (Go + CLI) com ZIP por SSH.
+# PRs de destino: develop, promolog e main. Cada commit gera nova execução.
+name: "Integral 2 - ZIP e comandos"
+
+on:
+  pull_request:
+    branches: [develop, promolog, main]
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  integral-2-zip-upload-command:
+    name: integral-2-zip-upload-command
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - name: Checkout da PR
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Preparar KVM/Libvirt e rede DHCP
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -c /dev/kvm ]] || { echo "::error::KVM unavailable"; exit 1; }
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libvirt-daemon-system libvirt-clients qemu-system-x86 qemu-utils \
+            genisoimage acl curl ca-certificates
+          sudo systemctl start libvirtd.service
+          sudo setfacl -m "u:$(id -un):rw" /run/libvirt/libvirt-sock
+          if ! virsh -c qemu:///system net-info default | grep -Eq 'Active:[[:space:]]+yes'; then
+            sudo virsh -c qemu:///system net-start default
+          fi
+          virsh -c qemu:///system net-info default
+
+      - name: Teste Integral 2 - ZIP API Go, CLI e encerramento
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/tests/integral-2-zip.sh
+
+      - name: Coletar diagnóstico Libvirt (somente em falha)
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p data/integral-2-ci/diagnostic
+          sudo virsh -c qemu:///system list --all > data/integral-2-ci/diagnostic/domains.txt 2>&1 || true
+          sudo journalctl -u libvirtd -u virtqemud --since '30 minutes ago' --no-pager \
+            > data/integral-2-ci/diagnostic/journal.log 2>&1 || true
+
+      - name: Salvar logs e evidências
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integral-2-zip-evidencias
+          path: |
+            data/integral-2-ci/state/logs/
+            data/integral-2-ci/diagnostic/
+          if-no-files-found: warn
+          retention-days: 7
