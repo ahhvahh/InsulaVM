@@ -6,13 +6,13 @@ ROOT="$(cd -- "$(dirname -- "$0")/../.." && pwd)"
 STATE="$ROOT/data/integral-2-ci"
 CONFIG=""
 IMAGE=""
-BASE_URL="https://cloud.debian.org/images/cloud/trixie/latest"
-IMAGE_NAME="debian-13-generic-amd64.qcow2"
+BASE_URL="https://cloud.debian.org/images/cloud/bookworm/latest"
+IMAGE_NAME="debian-12-generic-amd64.qcow2"
 
 usage() {
   cat <<'USAGE'
 Usage: bash scripts/tests/integral-2-zip.sh [--config /absolute/config.yaml] [--qcow2 /absolute/debian-cloud.qcow2]
-  By default uses an isolated test config and downloads a verified Debian 13 Cloud QCOW2.
+  By default uses an isolated test config and downloads a verified Debian 12 Cloud QCOW2.
   Requires real Linux KVM/Libvirt with an active DHCP network and Go.
 USAGE
 }
@@ -79,7 +79,7 @@ if [[ -z "$IMAGE" ]]; then
   mkdir -p "$download"
   IMAGE="$download/$IMAGE_NAME"
   if [[ ! -s "$IMAGE" ]]; then
-    echo "[integral-2] downloading official Debian 13 generic cloud image"
+    echo "[integral-2] downloading official Debian 12 generic cloud image"
     curl -fSL --retry 3 --connect-timeout 30 \
       "$BASE_URL/$IMAGE_NAME" -o "$IMAGE"
   fi
