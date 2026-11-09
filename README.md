@@ -164,7 +164,7 @@ O teste unitário está em `bash scripts/tests/unit.sh`. O integral real (VMs, s
 
 ## Teste Integral 2 — enviar ZIP, executar comandos e encerrar VM
 
-O runner [integral-2-zip.sh](scripts/tests/integral-2-zip.sh) usa um QCOW2 Debian 13 Cloud verificado, inicializa uma VM por Cloud-Init/SSH, envia um ZIP via **API Go**, conta 12 itens no ZIP dentro da VM, descompacta e confirma 12 arquivos extraídos e hashes SHA-256. Repete o teste via **CLI** com outro ZIP, valida respostas de comandos e só aprova o encerramento gracioso (sem destroy). Não modifica o motor: ImportToVM utiliza TAR.GZ como transporte, preservando o ZIP para os comandos posteriores.
+O runner [integral-2-zip.sh](scripts/tests/integral-2-zip.sh) usa um QCOW2 Debian 12 Cloud verificado, inicializa uma VM por Cloud-Init/SSH, envia um ZIP via **API Go**, conta 12 itens no ZIP dentro da VM, descompacta e confirma 12 arquivos extraídos e hashes SHA-256. Repete o teste via **CLI** com outro ZIP, valida respostas de comandos e só aprova o encerramento gracioso (sem destroy). Não modifica o motor: ImportToVM utiliza TAR.GZ como transporte, preservando o ZIP para os comandos posteriores.
 
 ~~~bash
 bash scripts/tests/integral-2-zip.sh
