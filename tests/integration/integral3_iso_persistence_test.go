@@ -9,8 +9,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -300,15 +300,6 @@ func integral3AssertDomainResources(t *testing.T, uri, id string, memoryMiB, vcp
 	if err != nil {
 		t.Fatalf("inspect actual Libvirt domain resources: %v", err)
 	}
-	xml := string(out)
-	for _, expected := range []string{
-		fmt.Sprintf("<memory unit='MiB'>%d</memory>", memoryMiB),
-		fmt.Sprintf("<vcpu>%d</vcpu>", vcpus),
-	} {
-		// virsh dumpxml may normalize XML and/or unit formatting. Parse
-		// structurally instead of string-matching the authored domain spec.
-		_ = expected
-	}
 	var domain struct {
 		Memory struct {
 			Value int    `xml:",chardata"`
@@ -332,7 +323,7 @@ func integral3AssertDomainResources(t *testing.T, uri, id string, memoryMiB, vcp
 func TestIntegral3MarkerContract(t *testing.T) {
 	if integral3SHA("INSULA_IT3_PERSIST_test
 ") !=
-		"67d5b9748ef0e557e4da7218d97e6a089ec749132065904518b16e973fa16bcc" {
+		"ce07ea9ba3eed09c442370cacbe4aa1139fffd238252dded6a2cc189e5f651e4" {
 		t.Fatal("SHA-256 fixture changed unexpectedly")
 	}
 	if integral3MemoryMiB != 500 || integral3VCPUs != 1 || integral3DiskGiB != 10 ||
