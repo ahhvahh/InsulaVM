@@ -14,6 +14,18 @@ import (
 // transient Libvirt domain to disappear. The overlay is NOT removed.
 // Never convert an overlay while Libvirt still reports its domain present.
 func ShutdownForFreeze(ctx context.Context, uri, uuid string, timeout time.Duration) error {
+ return shutdownWithMode(ctx,uri,uuid,timeout,"")
+}
+
+// ShutdownWithMode constrains the shutdown method. The stop-with-force
+// policy uses ACPI explicitly to avoid switching to QEMU guest-agent shutdown
+// when testing a guest that must ignore ACPI power events.
+func ShutdownWithMode(ctx context.Context,uri,uuid string,timeout time.Duration,mode string) error {
+ if mode!="" && mode!="acpi"{return errors.New("unsupported shutdown mode")}
+ return shutdownWithMode(ctx,uri,uuid,timeout,mode)
+}
+
+func shutdownWithMode(ctx context.Context, uri, uuid string, timeout time.Duration,mode string) error {
  if ctx == nil { return errors.New("context is required") }
  if uuid == "" { return errors.New("VM UUID is required") }
  if timeout <= 0 { return errors.New("shutdown timeout must be positive") }
@@ -23,12 +35,14 @@ func ShutdownForFreeze(ctx context.Context, uri, uuid string, timeout time.Durat
  if !infos[0].IsRunning() {
   return fmt.Errorf("VM %s must be running for a safe freeze (state: %s)",uuid,infos[0].LibvirtState)
  }
- output,err := virsh(ctx,uri,"shutdown",uuid)
+ stopCtx,cancel:=context.WithTimeout(ctx,timeout)
+ defer cancel()
+ shutdownArgs:=[]string{"shutdown",uuid}
+ if mode!=""{shutdownArgs=append(shutdownArgs,"--mode",mode)}
+ output,err := virsh(stopCtx,uri,shutdownArgs...)
  if err!=nil {
   return fmt.Errorf("request graceful VM shutdown: %w: %s",err,strings.TrimSpace(string(output)))
  }
- stopCtx,cancel:=context.WithTimeout(ctx,timeout)
- defer cancel()
  ticker:=time.NewTicker(time.Second)
  defer ticker.Stop()
  for {

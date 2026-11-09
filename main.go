@@ -45,7 +45,9 @@ func run(args []string) error {
 			fmt.Println("       insula vm list -config config.yaml")
 			fmt.Println("       insula vm status -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm shell -config config.yaml -id UUIDv7 [-directory InsulaVM]")
-			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7")
+			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7 [-grace-timeout 30s] [-force-after-timeout=true]")
+			fmt.Println("       insula vm start-iso -profile debian-go [-iso debian-go-live.iso]")
+			fmt.Println("       insula vm console -id UUIDv7")
 			fmt.Println("       insula vm stop-all -config config.yaml [-dry-run]")
 			fmt.Println("       insula vm freeze -id UUIDv7 -name debian13-tests [-shutdown-timeout 3m]")
 			fmt.Println("       insula vm exec -id UUIDv7 -command \"id -u\" [-sudo]")
@@ -54,6 +56,10 @@ func run(args []string) error {
 			fmt.Println("       insula profile list -config config.yaml")
 			fmt.Println("       insula profile show -config config.yaml -name debian-go")
 			fmt.Println("       insula profile register -config config.yaml -name debian-go -image installed.qcow2 -memory-mib 1024 -vcpus 1 -disk-gb 8")
+			fmt.Println("       insula profile clone -source debian-go -name debian-go-copy")
+			fmt.Println("       insula profile create-from-iso -name debian-13 -iso /isos/debian-13-amd64-netinst.iso -memory-mib 2048 -vcpus 2 -disk-gb 12")
+			fmt.Println("       insula vm export-iso -id UUIDv7 -name debian-live [-prepare-live-boot]")
+			fmt.Println("       insula profile export-iso -name debian-go")
 			return nil
 		}
 	}
@@ -84,18 +90,20 @@ func configCommand(args []string) error {
 
 func profileCommand(args []string) error {
 	if len(args) == 0 {
-		return errors.New("expected profile list, show or register")
+		return errors.New("expected profile list, show, register, clone, create-from-iso or export-iso")
 	}
 	cmd := args[0]
 	fs := flag.NewFlagSet("profile "+cmd, flag.ContinueOnError)
 	cfgPath := fs.String("config", "config.yaml", "global config")
 	name := fs.String("name", "", "profile name")
+	sourceProfile := fs.String("source", "", "source profile name for cloning")
 	image := fs.String("image", "", "fully installed QCOW2 source path")
 	memory := fs.Int("memory-mib", 0, "guest RAM (MiB)")
 	cpus := fs.Int("vcpus", 0, "guest vCPUs")
 	disk := fs.Int("disk-gb", 0, "virtual disk capacity in GiB")
 	distro := fs.String("os", "debian", "OS label")
-	iso := fs.String("iso", "", "original ISO path (metadata only)")
+	iso := fs.String("iso", "", "local installer ISO path for create-from-iso; other commands store metadata only")
+	installTimeout := fs.Duration("install-timeout", 90*time.Minute, "Debian ISO installer maximum duration")
 	address := fs.String("address", "", "existing guest SSH address (optional)")
 	user := fs.String("user", "", "guest SSH user (optional)")
 	if err := fs.Parse(args[1:]); err != nil {
@@ -145,8 +153,36 @@ func profileCommand(args []string) error {
 		}
 		c := engine.Configuration()
 		fmt.Printf("Profile registered: %s\n", localPathForCLI(filepath.Join(c.Storage.Profiles, p.Name, "profile.yaml")))
+	case "clone":
+		if *sourceProfile == "" || *name == "" { return errors.New("profile clone requires -source and -name") }
+		p, err := engine.CloneProfile(context.Background(),*sourceProfile,*name)
+		if err != nil { return err }
+		fmt.Printf("PROFILE CLONE OK: source=%s name=%s\n",*sourceProfile,p.Name)
+	case "create-from-iso":
+		if *name == "" || *iso == "" { return errors.New("profile create-from-iso requires -name and -iso") }
+		c := engine.Configuration()
+		ram, cores, size := *memory, *cpus, *disk
+		if ram == 0 { ram = 2048 }
+		if cores == 0 { cores = 2 }
+		if size == 0 { size = c.Virtualization.DefaultDiskGB }
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer cancel()
+		result, err := engine.CreateProfileFromISO(ctx, insulavm.CreateProfileFromISORequest{
+			Name:*name, ISOPath:*iso, MemoryMiB:ram, VCPUs:cores,
+			DiskGB:size, Timeout:*installTimeout,
+			OnProgress:func(p insulavm.ProfileISOProgress) {
+				fmt.Fprintf(os.Stderr, "[InsulaVM][iso:%s] %s\n",p.Stage,p.Message)
+			},
+		})
+		if err != nil { return err }
+		fmt.Printf("PROFILE ISO OK: name=%s image=%s sha256=%s\n",result.Profile.Name,localPathForCLI(result.ImagePath),result.ISOChecksumSHA256)
+	case "export-iso":
+		if *name == "" { return errors.New("profile export-iso requires -name") }
+		path, err := engine.ExportProfileLiveISO(context.Background(),*name)
+		if err != nil { return err }
+		fmt.Printf("LIVE ISO OK: %s\n",localPathForCLI(path))
 	default:
-		return errors.New("expected profile list, show or register")
+		return errors.New("expected profile list, show, register, clone or export-iso")
 	}
 	return nil
 }

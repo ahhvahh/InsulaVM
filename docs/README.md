@@ -3,18 +3,22 @@
 
 # Documentação — InsulaVM
 
-**Estado geral:** configuração, perfis QCOW2, criação de VMs transitórias, Cloud-Init NoCloud, SQLite, importação, deploy, congelamento de VM e execução SSH com logs estão implementados. Instalação a partir de ISO instaladora, exportação de ISO Live e checkout Git automático continuam não implementados.
+**Estado geral:** configuração, perfis QCOW2, criação de VMs transitórias, Cloud-Init NoCloud, SQLite, importação, deploy, congelamento de VM e execução SSH com logs estão implementados. Instalação automática por ISO instaladora Debian 13 foi implementada nesta branch e depende de validação em KVM real; checkout Git automático continua não implementado. A branch de trabalho acrescenta operações de ISO Live e testes integrais, ainda sem validação em KVM real.
 
-O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perfil selecionado em `insula.yaml`, pode importar arquivos/pastas locais em TAR.GZ antes dos jobs, inicia uma VM descartável usando overlay QCOW2 ou usa uma VM SSH existente, e grava logs por job. A CLI e outros projetos Go podem usar o mesmo motor através do pacote importável `insulavm`. O Linux deve estar instalado em uma imagem com Cloud-Init; a ISO NoCloud de configuração já é gerada, mas a instalação do sistema a partir de ISO instaladora permanece pendente. O InsulaVM registra as VMs em SQLite.
+O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perfil selecionado em `insula.yaml`, pode importar arquivos/pastas locais em TAR.GZ antes dos jobs, inicia uma VM descartável usando overlay QCOW2 ou usa uma VM SSH existente, e grava logs por job. A CLI e outros projetos Go podem usar o mesmo motor através do pacote importável `insulavm`. O Linux deve estar instalado em uma imagem com Cloud-Init; a ISO NoCloud de configuração já é gerada, mas a instalação do sistema via ISO instaladora Debian 13 está disponível como operação não interativa ainda sem validação no hipervisor real. O InsulaVM registra as VMs em SQLite.
+
+**Instalar Debian por ISO:** [INTF-TERM-007 — Criar perfil Debian via ISO instaladora](interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md). **Novos fluxos e testes:** [FLUX-006 — Testes integrais VM/ISO Live](fluxos/FLUX-006-teste-integral-iso-vm.md), [GUIA-003 — Testes](guias/GUIA-003-testes.md), [INTF-TERM-006 — ISO Live](interfaces/terminal/INTF-TERM-006-iso-live.md).
 
 ## Mapa de leitura
 
 | Documento | Categoria | Conteúdo |
 | --- | --- | --- |
-| [CONTR-001 — Operações canônicas](interfaces/CONTR-001-operacoes-canonicas.md) | Contrato normativo | Nomes e semântica compartilhados entre CLI e biblioteca Go, parâmetros, retornos, mapeamento legado e estados de implementação |
-| [CONTR-002 — STDIO fiel](interfaces/CONTR-002-transporte-stdio.md) | Contrato normativo | Transporte binário de stdin/stdout/stderr, exit code, callbacks, erros e testes de equivalência |
-| [CONTR-003 — Inventário de operações](interfaces/CONTR-003-inventario-operacoes.md) | Inventário | Mapa CLI/Go, redundâncias reais e plano de consolidação |
-| [GUIA-001 — Operar VMs](guias/GUIA-001-operar-insulavm.md) | Guia operacional | Como iniciar, configurar, congelar, importar e executar rotinas em VMs |\n| [GUIA-002 — Permissões Libvirt](guias/GUIA-002-permissoes-libvirt.md) | Diagnóstico | UID do QEMU, ACLs e segurança dos discos QCOW2 |\n| [ARQ-001 — Arquitetura do motor](arquitetura/ARQ-001-motor-insulavm.md) | Explicação/arquitetura | Componentes, dependências Go futuras, provisionamento, autenticação, segurança e decisões pendentes |
+| [CONTR-001 — Operações canônicas](contratos/CONTR-001-operacoes-canonicas.md) | Contrato normativo | Nomes e semântica compartilhados entre CLI e biblioteca Go, parâmetros, retornos, mapeamento legado e estados de implementação |
+| [CONTR-002 — STDIO fiel](contratos/CONTR-002-transporte-stdio.md) | Contrato normativo | Transporte binário de stdin/stdout/stderr, exit code, callbacks, erros e testes de equivalência |
+| [REF-001 — Inventário de operações](referencia/REF-001-inventario-operacoes.md) | Inventário | Mapa CLI/Go, redundâncias reais e plano de consolidação |
+| [GUIA-001 — Operar VMs](guias/GUIA-001-operar-insulavm.md) | Guia operacional | Como iniciar, configurar, congelar, importar e executar rotinas em VMs |
+| [GUIA-002 — Permissões Libvirt](guias/GUIA-002-permissoes-libvirt.md) | Diagnóstico | UID do QEMU, ACLs e segurança dos discos QCOW2 |
+| [ARQ-001 — Arquitetura do motor](arquitetura/ARQ-001-motor-insulavm.md) | Explicação/arquitetura | Componentes, dependências Go futuras, provisionamento, autenticação, segurança e decisões pendentes |
 | [ARQ-002 — Perfis de VM](arquitetura/ARQ-002-perfis-vm.md) | Arquitetura | Instalação inicial proposta, metadados QCOW2 e overlays descartáveis |
 | [ARQ-003 — Configuração e catálogo](arquitetura/ARQ-003-configuracao-perfis.md) | Arquitetura implementada | Config global, `guest.destination` compartilhado, perfis e Libvirt |
 | [ARQ-004 — Biblioteca Go](arquitetura/ARQ-004-biblioteca-go.md) | Integração implementada | API Go para orquestradores externos, `Run(ctx, request)`, retorno estruturado e ciclo de vida |
@@ -30,7 +34,8 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 | [INTF-TERM-003 — Configuração e perfis](interfaces/terminal/INTF-TERM-003-configuracao-perfis.md) | CLI implementada | Validar config, listar/inspecionar/registrar perfis e iniciar instância |
 | [INTF-TERM-004 — Gerenciamento de VMs](interfaces/terminal/INTF-TERM-004-gerenciar-vms.md) | CLI implementada | Criar, listar, consultar, congelar e encerrar VMs individuais ou em lote |
 | [INTF-TERM-005 — Deploy](interfaces/terminal/INTF-TERM-005-deploy-vm.md) | CLI implementada | Flags, saídas e erros de upload + script por UUID |
-| [PERS-001 — Instâncias SQLite](persistencia/PERS-001-registro-instancias.md) | Persistência | Schema vm_instances, estados e relação lógica com perfis |\n| [Exemplo config.yaml](../config.yaml) | Configuração | Pasta de destino comum, virtualização e SSH |
+| [PERS-001 — Instâncias SQLite](persistencia/PERS-001-registro-instancias.md) | Persistência | Schema vm_instances, estados e relação lógica com perfis |
+| [Exemplo config.yaml](../config.yaml) | Configuração | Pasta de destino comum, virtualização e SSH |
 | [Exemplo de consumo da biblioteca](../examples/go-library/main.go) | Exemplo Go | Outro processo controla execução in-processo, sem sockets |
 | [Exemplo de insula.yaml](../insula.yaml.example) | Exemplo de entrada | Manifesto com usuário SSH opcional, imports sem destino, setup e jobs |
 | [README da raiz](../README.md) | Visão geral | Propósito do projeto e entrada para a documentação |
@@ -39,12 +44,15 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 
 | Prefixo | Finalidade | Documentos atuais |
 | --- | --- | --- |
-| `CONTR` | Contrato público canônico da CLI e biblioteca | [CONTR-001](interfaces/CONTR-001-operacoes-canonicas.md), [CONTR-002](interfaces/CONTR-002-transporte-stdio.md), [CONTR-003](interfaces/CONTR-003-inventario-operacoes.md) |
-| `GUIA` | Procedimentos e resolução de problemas | [GUIA-001](guias/GUIA-001-operar-insulavm.md), [GUIA-002](guias/GUIA-002-permissoes-libvirt.md) |\n| `ARQ` | Arquitetura | [ARQ-001](arquitetura/ARQ-001-motor-insulavm.md), [ARQ-002](arquitetura/ARQ-002-perfis-vm.md), [ARQ-003](arquitetura/ARQ-003-configuracao-perfis.md), [ARQ-004](arquitetura/ARQ-004-biblioteca-go.md), [ARQ-005](arquitetura/ARQ-005-importacao-arquivos.md), [ARQ-006](arquitetura/ARQ-006-identidade-registro-sudo.md) |
+| `CONTR` | Contratos canônicos da biblioteca Go e CLI | [CONTR-001](contratos/CONTR-001-operacoes-canonicas.md), [CONTR-002](contratos/CONTR-002-transporte-stdio.md) |
+| `REF` | Inventário de operações e referência interna | [REF-001](referencia/REF-001-inventario-operacoes.md) |
+| `GUIA` | Procedimentos e resolução de problemas | [GUIA-001](guias/GUIA-001-operar-insulavm.md), [GUIA-002](guias/GUIA-002-permissoes-libvirt.md) |
+| `ARQ` | Arquitetura | [ARQ-001](arquitetura/ARQ-001-motor-insulavm.md), [ARQ-002](arquitetura/ARQ-002-perfis-vm.md), [ARQ-003](arquitetura/ARQ-003-configuracao-perfis.md), [ARQ-004](arquitetura/ARQ-004-biblioteca-go.md), [ARQ-005](arquitetura/ARQ-005-importacao-arquivos.md), [ARQ-006](arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `FLUX` | Fluxos de execução | [FLUX-001](fluxos/FLUX-001-execucao-manifesto.md), [FLUX-002](fluxos/FLUX-002-criacao-perfil-vm.md), [FLUX-003](fluxos/FLUX-003-execucao-sequencial-logs.md), [FLUX-004](fluxos/FLUX-004-congelar-vm.md), [FLUX-005](fluxos/FLUX-005-deploy-arquivos.md) |
 | `INTF-TERM` | Interface de terminal | [INTF-TERM-001](interfaces/terminal/INTF-TERM-001-criar-perfil-vm.md), [INTF-TERM-002](interfaces/terminal/INTF-TERM-002-executar-manifesto.md), [INTF-TERM-003](interfaces/terminal/INTF-TERM-003-configuracao-perfis.md), [INTF-TERM-004](interfaces/terminal/INTF-TERM-004-gerenciar-vms.md), [INTF-TERM-005](interfaces/terminal/INTF-TERM-005-deploy-vm.md) |
+| `PERS` | Persistência | [PERS-001](persistencia/PERS-001-registro-instancias.md) |
 
-| `PERS` | Persistência | [PERS-001](persistencia/PERS-001-registro-instancias.md) |\n\n## Convenções e evidências
+## Convenções e evidências
 
 - Aplicamos a convenção **A-Bioma Doc Standard**, inspirada em Diátaxis, arc42 simplificado e C4; isso **não** equivale a certificação formal.
 - **Proposto:** comportamento ainda não existente no código.

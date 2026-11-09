@@ -9,7 +9,7 @@
 
 ## Correspondência com contratos canônicos
 
-Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatura de referência de operações e a exigência de paridade entre CLI e biblioteca constam em [CONTR-001](../CONTR-001-operacoes-canonicas.md). Os futuros `vm command` e `vm run-script` devem obedecer a [CONTR-002](../CONTR-002-transporte-stdio.md), sem alterar silenciosamente os formatos legados de `vm exec`/`vm deploy`.
+Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatura de referência de operações e a exigência de paridade entre CLI e biblioteca constam em [CONTR-001](../../contratos/CONTR-001-operacoes-canonicas.md). Os futuros `vm command` e `vm run-script` devem obedecer a [CONTR-002](../../contratos/CONTR-002-transporte-stdio.md), sem alterar silenciosamente os formatos legados de `vm exec`/`vm deploy`.
 
 ## Comandos e parâmetros
 
@@ -62,7 +62,7 @@ A execução percorre **somente** os UUIDs do banco SQLite associado ao `config.
 
 | Aspecto | Contrato efetivo |
 | --- | --- |
-| stdin | Nenhuma entrada interativa em `start`, `list`, `show`, `status`, `freeze`, `stop` ou `stop-all`; `shell` transfere o terminal para SSH |
+| stdin | Nenhuma entrada interativa em `start`, `list`, `status`, `freeze`, `stop` ou `stop-all`; `shell` transfere o terminal para SSH |
 | stdout | Dados de VM, sugestões de comando SSH, resumos `STOP-ALL` e `FREEZE SUCCESS` quando aplicável |
 | stderr | Mensagens de progresso, avisos de perfil duplicado em execução, falhas de validação e Libvirt |
 | Código de saída | `0` quando `vmCommand` retorna `nil`; `1` em erro retornado pelo executável |
@@ -80,3 +80,9 @@ A execução percorre **somente** os UUIDs do banco SQLite associado ao `config.
 | `stop-all` | Registros SQLite + estados Libvirt | Quantidade verificada, encerrada, ignorada e falhas |
 
 **Limite de validação:** exemplos são correspondentes ao parser Go; a execução completa em hipervisor KVM real ainda não está comprovada nesta revisão.
+
+## Desligamento com timeout (novo)
+
+A CLI `insula vm stop -id UUID -grace-timeout 30s -force-after-timeout=true` tenta `virsh shutdown` e espera até 30 segundos; apenas ao expirar o prazo usa destruição imediata e limpa o overlay. `-force-after-timeout=false` mantém a VM quando o prazo expira. Falhas de Libvirt diferentes de timeout não autorizam forçar. A biblioteca legada `StopVM` permanece com destruição imediata; usar `StopVMWithOptions` para a nova política. Consulte [INTF-TERM-006](INTF-TERM-006-iso-live.md) e [FLUX-006](../../fluxos/FLUX-006-teste-integral-iso-vm.md).
+
+**Estado:** código novo não validado em hipervisor real.

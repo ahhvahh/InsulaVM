@@ -1,5 +1,7 @@
-<!-- A-BIOMA-DOC-STANDARD -->
-<!-- A-BIOMA-DOC-REVISADO -->
+<!-- A-BIOMA-DOC-OBSOLETO -->
+<!-- A-BIOMA-DOC-MIGRADO -->
+
+> **Conteúdo lido e migrado para:** [REF-001-inventario-operacoes.md](../referencia/REF-001-inventario-operacoes.md). Este arquivo é mantido para rastreabilidade histórica; use o destino como fonte canônica.
 
 # CONTR-003 — Inventário de operações e redução de redundâncias
 
@@ -34,7 +36,7 @@ Além destes, `insula help`, `insula -h` e `insula --help` exibem a ajuda. O ata
 
 | Contrato alvo | CLI alvo | Estado e relação com legado |
 | --- | --- | --- |
-| `CreateProfileFromISO` | `insula profile create-from-iso` | pendente; não confundir ISO instaladora com QCOW2 preexistente |
+| `CreateProfileFromISO` | `insula profile create-from-iso` | implementado na develop em modo automático; boot real não verificado |
 | `CreateVM` | `insula vm create` | parcial por `vm start`; clonar origem e alterar disco pendentes |
 | `UploadArchive` | `insula vm upload` | parcial por `vm import`; salvar TAR.GZ sem extrair ainda pendente |
 | `ExecuteScript` | `insula vm run-script` | parcial por `vm deploy`; STDIO fiel pendente |
@@ -80,3 +82,24 @@ Além destes, `insula help`, `insula -h` e `insula --help` exibem a ajuda. O ata
 - Verificar que nenhum guia público sugere `vm show`.
 - Validar que `vm shell`, `vm exec`, `vm import`, `vm deploy` e `run` seguem distintos e não foram removidos.
 - Executar `go test ./...` para verificar regressões; execução real KVM/Libvirt requer host apropriado.
+
+## Extensões experimentais adicionadas
+
+| Ação | CLI | Go | Evidência |
+| --- | --- | --- | --- |
+| Clonar perfil por nome | `profile clone` | `CloneProfile` | `insulavm/profile_clone.go` |
+| Exportar Debian Live | `profile export-iso` | `ExportProfileLiveISO` | `insulavm/export_iso.go` |
+| Iniciar guest por ISO Live | `vm start-iso` | `StartVMFromISO` | `insulavm/live_iso.go`, `pkg/vm/live_iso.go` |
+| Console serial | `vm console` | `OpenConsole` | `insulavm/console.go` |
+| Shutdown 30 s e força após timeout | `vm stop` | `StopVMWithOptions` | `insulavm/stop_policy.go` |
+
+Implementação no código da branch de trabalho; **compilação e teste real KVM ainda não comprovados**. Instalador ISO netinst permanece pendente. [Fluxo de testes integrais](../fluxos/FLUX-006-teste-integral-iso-vm.md).
+
+## Acrescentadas na develop — 2026-11-08
+
+| Intenção | CLI | Go | Situação |
+| --- | --- | --- | --- |
+| Instalar Debian 13 da ISO e publicar perfil | `profile create-from-iso` | `CreateProfileFromISO` | implementado, KVM real pendente |
+| Exportar ISO Live de VM gerenciada em uma operação | `vm export-iso` | `ExportVMToLiveISO` | implementado, KVM real pendente |
+
+Ambas utilizam o mesmo motor da biblioteca. Não foi criada uma segunda implementação do ciclo de VM.

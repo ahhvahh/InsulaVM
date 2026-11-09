@@ -13,13 +13,18 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|list|status|shell|stop|stop-all|freeze|exec|import|deploy")}
+ if len(args)==0{return errors.New("usage: insula vm start|start-iso|list|status|shell|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
  profileName:=fs.String("profile","","registered, reusable cloud-init-ready QCOW2 profile")
+ isoPath:=fs.String("iso","","path to a prepared Debian Live ISO (not an installer)")
+ startupScript:=fs.String("startup-script","","absolute path to trusted first-boot script (Live ISO only)")
  memoryMiB:=fs.Int("memory-mib",0,"override guest RAM in MiB for this VM only; 0 keeps profile default")
  vcpus:=fs.Int("vcpus",0,"override guest vCPUs for this VM only; 0 keeps profile default")
+ prepareLiveBoot:=fs.Bool("prepare-live-boot",false,"install live-boot inside managed Debian before freezing for ISO export")
+ graceTimeout:=fs.Duration("grace-timeout",30*time.Second,"VM graceful shutdown deadline before escalation")
+ forceAfterTimeout:=fs.Bool("force-after-timeout",true,"use hard destroy after graceful shutdown deadline")
  dryRun:=fs.Bool("dry-run",false,"list managed VMs that would be stopped by stop-all without changing them")
  id:=fs.String("id","","VM UUIDv7")
  freezeName:=fs.String("name","","unique name for a frozen VM profile")
@@ -59,6 +64,15 @@ func vmCommand(args []string)error{
    instance.ID,instance.Profile,instance.IPAddress,instance.MACAddress,instance.SSHUser,instance.SudoMode)
   fmt.Println("SSH:",sshCommandForCLI(instance.SSHPrivateKeyPath,instance.SSHKnownHostsPath,instance.SSHUser,instance.IPAddress))
   fmt.Println("Para encerrar: insula vm stop -id",instance.ID)
+ case "start-iso":
+  if *profileName==""{return errors.New("vm start-iso requires -profile")}
+  instance,err:=engine.StartVMFromISO(ctx,insulavm.LiveISOStartOptions{Profile:*profileName,ISOPath:*isoPath,MemoryMiB:*memoryMiB,VCPUs:*vcpus,StartupScriptPath:*startupScript})
+  if err!=nil{return presentCLIError(err,root)}
+  fmt.Printf("VM LIVE pronta: id=%s profile=%s ip=%s user=%s\n",instance.ID,instance.Profile,instance.IPAddress,instance.SSHUser)
+  fmt.Println("SSH:",sshCommandForCLI(instance.SSHPrivateKeyPath,instance.SSHKnownHostsPath,instance.SSHUser,instance.IPAddress))
+ case "console":
+  if *id==""{return errors.New("vm console requires -id")}
+  return engine.OpenConsole(ctx,*id,os.Stdin,os.Stdout,os.Stderr)
  case "list":
   entries,err:=engine.ListVMStatus(ctx)
   if err!=nil{return err}
@@ -126,6 +140,17 @@ func vmCommand(args []string)error{
   if err!=nil{return presentCLIError(err,root)}
   fmt.Printf("FREEZE SUCCESS: name=%s source=%s\n",result.ProfileName,result.VMID)
   return nil
+ case "export-iso":
+  if *id==""||*freezeName==""{return errors.New("vm export-iso requires -id and -name")}
+  result,err:=engine.ExportVMToLiveISO(ctx,insulavm.VMExportISORequest{
+   VMID:*id,Name:*freezeName,PrepareLiveBoot:*prepareLiveBoot,
+   ShutdownTimeout:*shutdownTimeout,CommandTimeout:*cmdTimeout,
+   OnProgress:func(p insulavm.VMFreezeProgress){
+    fmt.Fprintf(os.Stderr,"[InsulaVM][export-iso:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
+   },
+  })
+  if err!=nil{return presentCLIError(err,root)}
+  fmt.Printf("VM ISO OK: profile=%s iso=%s source=%s\n",result.Freeze.ProfileName,localPathForCLI(result.ISOPath),*id)
  case "stop-all":
   if *id!=""{return errors.New("vm stop-all does not accept -id; use vm stop -id UUID instead")}
   result,err:=engine.StopAllVMs(ctx,insulavm.VMStopAllOptions{
@@ -144,8 +169,9 @@ func vmCommand(args []string)error{
   return presentCLIError(err,root)
  case "stop":
   if *id==""{return errors.New("vm stop requires -id")}
-  if err:=engine.StopVM(ctx,*id);err!=nil{return err}
-  fmt.Println("VM encerrada:",*id)
+  result,err:=engine.StopVMWithOptions(ctx,insulavm.VMStopOptions{VMID:*id,GracePeriod:*graceTimeout,ForceAfterTimeout:*forceAfterTimeout})
+  if err!=nil{return err}
+  fmt.Printf("VM encerrada: %s graceful=%t forced=%t timed_out=%t\n",*id,result.Graceful,result.Forced,result.TimedOut)
  default:return errors.New("usage: insula vm start|list|status|shell|stop|stop-all|freeze|exec|import|deploy")
  }
  return nil

@@ -1,5 +1,7 @@
-<!-- A-BIOMA-DOC-STANDARD -->
-<!-- A-BIOMA-DOC-REVISADO -->
+<!-- A-BIOMA-DOC-OBSOLETO -->
+<!-- A-BIOMA-DOC-MIGRADO -->
+
+> **Conteúdo lido e migrado para:** [CONTR-001-operacoes-canonicas.md](../contratos/CONTR-001-operacoes-canonicas.md). Este arquivo é mantido para rastreabilidade histórica; use o destino como fonte canônica.
 
 # CONTR-001 — Contrato canônico de operações InsulaVM (CLI e biblioteca Go)
 
@@ -27,7 +29,7 @@
 
 | Método Go (desejado) | CLI canônica (desejada) | Entradas lógicas | Retorno obrigatório | Situação na main de 2026-11-08 |
 | --- | --- | --- | --- | --- |
-| `CreateProfileFromISO` | `insula profile create-from-iso` | Nome, ISO local, RAM MiB, vCPUs, disco GiB, modo de instalação | Perfil, imagem QCOW2, progresso, erro | **Pendente:** instalação de sistema por ISO não existe |
+| `CreateProfileFromISO` | `insula profile create-from-iso` | Nome, ISO local, RAM MiB, vCPUs, disco GiB, modo de instalação | Perfil, imagem QCOW2, progresso, erro | **Implementado na develop, não verificado em KVM real:** Debian 13 amd64, modo automático; wizard interativo pendente |
 | `CreateVM` | `insula vm create` | Perfil registrado **ou** origem VM existente, RAM, vCPUs, disco opcional, script inicial opcional | UUIDv7, nome, estado, IP/SSH, progresso, erro | **Parcial:** `StartVMWithOptions` cria por perfil, RAM/vCPUs; disco/clone direto pendentes |
 | `UploadArchive` | `insula vm upload` | UUIDv7, caminho TAR.GZ local, `Extract` | Pasta, nome do pacote, bytes, hash/verificação, resultado/erro | **Parcial:** `ImportToVM` compacta e **extrai sempre**; `DeployToVM` envia fonte e executa script |
 | `ExecuteScript` | `insula vm run-script` | UUIDv7, script local, argumentos, stdin, stdout, stderr, timeout, sudo | Exit code, início/fim, logs separados, erro de transporte | **Parcial:** `DeployToVM` executa script, mas mistura progresso com saída |
@@ -141,3 +143,26 @@ O `ExecuteScript` compartilha os mesmos streams e retorno de `ExecuteCommand`; a
 - [FLUX-002 — Instalação por ISO (proposta)](../fluxos/FLUX-002-criacao-perfil-vm.md)
 - [FLUX-004 — Freeze existente](../fluxos/FLUX-004-congelar-vm.md)
 - [ARQ-005 — Importação existente](../arquitetura/ARQ-005-importacao-arquivos.md)
+
+## Extensões de perfil, ISO Live e encerramento (código experimental)
+
+Este conjunto amplia os oito métodos de referência, preservando a compatibilidade legada. A execução real em KVM ainda não foi verificada.
+
+| Método | Entradas | Resultado | Condições |
+| --- | --- | --- | --- |
+| `CloneProfile` | nome origem e destino | perfil independente QCOW2 | não altera imagem original |
+| `ExportProfileLiveISO` | nome do perfil | caminho ISO Live | exige Debian com live-boot/initramfs e libguestfs/GRUB no host |
+| `StartVMFromISO` | perfil, ISO Live opcional, RAM, CPU, script administrativo opcional | UUID/IP/SSH e erro | não instala ISO netinst; exige Cloud-Init no Live |
+| `OpenConsole` | UUID, stdin, stdout e stderr | console Libvirt serial bloqueante | verifica propriedade no registro |
+| `StopVMWithOptions` | UUID, período de graça e force no timeout | `VMStopResult` (Graceful, Forced, TimedOut) | padrão 30 s; só força em deadline, não em erro Libvirt |
+
+A CLI expõe `profile clone`, `profile export-iso`, `vm start-iso`, `vm console` e `vm stop -grace-timeout/-force-after-timeout`. A biblioteca preserva `StopVM` legado (destruição imediata) para compatibilidade; **a CLI `vm stop` usa a nova política graciosa**. Não confundir `StartVMFromISO` (Live pronta) com `CreateProfileFromISO` (instaladora Debian ainda pendente). Consulte [INTF-TERM-006](terminal/INTF-TERM-006-iso-live.md) e [FLUX-006](../fluxos/FLUX-006-teste-integral-iso-vm.md).
+
+## Extensões implementadas em develop — Debian ISO instaladora e VM ISO Live
+
+| Go | CLI | Retorno | Situação |
+| --- | --- | --- | --- |
+| `CreateProfileFromISO(ctx, CreateProfileFromISORequest)` | `profile create-from-iso -name -iso -memory-mib -vcpus -disk-gb [-install-timeout]` | Perfil QCOW2 independente, caminho, SHA256 da ISO, progresso | Implementado; execução real não verificada |
+| `ExportVMToLiveISO(ctx, VMExportISORequest)` | `vm export-iso -id -name [-prepare-live-boot]` | Perfil congelado e caminho da ISO Live | Implementado; execução real não verificada |
+
+Ambos reutilizam biblioteca Go para a CLI. Exportar uma VM congela e remove a origem; instalar uma ISO cria um perfil e preserva o arquivo original. O `CreateVM` canônico com clone por UUID, mudança do disco por instância e os contratos de STDIO fiel continuam parciais.

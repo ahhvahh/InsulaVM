@@ -19,9 +19,7 @@ jobs:
           go mod tidy
           git diff --exit-code -- go.mod go.sum
       - name: Validate and test
-        run: |
-          go vet ./...
-          go test -race ./...
+        run: bash scripts/tests/unit.sh
 
       - name: Validate Git repository TAR.GZ script
         run: |

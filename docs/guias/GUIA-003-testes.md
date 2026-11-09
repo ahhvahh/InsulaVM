@@ -1,0 +1,66 @@
+<!-- A-BIOMA-DOC-STANDARD -->
+<!-- A-BIOMA-DOC-REVISADO -->
+
+# GUIA-003 — Executar testes unitários e integrais
+
+**Estado:** scripts criados; boot KVM real não verificado.
+**Fluxo:** [FLUX-006](../fluxos/FLUX-006-teste-integral-iso-vm.md).
+
+## Unitários
+
+Executar na raiz do projeto:
+
+```bash
+bash scripts/tests/unit.sh
+```
+
+
+O script executa `bash -n`, `go vet ./...`, `go test -race` com relatório de cobertura, compilação do executável, verificação de `help` e compilação da suíte com build tag `integration` **sem executar VMs**. Os testes unitários incluem a matriz da CLI, métodos públicos Go, adaptadores Libvirt/SQLite simulados, escalada de desligamento, exportação ISO simulada, SSH e deploy.
+
+## Integrais
+
+**Executar somente em host dedicado** com Libvirt/KVM, rede DHCP, configuração e imagem Debian preparadas. O teste cria e destrói instâncias reais; os perfis criados ficam no storage configurado para inspeção.
+
+```bash
+bash scripts/tests/integration.sh \
+  --config /etc/insulavm/test-config.yaml \
+  --base-qcow2 /var/lib/insulavm-test/debian13-cloud.qcow2
+```
+
+
+- O perfil precisa ter Debian 13 instalado, SSH, Cloud-Init e sudo sem senha.
+- A montagem Live requer guestmount, guestunmount, grub-mkrescue, mksquashfs, lsinitramfs, grub-pc-bin/grub-efi-amd64-bin e xorriso.
+- O guest precisa de acesso ao APT para instalar live-boot e gerar initramfs compatível.
+- O script valida upload, execução com token, congelamento e clonagem, boot da ISO Live e encerramento com timeout de 30 segundos.
+- Um guest descartável ignora o botão de energia ACPI enquanto executa loop infinito; é obrigatório retornar `forced=true` e `timed_out=true`, com estado `absent` após o prazo de graça de 30 s.
+- Por padrão o teste executa também `go test -tags integration ./tests/integration`, consumindo o `Engine` como biblioteca Go para registro, clone, start, status, exec, import, deploy, stop, freeze, ISO Live e boot da ISO.
+- `--skip-go-api` desativa apenas os cenários reais da API Go. `--skip-live-iso` desativa os cenários Live ISO na CLI e na API Go.
+- Para isolar problemas da ISO, use --skip-live-iso; isso **não** passa no critério de aceite integral da ISO.
+
+O marcador de êxito é INSULA_INTEGRATION_OK. Em erro, o script termina com código diferente de zero. Não considerar sucesso apenas porque existe uma imagem .iso.
+
+## Troubleshooting
+
+- /dev/kvm indisponível: executar no host com virtualização ativada.
+- Libvirt sem permissão: ajustar acesso ao URI conforme [GUIA-002](GUIA-002-permissoes-libvirt.md).
+- DHCP/SSH falha: conferir rede Libvirt, Cloud-Init e usuário configurado no guest.
+- Falha na ISO: conferir live-boot no initramfs e dependências do host.
+- Falha ao encerrar: analisar estado real com insula vm status -id UUID e virsh; não apagar discos de instâncias ativas.
+
+## Cobertura e limites
+
+A matriz de testes unitários invoca todos os subcomandos da CLI e todos os métodos públicos de `Engine` pelo menos em um caminho de validação ou cenário controlado. Isso **não significa** cobertura total dos caminhos ou das linhas: a suíte integral é necessária para os fluxos positivos dependentes de Libvirt/SSH. `CreateProfileFromISO` (instalação automática de Debian 13 via Preseed) tem testes unitários com ferramentas do host simuladas e opção de teste integral com ISO real; o cenário de boot de instalador ainda não foi executado em KVM.
+
+O `vm stop` utiliza `virsh shutdown UUID --mode acpi` para que o teste de botão de energia ignorado seja determinístico mesmo quando o guest tiver QEMU Guest Agent. O timeout cobre também a tentativa inicial de `shutdown`; ao expirar, somente a VM registrada pode receber `virsh destroy`. Esse comportamento usa as opções documentadas no [manual oficial virsh](https://www.libvirt.org/manpages/virsh.html). O shutdown/limpeza completa pode exceder a janela de 30 s por operações de Libvirt e armazenamento.
+
+## Instalar Debian 13 da ISO durante a suíte integral
+
+Com `--installer-iso`, o script instala Debian da ISO e pode usar o QCOW2 produzido como base quando `--base-qcow2` não for fornecido. Requer `virt-install`, `openssl`, `guestmount`, `guestunmount`, acesso a repositórios APT no guest e rede Libvirt.
+
+```bash
+bash scripts/tests/integration.sh \
+  --config /etc/insulavm/test-config.yaml \
+  --installer-iso /isos/debian-13-amd64-netinst.iso
+```
+
+Com a suíte Go habilitada, também executa o teste opt-in `TestCreateProfileFromDebianInstallerISO` que chama diretamente a biblioteca, inicia uma VM do perfil criado e, com testes Live habilitados, tenta a exportação da própria VM e novo boot pela ISO. Este teste prolongado não é executado no CI padrão sem KVM.
