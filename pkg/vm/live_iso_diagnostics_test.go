@@ -2,6 +2,7 @@ package vm
 
 import (
  "context"
+ "encoding/xml"
  "os"
  "path/filepath"
  "strings"
@@ -54,15 +55,44 @@ esac
 }
 
 func TestLiveISOConsoleLogXML(t *testing.T){
+ // XML permits equivalent encodings such as &#39; and &apos;. Decode the
+ // document and verify semantic attributes instead of hardcoding entities.
+ const wantPath="/tmp/vm's&console.log"
  spec:=liveISODomainXMLWithLog(
   "01a1c192-e9c6-7064-85c5-73151ded8551","insula-test",1024,1,
   "/tmp/test.iso","/tmp/seed.iso","/tmp/disk.qcow2","default",
-  "52:54:00:aa:bb:cc","/tmp/vm's&console.log")
- for _,want:=range []string{
-  "<serial type='pty'>",
-  "<log file='/tmp/vm&apos;s&amp;console.log' append='on'/>",
-  "<target type='serial' port='0'/>",
- }{
-  if !strings.Contains(spec,want){t.Fatalf("missing %s: %s",want,spec)}
+  "52:54:00:aa:bb:cc",wantPath)
+ var domain struct{
+  Devices struct{
+   Serial struct{
+    Type string `xml:"type,attr"`
+    Target struct{Port string `xml:"port,attr"`} `xml:"target"`
+    Log struct{
+     File string `xml:"file,attr"`
+     Append string `xml:"append,attr"`
+    } `xml:"log"`
+   } `xml:"serial"`
+   Console struct{
+    Type string `xml:"type,attr"`
+    Target struct{
+     Type string `xml:"type,attr"`
+     Port string `xml:"port,attr"`
+    } `xml:"target"`
+   } `xml:"console"`
+  } `xml:"devices"`
+ }
+ if err:=xml.Unmarshal([]byte(spec),&domain);err!=nil{
+  t.Fatalf("invalid domain XML: %v; document=%s",err,spec)
+ }
+ serial:=domain.Devices.Serial
+ if serial.Type!="pty"||serial.Target.Port!="0"{
+  t.Fatalf("unexpected serial configuration: %+v",serial)
+ }
+ if serial.Log.File!=wantPath||serial.Log.Append!="on"{
+  t.Fatalf("serial logging attributes incorrect: %+v",serial.Log)
+ }
+ console:=domain.Devices.Console
+ if console.Type!="pty"||console.Target.Type!="serial"||console.Target.Port!="0"{
+  t.Fatalf("unexpected console configuration: %+v",console)
  }
 }
