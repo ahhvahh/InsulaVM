@@ -61,3 +61,44 @@ O cenário é **obrigatório** na suíte integral mesmo quando --skip-live-iso o
 - O boot do Alpine Virtual não instala sistema em disco e não altera imagem original.
 - O login root sem senha só é aceitável em laboratório descartável e confiável.
 - Execução real no hypervisor deve ser registrada separadamente; compilação de teste não prova boot.
+
+## Execução automática em PRs — Teste Integral 1
+
+O arquivo [Integral 1 - Alpine ISO](../../.github/workflows/integral-1-alpine-iso.yml)
+define o check estável **integral-1-alpine-iso** no GitHub Actions.
+A execução é disparada por `pull_request` para as branches `develop`,
+`promolog` e `main`: abertura, reabertura, novos commits na PR
+(`synchronize`), marcação como pronta para revisão e edição da PR (inclusive
+mudança de base). Não há filtros por arquivos nem cancelamento automático de
+uma execução anterior, portanto todo evento de commit recebido gera nova
+tentativa.
+
+O job usa `ubuntu-24.04` hospedado pelo GitHub, com token somente de leitura,
+instala Libvirt/QEMU, **falha** se /dev/kvm estiver ausente, executa
+`scripts/tests/alpine-iso.sh` e publica `serial.log` e `domain.xml`
+como artefatos, inclusive quando o boot falha. Não usa runner self-hosted
+para executar código de PR pública. O GitHub não garante suporte oficial à
+virtualização aninhada nos runners hospedados; o resultado real de CI
+precisa ser observado. Uma falha de infraestrutura não é considerada sucesso.
+
+### Tornar o check bloqueante para merge
+
+1. Incorporar este workflow em **cada branch de destino**. Sem o arquivo na
+   base da PR, não assumir que o GitHub vai processar seu evento.
+2. No GitHub, acessar **Settings > Rules > Rulesets** (ou **Branches**)
+   e criar proteção para `develop`, `promolog` e `main`.
+3. Habilitar **Require status checks to pass before merging** e selecionar
+   o check `integral-1-alpine-iso` (origem GitHub Actions). Recomenda-se
+   desabilitar bypass para pessoas que não possam ignorar o gate.
+4. Criar ou atualizar uma PR de teste e verificar **Actions > Integral 1 -
+   Alpine ISO**, saída `INSULA_ALPINE_INTEGRATION_OK`, artefatos e status
+   exigido no painel da PR. Repetir após um novo commit.
+
+Em 09/11/2026, `develop` e `main` existiam e não estavam protegidas;
+`promolog` ainda não existia. Este commit prepara o workflow na branch
+de desenvolvimento específica, mas **não afirma** que as regras de proteção
+já foram aplicadas. Nenhum outro workflow antes desativado foi reativado.
+
+O status deve ser avaliado **no commit mais recente**. Quando um PR possuir
+conflitos de merge, o GitHub pode não disparar `pull_request`; esses conflitos
+precisam ser resolvidos antes de obter o check exigido.
