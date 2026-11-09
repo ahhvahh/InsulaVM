@@ -37,7 +37,8 @@ O registro de perfil é necessário apenas se ele ainda não existir. Consulte [
 O comando cria uma VM instaladora temporária, instala Debian 13 em QCOW2 com Preseed, valida os componentes do sistema e registra o perfil. **Requer internet no instalador** para os pacotes de Cloud-Init/SSH/sudo/live-boot; não foi validado em host KVM real.
 
 ```bash
-./insula profile create-from-iso -name debian13 -iso /isos/debian-13-amd64-netinst.iso \
+ISO="$(bash scripts/baixar-debian.sh)"  # baixa e valida SHA256; retorna caminho absoluto
+./insula profile create-from-iso -name debian13 -iso "$ISO" \
   -memory-mib 2048 -vcpus 2 -disk-gb 12 -install-timeout 90m
 ./insula vm start -profile debian13
 ```
