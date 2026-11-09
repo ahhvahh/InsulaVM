@@ -321,8 +321,7 @@ func integral3AssertDomainResources(t *testing.T, uri, id string, memoryMiB, vcp
 }
 
 func TestIntegral3MarkerContract(t *testing.T) {
-	if integral3SHA("INSULA_IT3_PERSIST_test
-") !=
+	if integral3SHA("INSULA_IT3_PERSIST_test\n") !=
 		"ce07ea9ba3eed09c442370cacbe4aa1139fffd238252dded6a2cc189e5f651e4" {
 		t.Fatal("SHA-256 fixture changed unexpectedly")
 	}
