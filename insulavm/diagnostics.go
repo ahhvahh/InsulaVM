@@ -50,6 +50,7 @@ func (e *Engine) DiagnoseVMSSH(ctx context.Context,id string,timeout time.Durati
  client,err:=executor.DialContext(probeCtx,executor.DialConfig{
   Address:net.JoinHostPort(result.IP,strconv.Itoa(port)),User:record.SSHUser,
   PrivateKeyPath:record.PrivateKeyPath,KnownHostsPath:record.KnownHostsPath,Timeout:timeout,
+  HostKeyAlgorithms:[]string{"ssh-ed25519"},
  })
  if err!=nil{return result,fmt.Errorf("SSH authentication failed: %w",err)}
  defer client.Close()
