@@ -23,7 +23,7 @@ O script executa `bash -n`, `go vet ./...`, `go test -race` com relatório de co
 bash scripts/tests/integral-2-zip.sh
 ~~~
 
-A suíte independente cria uma VM Debian 13 Cloud gerenciada por InsulaVM, importa dois ZIPs com 12 arquivos cada pelas interfaces Go e CLI, executa comandos SSH reais para comparar SHA-256 e contagens antes/depois da extração e exige parada graciosa. O workflow de PR é **integral-2-zip-upload-command**; habilite esse check nas regras de merge. Veja [GUIA-006](GUIA-006-teste-integral-2-zip.md).
+A suíte independente cria uma VM Debian 12 Cloud gerenciada por InsulaVM, importa dois ZIPs com 12 arquivos cada pelas interfaces Go e CLI, executa comandos SSH reais para comparar SHA-256 e contagens antes/depois da extração e exige parada graciosa. O workflow de PR é **integral-2-zip-upload-command**; habilite esse check nas regras de merge. Veja [GUIA-006](GUIA-006-teste-integral-2-zip.md).
 
 ## Integrais
 
