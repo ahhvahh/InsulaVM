@@ -47,8 +47,11 @@ jobs:
           fi
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            libvirt-daemon-system libvirt-clients qemu-system-x86
+            libvirt-daemon-system libvirt-clients qemu-system-x86 acl
           sudo systemctl start libvirtd.service
+          # Permitir apenas ao usuário temporário do runner conectar ao Libvirt.
+          # Evitar chmod global no socket e alterações de grupos da sessão.
+          sudo setfacl -m "u:$(id -un):rw" /run/libvirt/libvirt-sock
           virsh -c qemu:///system list --all
 
       - name: Teste Integral 1 - Alpine ISO, comando e desligamento
