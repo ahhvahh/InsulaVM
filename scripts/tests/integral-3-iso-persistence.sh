@@ -80,6 +80,9 @@ else
     echo "[integral-3] --installer-iso must be absolute and nonempty" >&2; exit 2;
   }
 fi
+echo "[integral-3] inspecting ISO boot kernel/initrd paths (read-only)"
+xorriso -indev "$INSTALLER_ISO" -find / -type f -print 2>&1 |
+  grep -E 'linux|initrd|vmlinuz|install' | tail -n 45 || true
 virsh -c qemu:///system net-info default | grep -Eq 'Active:[[:space:]]+yes' || {
   echo "[integral-3] Libvirt default network inactive" >&2; exit 1;
 }
