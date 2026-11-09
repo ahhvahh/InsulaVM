@@ -42,6 +42,8 @@ func TestCLICommandContractMatrix(t *testing.T) {
   {"vm console unknown UUID",[]string{"vm","console","-config",cfg,"-id","unknown"},true,""},
   {"vm status requires id",[]string{"vm","status","-config",cfg},true,"requires"},
   {"vm status unknown UUID",[]string{"vm","status","-config",cfg,"-id","unknown"},true,""},
+  {"vm diagnose requires id",[]string{"vm","diagnose","-config",cfg},true,"requires"},
+  {"vm diagnose unknown UUID",[]string{"vm","diagnose","-config",cfg,"-id","unknown"},true,""},
   {"vm shell requires id",[]string{"vm","shell","-config",cfg},true,""},
   {"vm exec requires command",[]string{"vm","exec","-config",cfg,"-id","unknown"},true,"requires"},
   {"vm import requires source",[]string{"vm","import","-config",cfg,"-id","unknown"},true,"requires"},

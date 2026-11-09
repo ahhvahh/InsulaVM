@@ -191,3 +191,37 @@ sem recorrer diretamente ao `virsh`:
 O `start-iso` não garante automaticamente que a ISO esteja inicializável;
 a saída serial preservada é necessária para descobrir problemas de boot.
 `vm stop` remove a VM descartável após o diagnóstico.
+
+## Boot por ISO Live: evidências e recuperação
+
+Uma falha `start-iso` na etapa DHCP **não comprova** que a ISO inicializou.
+Para cada tentativa, os eventos e snapshots são preservados no Linux em
+`storage.logs/live-iso/<UUID>/`. O padrão da CLI `start-iso` agora é
+`-preserve-on-failure=true`; um domínio já iniciado fica disponível para
+investigação após erros de DHCP/SSH. O console serial opcional usa `-serial-log`:
+
+```bash
+./insula vm start-iso -config ./config.yaml \
+  -profile deb13-abioma-tests-final \
+  -iso ./deb13-abioma-tests-final.iso \
+  -memory-mib 1024 -vcpus 1 -serial-log
+# Se falhar, o UUID da instância será impresso:
+./insula vm diagnose -config ./config.yaml -id UUID_DA_VM
+./insula vm console -config ./config.yaml -id UUID_DA_VM
+```
+
+O comando `vm diagnose` coleta estado do domínio, interface e concessão DHCP
+para o MAC exato, exibindo caminhos dos logs e seus últimos 16 KiB.
+`-serial-log` depende de permissões de gravação suportadas pelo host.
+`vm stop` limpa a VM descartável: execute apenas após o diagnóstico.
+
+**Para recriar o Debian instalado mesmo se a ISO Live falhar**, use o
+QCOW2 registrado pelo `freeze`:
+
+```bash
+./insula vm start -config ./config.yaml \
+  -profile deb13-abioma-tests-final -memory-mib 1024 -vcpus 1
+```
+
+Esta inicialização a partir do perfil QCOW2 é distinta do boot da ISO Live.
+Consulte a [interface e diagnóstico de ISO](docs/interfaces/terminal/INTF-TERM-006-iso-live.md).

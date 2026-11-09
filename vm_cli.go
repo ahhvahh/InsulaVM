@@ -13,7 +13,7 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|start-iso|list|status|shell|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
+ if len(args)==0{return errors.New("usage: insula vm start|start-iso|list|status|diagnose|shell|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -23,7 +23,8 @@ func vmCommand(args []string)error{
  memoryMiB:=fs.Int("memory-mib",0,"override guest RAM in MiB for this VM only; 0 keeps profile default")
  vcpus:=fs.Int("vcpus",0,"override guest vCPUs for this VM only; 0 keeps profile default")
  sshReadyTimeout:=fs.Duration("ssh-ready-timeout",5*time.Minute,"wait for SSH after DHCP; default 5m")
- preserveOnFailure:=fs.Bool("preserve-on-failure",false,"retain failed guest and SSH credentials for diagnosis; stop it manually")
+ preserveOnFailure:=fs.Bool("preserve-on-failure",command=="start-iso","retain failed guest and SSH credentials for diagnosis; start-iso defaults to true")
+ captureSerial:=fs.Bool("serial-log",false,"record ttyS0 guest output to storage.logs/live-iso/UUID/serial.log; may require QEMU log permissions")
  prepareLiveBoot:=fs.Bool("prepare-live-boot",true,"prepare guest Live boot support before ISO export (disable for previously cleaned recovery)")
  exportISO:=fs.Bool("export-iso",true,"make a Debian Live ISO after freezing; false saves only QCOW2")
  forceFreeze:=fs.Bool("force-freeze-shutdown",false,"explicitly force-stop VM after graceful timeout; risks crash-consistent disk")
@@ -80,11 +81,36 @@ func vmCommand(args []string)error{
   if *profileName==""{return errors.New("vm start-iso requires -profile")}
   instance,err:=engine.StartVMFromISO(ctx,insulavm.LiveISOStartOptions{
    Profile:*profileName,ISOPath:*isoPath,MemoryMiB:*memoryMiB,VCPUs:*vcpus,
-   StartupScriptPath:*startupScript,SSHReadyTimeout:*sshReadyTimeout,PreserveOnFailure:*preserveOnFailure,
+   StartupScriptPath:*startupScript,SSHReadyTimeout:*sshReadyTimeout,PreserveOnFailure:*preserveOnFailure,CaptureSerial:*captureSerial,
+   OnProgress:func(stage,message string){
+    fmt.Fprintf(os.Stderr,"[InsulaVM][iso:%s] %s\n",stage,localMessageForCLI(message,root))
+   },
   })
   if err!=nil{return presentCLIError(err,root)}
   fmt.Printf("VM LIVE pronta: id=%s profile=%s ip=%s user=%s\n",instance.ID,instance.Profile,instance.IPAddress,instance.SSHUser)
   fmt.Println("SSH:",sshCommandForCLI(instance.SSHPrivateKeyPath,instance.SSHKnownHostsPath,instance.SSHUser,instance.IPAddress))
+ case "diagnose":
+  if *id==""{return errors.New("vm diagnose requires -id")}
+  diag,err:=engine.DiagnoseLiveISO(ctx,*id)
+  if diag!=nil{
+   fmt.Printf("Diagnostico Live ISO: id=%s perfil=%s SQLite=%s Libvirt=%s\n",diag.VMID,diag.Profile,diag.SQLiteStatus,diag.LibvirtState)
+   fmt.Println("Pasta:",localPathForCLI(diag.LogsDirectory))
+   fmt.Println("Eventos:",localPathForCLI(diag.EventsFile))
+   fmt.Println("Estado Libvirt/rede:",localPathForCLI(diag.SnapshotFile))
+   if _,serialErr:=os.Stat(diag.SerialFile);serialErr==nil{
+    fmt.Println("Console serial capturado:",localPathForCLI(diag.SerialFile))
+   }
+   for _,path:=range []string{diag.EventsFile,diag.SnapshotFile,diag.SerialFile}{
+    contents,readErr:=os.ReadFile(path)
+    if readErr==nil{
+     // Bound CLI output; full files remain available in the log directory.
+     if len(contents)>16384{contents=contents[len(contents)-16384:]}
+     fmt.Printf("\n--- %s (ultimos 16 KiB) ---\n%s\n",path,contents)
+    }
+   }
+   fmt.Printf("Console interativo: ./insula vm console -config %s -id %s\n",*cfgPath,*id)
+  }
+  return err
  case "console":
   if *id==""{return errors.New("vm console requires -id")}
   return engine.OpenConsole(ctx,*id,os.Stdin,os.Stdout,os.Stderr)
