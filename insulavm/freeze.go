@@ -30,6 +30,9 @@ type VMFreezeRequest struct {
  // ExportISO creates a Debian Live ISO after publishing the QCOW2.
  // The QCOW2 always survives if ISO creation fails.
  ExportISO bool
+ // OutputISOPath is an optional absolute or CWD-relative .iso destination.
+ // Empty preserves the managed profile/exports location.
+ OutputISOPath string
  OnProgress func(VMFreezeProgress)
 }
 
@@ -59,6 +62,12 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
  if err:=ctx.Err();err!=nil{return nil,err}
  if strings.TrimSpace(req.VMID)==""{return nil,errors.New("VM ID is required")}
  if err:=storage.ValidateName(req.Name);err!=nil{return nil,fmt.Errorf("invalid freeze name: %w",err)}
+ if req.OutputISOPath!=""&&!req.ExportISO{return nil,errors.New("output ISO path requires ExportISO=true")}
+ // Validate destination BEFORE touching guest identity, requesting shutdown,
+ // or publishing a disk profile.
+ if req.ExportISO{
+  if _,err:=e.liveISODestination(req.Name,req.OutputISOPath);err!=nil{return nil,err}
+ }
  if req.ShutdownTimeout<0{return nil,errors.New("shutdown timeout must not be negative")}
  if req.ShutdownTimeout==0{req.ShutdownTimeout=3*time.Minute}
  notify:=func(stage,msg string){
@@ -108,6 +117,11 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
   // The existing SSH connection remains alive long enough to finish cleanup.
   // On retry after a shutdown failure, an operator must set SkipGuestCleanup.
   guestCmd:="set -eu; command -v cloud-init >/dev/null; "+
+   // The guest is asked to power off itself even on older Libvirt domains
+   // with broken ACPI/agent wiring. systemd-run schedules the request and
+   // returns while the SSH command can still finish.
+   "if command -v systemd-run >/dev/null 2>&1; then "+
+   "systemd-run --collect --on-active=10s /usr/bin/systemctl poweroff --no-wall >/dev/null 2>&1 || :; fi; "+
    "home_dir=$(getent passwd "+quoteGuest(record.SSHUser)+" | cut -d: -f6); "+
    "test -n \"$home_dir\"; cloud-init clean --logs --machine-id --seed; "+
    "rm -f -- \"$home_dir/.ssh/authorized_keys\"; rm -f /etc/ssh/ssh_host_*"
@@ -137,20 +151,23 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
  result.ImagePath=image
  notify("registered","Reusable profile created: "+req.Name)
 
- // Only remove the original instance AFTER profile.yaml and image are complete.
- notify("cleanup","Removing the original disposable VM")
- if err:=e.StopVM(ctx,req.VMID);err!=nil{
-  return result,fmt.Errorf("profile %s is already saved, but source VM cleanup failed: %w",req.Name,err)
- }
- result.SourceCleaned=true
+ // Keep the source overlay until BOTH the independent QCOW2 is saved and
+ // the requested ISO has been published. On ISO failure, the operator can
+ // retry from the saved profile without losing the original source overlay.
  if req.ExportISO{
-  notify("iso","Exporting Debian Live ISO from saved QCOW2")
-  iso,isoErr:=e.ExportProfileLiveISO(ctx,req.Name)
+  notify("iso","Mapping the stopped QCOW2 disk and exporting Debian Live ISO")
+  iso,isoErr:=e.ExportProfileLiveISOTo(ctx,req.Name,req.OutputISOPath)
   if isoErr!=nil{
-   return result,fmt.Errorf("QCOW2 profile %s saved; Live ISO export failed (retry: insula profile export-iso -name %s): %w",req.Name,req.Name,isoErr)
+   return result,fmt.Errorf("QCOW2 profile %s saved; Live ISO export failed; source overlay preserved; retry: insula profile export-iso -name %s: %w",req.Name,req.Name,isoErr)
   }
   result.ISOPath=iso
  }
+ notify("cleanup","Removing transient VM only after the requested artifacts are saved")
+ if err:=e.StopVM(ctx,req.VMID);err!=nil{
+  return result,fmt.Errorf("artifacts saved but source VM cleanup failed (source preserved): %w",err)
+ }
+ result.SourceCleaned=true
  notify("ready","Frozen QCOW2 profile ready: "+req.Name)
+
  return result,nil
 }

@@ -14,6 +14,8 @@ import (
 type VMExportISORequest struct {
  VMID string
  Name string
+ // OutputISOPath is optional; absolute or relative to the current directory.
+ OutputISOPath string
  PrepareLiveBoot bool
  ForceShutdown bool
  SkipGuestCleanup bool
@@ -38,6 +40,7 @@ func(e *Engine)ExportVMToLiveISO(ctx context.Context,req VMExportISORequest)(*VM
  if strings.TrimSpace(req.VMID)==""||strings.TrimSpace(req.Name)==""{
   return nil,errors.New("VMID and frozen profile name are required")
  }
+ if _,err:=e.liveISODestination(req.Name,req.OutputISOPath);err!=nil{return nil,err}
  if req.CommandTimeout<0{return nil,errors.New("command timeout must not be negative")}
  if req.CommandTimeout==0{req.CommandTimeout=30*time.Minute}
  if req.PrepareLiveBoot{
@@ -59,7 +62,7 @@ func(e *Engine)ExportVMToLiveISO(ctx context.Context,req VMExportISORequest)(*VM
  freeze,err:=e.FreezeVM(ctx,VMFreezeRequest{
   VMID:req.VMID,Name:req.Name,ShutdownTimeout:req.ShutdownTimeout,
   ForceShutdown:req.ForceShutdown,SkipGuestCleanup:req.SkipGuestCleanup,
-  AllowStopped:req.AllowStopped,ExportISO:true,OnProgress:req.OnProgress,
+  AllowStopped:req.AllowStopped,ExportISO:true,OutputISOPath:req.OutputISOPath,OnProgress:req.OnProgress,
  })
  result:=&VMExportISOResult{Freeze:freeze}
  if freeze!=nil{result.ISOPath=freeze.ISOPath}

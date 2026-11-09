@@ -79,6 +79,31 @@ A imagem resultante ainda pode conter tokens, dados privados, arquivos temporár
 
 `FreezeVM(ctx, VMFreezeRequest)` retorna `VMFreezeResult` com `VMID`, `ProfileName`, `ImagePath`, `SourceStopped` e `SourceCleaned`, além de erro quando aplicável. A CLI usa código de saída `0` no sucesso e `1` em erro. Os testes automatizados empregam Libvirt/QEMU simulados; **boot e congelamento completo em KVM real não foram verificados aqui**.
 
+## Contrato de saída do freeze (desligamento, disco e ISO)
+
+Exemplo na pasta de trabalho da CLI:
+
+```bash
+./insula vm freeze \
+  -config ./config.yaml \
+  -id UUID_DA_VM \
+  ./imagens/deb13-abioma-tests-final.iso
+```
+
+A CLI recebe o último argumento como `OutputISOPath`; `-output` é equivalente. Um caminho `./` é relativo ao **diretório de execução da CLI**; também aceita caminhos absolutos. Se `-name` for omitido, o nome do perfil é derivado do basename do arquivo, sem a extensão `.iso`. `-name` continua aceito para compatibilidade; `-export-iso=false` exige nome de perfil e proíbe destino de ISO.
+
+A biblioteca expõe `VMFreezeRequest{VMID,Name,ExportISO,OutputISOPath,ShutdownTimeout,...}`; para fluxo com preparo automático, `VMExportISORequest` também expõe `OutputISOPath`, encaminhado para `FreezeVM`. `ExportProfileLiveISOTo(ctx, profile, outputPath)` permite escolher o destino a partir de um QCOW2 registrado. `ExportProfileLiveISO` mantém destino legado.
+
+**Ordem operacional:**
+
+1. Verificar o UUID, registro, espaço de saída e nome exclusivo antes de modificar a VM. Se o convidado ainda não tiver Live Boot, preparar `live-boot` e `live-boot-initramfs-tools` e regenerar o initramfs **antes do desligamento**.
+2. Solicitar poweroff pelo próprio Debian em um job do systemd (quando disponível) e enviar o shutdown gracioso pelo Libvirt, aguardando o domínio transitório desaparecer. Não executar `destroy` sem `-force-freeze-shutdown`.
+3. Com Libvirt confirmando `absent`, converter o overlay QCOW2 em disco independente (`qemu-img convert`), publicá-lo como novo perfil e montar somente-leitura via `guestmount`.
+4. Criar `filesystem.squashfs` e ISO Live com kernel/initramfs e GRUB. Publicar atomicamente no destino solicitado, sem sobrescrever arquivo existente.
+5. **Somente depois de salvar QCOW2 e ISO**, limpar os arquivos temporários da VM original e registrar `destroyed` no SQLite. Se a criação da ISO falhar, o perfil QCOW2 e o overlay original permanecem para recuperação.
+
+Uma ISO Live não é uma cópia bit a bit das partições: preserva o sistema como imagem SquashFS para boot Live e exige os scripts de Live Boot no initramfs. O comando não cria uma ISO inicializável apenas renomeando `.qcow2`. Teste de boot real ainda pendente.
+
 ## Desligamento corrigido e ISO Live
 
 - A definição XML de novas VMs inclui `<features><acpi/></features>` e canal virtio `org.qemu.guest_agent.0` para o QEMU Guest Agent. Isso aumenta a confiabilidade do desligamento, mas não altera domínios já iniciados.

@@ -110,17 +110,26 @@ Essa operação instala `live-boot` no guest (quando solicitada), congela o QCOW
 ## Preparar e congelar um ambiente
 
 ```bash
-# Depois de configurar a VM de origem, salva QCOW2 e ISO Live:
-./insula vm freeze -id UUID_DA_VM -name debian13-go-testes
-./insula vm start -profile debian13-go-testes -memory-mib 4096 -vcpus 4
+# Depois de configurar a VM de origem, desligar normalmente, salvar QCOW2 e ISO Live.
+# -config e -id identificam a instancia; o ultimo argumento e o destino da ISO.
+./insula vm freeze -config ./config.yaml -id UUID_DA_VM ./imagens/debian13-go-testes.iso
+
+# O perfil reutilizavel se chamara debian13-go-testes
+./insula vm start -config ./config.yaml -profile debian13-go-testes -memory-mib 4096 -vcpus 4
+
+# Tambem aceita caminho absoluto, ex.: /tmp/debian13-go-testes.iso.
+# Uso antigo com -name continua valido (usa o diretorio exports do perfil).
+./insula vm freeze -config ./config.yaml -id UUID_DA_VM -name debian13-go-testes
 
 # Somente QCOW2, sem Live ISO:
-./insula vm freeze -id UUID_DA_VM -name debian13-go-disco -export-iso=false
+./insula vm freeze -config ./config.yaml -id UUID_DA_VM -name debian13-go-disco -export-iso=false
 ```
 
 Para instalar dependências administrativas durante a primeira inicialização, a API Go oferece `VMStartOptions.StartupScriptPath`: caminho absoluto de script confiável, incluído no Cloud-Init e executado como root antes de a VM ficar pronta. Veja [ARQ-004](docs/arquitetura/ARQ-004-biblioteca-go.md).
 
 O congelamento **encerra e remove a VM original** após consolidar seu overlay em um QCOW2 autônomo. Por padrão, `vm freeze` também prepara e exporta uma ISO Live Debian; se esta segunda etapa falhar, o perfil QCOW2 **permanece salvo**. A ISO gerada fica em `data/profiles/NOME/exports/NOME-live.iso`. Não execute `vm stop` antes de congelar, pois isso apaga o overlay temporário.
+
+**Destino da ISO:** o último argumento do `vm freeze` é um arquivo terminado em `.iso`. Um caminho iniciado com `./` é resolvido a partir da pasta de onde o comando é executado, independentemente da localização de `config.yaml`. O diretório será criado quando necessário; o InsulaVM nunca sobrescreve uma ISO já existente. A preparação do `live-boot` ocorre antes do desligamento e a geração da ISO só começa **depois de o Libvirt confirmar que a VM encerrou**. A origem é removida somente após salvar o QCOW2 e publicar a ISO.
 
 **Desligamento e recuperação:** o domínio recém-criado declara ACPI e canal do QEMU Guest Agent. Se uma VM **antiga** ignorar o desligamento gracioso, use `-force-freeze-shutdown` apenas se aceitar o risco de disco crash-consistent. Após uma tentativa antiga que já tenha limpado chaves SSH, use `-skip-guest-cleanup -prepare-live-boot=false` para não repetir SSH; `-recover-stopped` é permitido somente para disco temporário intacto e domínio já ausente no Libvirt (ver FLUX-004). Sem `-force-freeze-shutdown`, a ferramenta **não** força o desligamento. Leia [FLUX-004](docs/fluxos/FLUX-004-congelar-vm.md).
 
