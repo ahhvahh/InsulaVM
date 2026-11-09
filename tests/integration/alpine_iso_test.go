@@ -192,7 +192,14 @@ func TestAlpineISOConsoleLifecycle(t *testing.T) {
 				if strings.Contains(transcript, "Password:") {
 					t.Fatal("unexpected Alpine live root password challenge")
 				}
-				if prompt.MatchString(strings.ReplaceAll(transcript, "\r", "")) {
+				if prompt.MatchString(alpineVisibleConsole(transcript)) {
+					// Alpine ash sends ESC[6n to query the terminal cursor.
+					// Respond so that shell input is accepted immediately.
+					if strings.Contains(transcript, "\x1b[6n") {
+						if _, err := console.Write([]byte("\x1b[1;1R")); err != nil {
+							t.Fatal(err)
+						}
+					}
 					cmd := fmt.Sprintf(
 						"sh -c 'test -s /etc/alpine-release && test \"$(uname -m)\" = x86_64 && printf \"INSULA_ALPINE_GUEST_OK_%s:%%s\\n\" \"$(cat /etc/alpine-release)\"'; printf 'INSULA_ALPINE_EXIT_%s:%%d\\n' \"$?\"\r",
 						token, token)
@@ -285,8 +292,16 @@ func alpineValidateResources(raw string) error {
 	return nil
 }
 
+// The Alpine Virtual serial shell appends an ANSI cursor-position request to
+// its prompt; strip CSI escape codes before matching shell output.
+var alpineANSI = regexp.MustCompile("\x1b\\[[0-?]*[ -/]*[@-~]")
+
+func alpineVisibleConsole(transcript string) string {
+	return alpineANSI.ReplaceAllString(strings.ReplaceAll(transcript, "\r", ""), "")
+}
+
 func alpineHasConsoleLine(transcript, line string) bool {
-	for _, part := range strings.Split(strings.ReplaceAll(transcript, "\r", ""), "\n") {
+	for _, part := range strings.Split(alpineVisibleConsole(transcript), "\n") {
 		if strings.TrimSpace(part) == line {
 			return true
 		}
@@ -295,7 +310,7 @@ func alpineHasConsoleLine(transcript, line string) bool {
 }
 
 func alpineHasConsoleExit(transcript, prefix string) bool {
-	for _, part := range strings.Split(strings.ReplaceAll(transcript, "\r", ""), "\n") {
+	for _, part := range strings.Split(alpineVisibleConsole(transcript), "\n") {
 		line := strings.TrimSpace(part)
 		if strings.HasPrefix(line, prefix) && len(line) > len(prefix) {
 			exitCode := strings.TrimPrefix(line, prefix)
@@ -358,6 +373,16 @@ func TestAlpineISOXMLContract(t *testing.T) {
 	}
 	if err := alpineValidateResources(strings.Replace(xmlFixture, "512000", "1024000", 1)); err == nil {
 		t.Fatal("incorrect memory must fail")
+	}
+}
+
+func TestAlpineISOSerialPromptWithANSI(t *testing.T) {
+	// Captured from GitHub Actions: boot and root login succeeded, while ash
+	// ended "localhost:~#" with CSI 6n, hiding it from the previous parser.
+	captured := "\r\nlocalhost login: root\r\nWelcome to Alpine!\r\nlocalhost:~# \x1b[6n"
+	prompt := regexp.MustCompile("(?m)(?:^|\n)[^\n]{0,100}# *$")
+	if !prompt.MatchString(alpineVisibleConsole(captured)) {
+		t.Fatalf("prompt must ignore ANSI control characters: %q", alpineVisibleConsole(captured))
 	}
 }
 
