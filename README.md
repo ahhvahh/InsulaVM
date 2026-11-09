@@ -46,6 +46,26 @@ bash scripts/tests/manual-debian-mini-iso.sh all
 
 Consulte [GUIA-004 — roteiro manual](docs/guias/GUIA-004-teste-manual-debian-mini-iso.md).
 
+## Laboratorio Debian 13 minimo (5 GiB, 1 CPU, 1 GiB RAM)
+
+Na pasta com `./insula` e `config.yaml` ja configurados:
+
+```bash
+bash /CAMINHO/InsulaVM/scripts/preparar-deb13-abioma-tests.sh all
+```
+
+O script usa a `mini.iso` atual da distribuicao `trixie`, com verificacao
+SHA256 pelo metodo `test download`, e cria o perfil
+`deb13-abioma-tests`. Ele abre uma sessao SSH para preparacao manual;
+`exit` sai do terminal sem desligar a VM. Depois pergunta se deve congelar
+a VM, encerrar e salvar `deb13-abioma-tests-preparado` como QCOW2 e ISO Live.
+
+Para reconectar ao shell ou salvar mais tarde, use respectivamente `open`
+e `export` no lugar de `all`. Nao execute `vm stop` antes de exportar:
+isso elimina as alteracoes do overlay. A instalacao minima em disco de 5 GiB
+ainda requer validacao KVM real e pode ficar sem espaco se muitos pacotes forem
+instalados. O script nao habilita GitHub Actions.
+
 ## Começar
 
 Requisitos: **Go 1.23+**, Linux com KVM/QEMU/Libvirt, `virsh`, `qemu-img`, rede Libvirt com DHCP, permissões para operar o hipervisor e geração de ISO NoCloud (`genisoimage` ou `xorriso`). O `config.yaml` é opcional na linha de comando, mas o arquivo precisa existir no local esperado.

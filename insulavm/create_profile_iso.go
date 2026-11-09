@@ -63,7 +63,7 @@ func (e *Engine) CreateProfileFromISO(ctx context.Context,req CreateProfileFromI
  if err:=checkDebianInstallerISO(req.ISOPath);err!=nil{return nil,err}
  if req.MemoryMiB<1024 || req.MemoryMiB>1024*1024{return nil,errors.New("installer memory_mib must be 1024..1048576")}
  if req.VCPUs<1||req.VCPUs>256{return nil,errors.New("installer vcpus must be 1..256")}
- if req.DiskGB<8||req.DiskGB>4096{return nil,errors.New("installer disk_gb must be 8..4096")}
+ if req.DiskGB<5||req.DiskGB>4096{return nil,errors.New("installer disk_gb must be 5..4096")}
  if req.Timeout<0{return nil,errors.New("installer timeout cannot be negative")}
  if req.Timeout==0{req.Timeout=90*time.Minute}
  if req.Timeout>6*time.Hour{return nil,errors.New("installer timeout exceeds 6 hours")}
