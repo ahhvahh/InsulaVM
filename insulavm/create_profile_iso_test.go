@@ -164,3 +164,18 @@ func TestCreateProfileFromISOUnmountFailureRetainsStaging(t *testing.T){
  if err!=nil||len(temps)!=1{t.Fatalf("mounted staging not retained: %v %v",temps,err)}
  t.Cleanup(func(){_ = os.RemoveAll(temps[0])}) // safe: fake guestmount only
 }
+
+func TestDebianMiniISOUsesExplicitNetbootKernel(t *testing.T) {
+ args:=debianVirtInstallArgs("qemu:///system","default","iso-test","/tmp/test.qcow2","/tmp/preseed.cfg",CreateProfileFromISORequest{
+  Name:"debian-mini",ISOPath:"/isos/mini.iso",MemoryMiB:2048,VCPUs:2,DiskGB:12,
+ })
+ for i,arg:=range args {
+  if arg=="--location" {
+   if i+1>=len(args)||args[i+1]!="/isos/mini.iso,kernel=linux,initrd=initrd.gz"{
+    t.Fatalf("incorrect Debian mini ISO kernel/initrd: %v",args)
+   }
+   return
+  }
+ }
+ t.Fatal("--location argument missing")
+}

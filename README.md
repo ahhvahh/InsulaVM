@@ -87,6 +87,20 @@ O congelamento **encerra e remove a VM original** após consolidar seu overlay e
 
 A API ainda é experimental, sem compromisso de compatibilidade de versão estável. O projeto utiliza a convenção [A-Bioma Doc Standard](docs/README.md) para organizar a documentação, sem alegar certificação formal.
 
+## Teste manual com Debian mini.iso
+
+Para baixar a menor ISO oficial Debian 13 amd64, instalar o perfil, abrir uma VM
+para personalização e exportar a ISO Live do sistema preparado:
+
+~~~bash
+bash scripts/tests/manual-debian-mini-iso.sh all
+~~~
+
+O script confirma antes de congelar e remover a VM original. Você também pode
+executar cada etapa separadamente (download, install, start, open, export, verify).
+Veja [GUIA-004](docs/guias/GUIA-004-teste-manual-debian-mini-iso.md).
+**Teste de boot KVM real ainda pendente.**
+
 ## ISO Live e testes de integração
 
 Para preparar uma ISO Live, instalar `live-boot` e reconstruir o initramfs **dentro da VM antes de `freeze`**. Depois executar `insula profile export-iso -name PERFIL` e `insula vm start-iso -profile PERFIL`. ISO Debian netinst comum **não** é suportada por `start-iso`; consulte [INTF-TERM-006](docs/interfaces/terminal/INTF-TERM-006-iso-live.md).
