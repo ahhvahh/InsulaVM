@@ -3,12 +3,13 @@
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "$ROOT"
-bash -n scripts/tests/unit.sh \
+bash -n scripts/baixar-debian.sh scripts/tests/test-baixar-debian.sh \
   scripts/tests/integration.sh \
   scripts/tests/guest/verify.sh \
   scripts/tests/guest/loop.sh \
   scripts/tests/guest/prepare-live.sh \
   scripts/tests/guest/ignore-shutdown.sh
+bash scripts/tests/test-baixar-debian.sh
 go vet ./...
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
