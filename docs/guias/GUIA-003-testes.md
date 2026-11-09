@@ -32,6 +32,12 @@ A ISO Alpine Virtual 3.24.4 (~67 MB) é baixada do espelho oficial e validada vi
 
 O runner `integration.sh` chama este teste obrigatoriamente, mesmo com `--skip-live-iso` ou `--skip-go-api`. `--alpine-iso /caminho/absoluto.iso` reutiliza uma ISO local. Este cenário isola a cadeia **ISO → firmware → bootloader → kernel → shell → shutdown**; não valida o provisionamento de SSH/Cloud-Init de `vm start-iso`, que continua coberto por cenários separados. Ver [GUIA-005](GUIA-005-alpine-iso.md).
 
+O workflow [Teste Integral 1](../../.github/workflows/integral-1-alpine-iso.yml) foi
+preparado para PRs destinadas a `develop`, `promolog` e `main`, incluindo
+novos commits (`synchronize`). Para bloquear merges, configurar o check
+obrigatório `integral-1-alpine-iso` nas regras de proteção e incorporar o
+workflow em cada branch de destino. Veja [GUIA-005](GUIA-005-alpine-iso.md).
+
 ## Integrais
 
 **Executar somente em host dedicado** com Libvirt/KVM, rede DHCP, configuração e imagem Debian preparadas. O teste cria e destrói instâncias reais; os perfis criados ficam no storage configurado para inspeção.
