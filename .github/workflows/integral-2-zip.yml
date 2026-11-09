@@ -27,6 +27,13 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Validar fixture ZIP e contratos Go (sem KVM)
+        shell: bash
+        run: |
+          set -euo pipefail
+          go vet ./...
+          go test -tags integration -count=1 -run '^TestIntegral2ZipFixtureContract$' ./tests/integration
+
       - name: Preparar KVM/Libvirt e rede DHCP
         shell: bash
         run: |
