@@ -97,3 +97,30 @@ A VM é preservada somente quando ela já foi criada e registrada pelo
 InsulaVM. Isso mantém o disco `scratch.qcow2`, o console e as chaves
 de diagnóstico. É necessário executar `vm stop` após a investigação,
 pois `-preserve-on-failure` deixa a VM ativa, consumindo memória.
+
+## Rede do Debian Live: DHCP explícito pela interface MAC
+
+O instalador Debian pode salvar uma configuração de rede associada a um
+nome de interface que muda quando a mesma imagem é inicializada como ISO Live.
+Para não depender do nome da placa, `start-iso` cria um arquivo
+`network-config` NoCloud versão 2 (somente na seed temporária da VM Live),
+com `match.macaddress` e `dhcp4: true`. A configuração é lida pelo
+Cloud-Init durante o primeiro boot e não altera o perfil QCOW2 congelado
+nem modifica a ISO Live original.
+
+Se o erro continuar, a ausência de lease não comprova que o DHCP falhou:
+a ISO pode sequer estar completando o boot (kernel, initramfs ou GRUB).
+Use `-preserve-on-failure` e `vm console -id UUID` para observar o guest.
+O `start-iso` utiliza `virsh domifaddr --source lease`, que só devolve
+IP quando existe uma concessão DHCP observável na rede Libvirt.
+
+```bash
+./insula vm start-iso -config ./config.yaml \
+  -profile deb13-abioma-tests-final \
+  -iso ./deb13-abioma-tests-final.iso \
+  -memory-mib 2048 -vcpus 2 \
+  -ssh-ready-timeout 8m -preserve-on-failure
+```
+
+**Teste KVM real:** pendente. O seed de rede melhora a determinação da
+interface de DHCP, mas não substitui a verificação de console/boot.

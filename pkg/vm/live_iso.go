@@ -88,7 +88,7 @@ func StartLiveISOWithOptions(ctx context.Context,c *config.Config,profileName,is
  hostKeys,err:=identity.GenerateKey()
  if err!=nil{return nil,err}
  instance.SSHHostFingerprint=identity.Fingerprint(hostKeys.Public)
- seed,err:=cloudinit.PrepareWithStartupScript(ctx,dir,id,instance.SSHUser,instance.SudoMode,keys.PublicAuthorized,hostKeys,startupScript)
+ seed,err:=cloudinit.PrepareWithStartupScriptAndNetwork(ctx,dir,id,instance.SSHUser,instance.SudoMode,keys.PublicAuthorized,hostKeys,startupScript,instance.MACAddress)
  if err!=nil{return nil,err}
  disk:=filepath.Join(dir,"scratch.qcow2")
  if out,err:=exec.CommandContext(ctx,"qemu-img","create","-f","qcow2",disk,"1G").CombinedOutput();err!=nil{

@@ -8,6 +8,7 @@ import (
  "encoding/base64"
  "errors"
  "fmt"
+ "net"
  "os"
  "os/exec"
  "path/filepath"
@@ -21,6 +22,7 @@ type Seed struct{
  ISO string
  UserData string
  MetaData string
+ NetworkConfig string
 }
 
 // Prepare generates user-data and meta-data in the private per-instance
@@ -37,7 +39,20 @@ func Prepare(ctx context.Context,dir,id,user,sudoMode,clientPublic string,host i
 // The script must originate from trusted host configuration, never a workflow.
 func PrepareWithStartupScript(ctx context.Context,dir,id,user,sudoMode,clientPublic string,
  host identity.Keys,startupScript []byte)(Seed,error){
+ return PrepareWithStartupScriptAndNetwork(ctx,dir,id,user,sudoMode,clientPublic,host,startupScript,"")
+}
+
+// PrepareWithStartupScriptAndNetwork adds an explicit NoCloud network-config
+// for a VM's NIC. DHCP is selected by MAC, not by a fragile PCI device name.
+// Empty mac preserves the original seed format for existing Go callers.
+func PrepareWithStartupScriptAndNetwork(ctx context.Context,dir,id,user,sudoMode,clientPublic string,
+ host identity.Keys,startupScript []byte,mac string)(Seed,error){
  var result Seed
+ if mac!=""{
+  hw,err:=net.ParseMAC(mac)
+  if err!=nil||len(hw)!=6{return result,fmt.Errorf("invalid Ethernet MAC address %q",mac)}
+  mac=hw.String()
+ }
  if ctx==nil{return result,errors.New("context is required")}
  if !identity.ValidUser(user){return result,fmt.Errorf("invalid non-root SSH user %q",user)}
  if sudoMode!="passwordless" && sudoMode!="disabled"{
@@ -93,9 +108,18 @@ func PrepareWithStartupScript(ctx context.Context,dir,id,user,sudoMode,clientPub
  metaData:="instance-id: "+id+"\nlocal-hostname: insula-"+id[:8]+"\n"
  if err:=os.WriteFile(result.UserData,[]byte(userData),0600);err!=nil{return result,err}
  if err:=os.WriteFile(result.MetaData,[]byte(metaData),0600);err!=nil{return result,err}
+ if mac!=""{
+  // NoCloud accepts a top-level v2 network config in "network-config".
+  // Explicit MAC match avoids assumptions about NIC names when booting
+  // from either a QCOW2 disk or the rearranged PCI layout of a Live ISO.
+  result.NetworkConfig=filepath.Join(path,"network-config")
+  networkConfig:="version: 2\nethernets:\n  insula-nic:\n    match:\n      macaddress: "+strconv.Quote(mac)+"\n    dhcp4: true\n    dhcp6: false\n"
+  if err:=os.WriteFile(result.NetworkConfig,[]byte(networkConfig),0600);err!=nil{return result,err}
+ }
  tool,args,err:=isoTool()
  if err!=nil{return result,err}
  args=append(args,"-quiet","-output",result.ISO,"-volid","cidata","-joliet","-rock","user-data","meta-data")
+ if result.NetworkConfig!=""{args=append(args,"network-config")}
  command:=exec.CommandContext(ctx,tool,args...)
  command.Dir=path
  if out,err:=command.CombinedOutput();err!=nil{
