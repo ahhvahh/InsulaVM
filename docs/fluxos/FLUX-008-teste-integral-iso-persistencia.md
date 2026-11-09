@@ -41,11 +41,11 @@ A ISO Live tem SquashFS de uma captura do sistema instalado, com overlay tempor�
 
 ## Integração CI
 
-O workflow [.github/workflows/integral-3-iso-workspace.yml](../../.github/workflows/integral-3-iso-workspace.yml) usa pull_request direcionado **somente para main**. Eventos: opened, synchronize, reopened, ready_for_review, edited. Job/check estável: integral-3-iso-workspace-persistence. Sem filtros paths, sem continue-on-error e sem fallback sem KVM.
+O workflow [.github/workflows/integral-3-iso-workspace.yml](../../.github/workflows/integral-3-iso-workspace.yml) executa **somente em pull_request para develop, homolog ou main**, nos eventos opened, synchronize (novo commit) e reopened. **Não** é acionado por push sem PR, fechamento/merge, edição de título, ready_for_review, schedule ou workflow_dispatch. Job/check: integral-3-iso-workspace-persistence. Sem filtros paths, sem continue-on-error e sem fallback sem KVM. Uma execução anterior da mesma PR é cancelada quando um novo commit solicita revalidação.
 
 Rodar essa instalação em cada PR pode consumir tempo e banda por instalar Debian pela rede, instalar live-boot e gerar SquashFS. O workflow usa runner efêmero GitHub-hosted e instala as dependências explícitas, sem acessar VMs do host do usuário.
 
-A existência de um workflow **não torna o check bloqueante**: exigir integral-3-iso-workspace-persistence nas regras de proteção de main, depois de incorporar o workflow à branch de destino. Não alterar main diretamente.
+A existência de um workflow **não torna o check bloqueante**: exigir integral-3-iso-workspace-persistence nas regras de proteção de develop, homolog e main, depois de incorporar o workflow às branches de destino. A branch homolog ainda precisará ser criada quando o processo de homologação for implantado. Não alterar main diretamente.
 
 ## Erros, segurança e evidências
 

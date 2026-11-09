@@ -53,12 +53,15 @@ INSULA_INTEGRAL_3_CI_OK, com exit code zero.
 ## Integração CI
 
 Workflow: [.github/workflows/integral-3-iso-workspace.yml](../../.github/workflows/integral-3-iso-workspace.yml).
-Apenas PRs para main: opened, synchronize (cada commit), reopened,
-ready_for_review e edited. Status estável:
+Somente PRs para **develop, homolog e main**: opened, synchronize (novo commit)
+e reopened. Não executa em push direto, merge, alteração de título, agendamento
+ou disparo manual por workflow_dispatch. Ao entrar outro commit na mesma PR,
+execuções antigas são canceladas para reduzir custo. Status estável:
 **integral-3-iso-workspace-persistence**.
 
 Para bloquear merge quando falhar, habilitar esse check como obrigatório
-nas regras da branch main. O workflow deve existir na branch-base.
+nas regras das branches develop, homolog e main. O workflow precisa estar
+incorporado à branch-base; homolog ainda não existe e não foi criada.
 
 ## Diagnóstico e limites
 

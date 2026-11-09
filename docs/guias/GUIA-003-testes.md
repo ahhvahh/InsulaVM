@@ -23,7 +23,7 @@ O script executa `bash -n`, `go vet ./...`, `go test -race` com relatório de co
 bash scripts/tests/integral-3-iso-persistence.sh
 ~~~
 
-O teste cria um perfil Debian 13 a partir da mini.iso oficial, inicia VM 500 MiB/1 CPU/10 GiB, escreve `/tmp/workspace/created/state.txt`, congela a VM, exporta a ISO Live e inicia outra VM 500 MiB/1 CPU a partir **dessa ISO**. Compara SHA-256 e existência do caminho, depois encerra graciosamente. O instalador precisa de 1024 MiB por contrato; o estado de RAM das VMs de teste permanece 500 MiB. O workflow de PR para `main` publica o check `integral-3-iso-workspace-persistence`. Veja [GUIA-007](GUIA-007-teste-integral-3-iso-persistencia.md).
+O teste cria um perfil Debian 13 a partir da mini.iso oficial, inicia VM 500 MiB/1 CPU/10 GiB, escreve `/tmp/workspace/created/state.txt`, congela a VM, exporta a ISO Live e inicia outra VM 500 MiB/1 CPU a partir **dessa ISO**. Compara SHA-256 e existência do caminho, depois encerra graciosamente. O instalador precisa de 1024 MiB por contrato; o estado de RAM das VMs de teste permanece 500 MiB. O workflow de PR para `develop`, `homolog` ou `main` publica o check `integral-3-iso-workspace-persistence`. Veja [GUIA-007](GUIA-007-teste-integral-3-iso-persistencia.md).
 
 ## Integrais
 

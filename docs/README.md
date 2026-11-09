@@ -9,7 +9,7 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 
 **Instalar Debian por ISO:** [INTF-TERM-007 — Criar perfil Debian via ISO instaladora](interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md). **Novos fluxos e testes:** [FLUX-006 — Testes integrais VM/ISO Live](fluxos/FLUX-006-teste-integral-iso-vm.md), [GUIA-003 — Testes](guias/GUIA-003-testes.md), [INTF-TERM-006 — ISO Live](interfaces/terminal/INTF-TERM-006-iso-live.md).
 
-**Teste Integral 3:** [FLUX-008 — ISO Live e preservação de /tmp/workspace](fluxos/FLUX-008-teste-integral-iso-persistencia.md) e [GUIA-007 — Executar e diagnosticar](guias/GUIA-007-teste-integral-3-iso-persistencia.md). O check `integral-3-iso-workspace-persistence` é preparado para PRs destinadas exclusivamente a `main`.
+**Teste Integral 3:** [FLUX-008 — ISO Live e preservação de /tmp/workspace](fluxos/FLUX-008-teste-integral-iso-persistencia.md) e [GUIA-007 — Executar e diagnosticar](guias/GUIA-007-teste-integral-3-iso-persistencia.md). O check `integral-3-iso-workspace-persistence` é preparado para PRs destinadas apenas a `develop`, `homolog` ou `main`.
 
 ## Mapa de leitura
 

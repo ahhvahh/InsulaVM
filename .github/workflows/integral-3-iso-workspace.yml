@@ -1,17 +1,22 @@
-# Teste Integral 3 — apenas PRs destinadas a main.
-# Executa ISO instaladora real, VM 500 MiB, freeze/ISO Live e restauracao.
+# Teste Integral 3: somente PRs para develop, homolog e main.
+# Sem push, workflow_dispatch, schedule, workflow_call ou outros gatilhos.
 name: "Integral 3 - ISO workspace persistence"
 
 on:
   pull_request:
     branches:
+      - develop
+      - homolog
       - main
     types:
       - opened
       - synchronize
       - reopened
-      - ready_for_review
-      - edited
+
+# Somente a revisao mais recente de cada PR consume horas de runner.
+concurrency:
+  group: integral-3-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -39,57 +44,8 @@ jobs:
           set -euo pipefail
           bash -n scripts/tests/integral-3-iso-persistence.sh
           go vet ./...
-          go test -count=1 -run '^TestDebianMiniISOInstallerKernelPaths          go test -tags integration -count=1 -run '^TestIntegral3MarkerContract$' ./tests/integration
-
-      - name: Preparar KVM, Libvirt, instalador e exportacao Live ISO
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ -c /dev/kvm ]] || { echo "::error::/dev/kvm missing: no mock fallback"; exit 1; }
-          sudo apt-get update -qq
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            libvirt-daemon-system libvirt-clients qemu-system-x86 qemu-utils \
-            virtinst dnsmasq-base genisoimage acl openssl \
-            libguestfs-tools squashfs-tools grub-common grub-pc-bin \
-            grub-efi-amd64-bin xorriso mtools initramfs-tools-core \
-            fuse3 ca-certificates curl
-          sudo systemctl start libvirtd.service
-          sudo setfacl -m "u:$(id -un):rw" /run/libvirt/libvirt-sock
-          if ! virsh -c qemu:///system net-info default | grep -Eq 'Active:[[:space:]]+yes'; then
-            sudo virsh -c qemu:///system net-start default
-          fi
-          virsh -c qemu:///system net-info default
-
-      - name: Teste Integral 3 - Mini ISO, congelamento e persistencia
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash scripts/tests/integral-3-iso-persistence.sh
-
-      - name: Diagnostico do host em falha
-        if: failure()
-        shell: bash
-        run: |
-          mkdir -p data/integral-3-ci/diagnostic
-          virsh -c qemu:///system list --all \
-            > data/integral-3-ci/diagnostic/domains.txt 2>&1 || true
-          virsh -c qemu:///system net-dhcp-leases default \
-            > data/integral-3-ci/diagnostic/leases.txt 2>&1 || true
-          sudo journalctl -u libvirtd -u virtqemud -u virtlogd \
-            --since '3 hours ago' --no-pager \
-            > data/integral-3-ci/diagnostic/libvirt-journal.log 2>&1 || true
-
-      - name: Publicar logs de host e do guest
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: integral-3-iso-workspace-evidencias
-          path: |
-            data/integral-3-ci/diagnostic/
-            data/integral-3-ci/state/logs/
-          if-no-files-found: warn
-          retention-days: 7
- ./insulavm
+          go test -count=1 -run '^TestIntegral3PRTriggerContract$' ./tests/integration
+          go test -count=1 -run '^TestDebianMiniISOInstallerKernelPaths$' ./insulavm
           go test -tags integration -count=1 -run '^TestIntegral3MarkerContract$' ./tests/integration
 
       - name: Preparar KVM, Libvirt, instalador e exportacao Live ISO
