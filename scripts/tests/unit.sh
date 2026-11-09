@@ -4,11 +4,14 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "$0")/../.." && pwd)"
 cd "$ROOT"
 bash -n scripts/tests/unit.sh \
+  scripts/tests/manual-debian-mini-iso.sh \
   scripts/tests/integration.sh \
   scripts/tests/guest/verify.sh \
   scripts/tests/guest/loop.sh \
   scripts/tests/guest/prepare-live.sh \
   scripts/tests/guest/ignore-shutdown.sh
+# The manual KVM test must stay safe to inspect on hosts without virtualization.
+bash scripts/tests/manual-debian-mini-iso.sh help >/dev/null
 go vet ./...
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT

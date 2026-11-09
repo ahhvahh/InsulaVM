@@ -185,8 +185,11 @@ verify() {
   id="$(sed -nE 's/^VM LIVE pronta: id=([a-f0-9-]{36}) .*/\1/p' <<<"$out")"
   [[ "$id" =~ ^[a-f0-9-]{36}$ ]] || { echo "Live VM ID not parsed" >&2; return 1; }
   rc=0
-  insula vm exec -id "$id" \
-    -command 'test -r /etc/debian_version && echo INSULA_MINI_LIVE_OK' || rc=1
+  if ! output="$(insula vm exec -id "$id" -command 'test -r /etc/debian_version && echo INSULA_MINI_LIVE_OK')"; then
+    rc=1
+  fi
+  printf '%s\n' "$output"
+  [[ "$output" == *INSULA_MINI_LIVE_OK* ]] || rc=1
   insula vm stop -id "$id" -grace-timeout 30s -force-after-timeout=true || rc=1
   [[ "$rc" == 0 ]] && echo "INSULA_DEBIAN_MINI_MANUAL_OK"
   return "$rc"
