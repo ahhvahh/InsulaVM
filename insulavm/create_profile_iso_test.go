@@ -179,3 +179,19 @@ func TestDebianMiniISOUsesExplicitNetbootKernel(t *testing.T) {
  }
  t.Fatal("--location argument missing")
 }
+
+func TestCreateProfileFromISOAcceptsFiveGiBLab(t *testing.T){
+ engine,iso,argsLog:=installerFixture(t)
+ result,err:=engine.CreateProfileFromISO(context.Background(),CreateProfileFromISORequest{
+  Name:"deb13-abioma-tests",ISOPath:iso,MemoryMiB:1024,VCPUs:1,DiskGB:5,
+ })
+ if err!=nil{t.Fatal(err)}
+ if result.Profile.MemoryMiB!=1024||result.Profile.VCPUs!=1||result.Profile.DiskGB!=5{
+  t.Fatalf("unexpected lab profile: %+v",result.Profile)
+ }
+ args,err:=os.ReadFile(argsLog)
+ if err!=nil{t.Fatal(err)}
+ for _,want:=range []string{"--memory\n1024\n","--vcpus\n1\n"}{
+  if !strings.Contains(string(args),want){t.Fatalf("missing %q in installer args: %s",want,args)}
+ }
+}
