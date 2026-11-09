@@ -35,7 +35,16 @@ go build -o insula .
 Erros de autenticação agora informam tentativas e limites independentes de DHCP
 e SSH. `test boot` preserva a VM após falha para diagnóstico.
 A `main` não é modificada e os workflows permanecem desativados.
-Veja [GUIA-004](docs/guias/GUIA-004-testes-guiados.md).
+Veja [GUIA-004 — comandos test](docs/guias/GUIA-004-testes-guiados.md).
+
+Alternativamente, o roteiro manual de ponta a ponta permite instalar, abrir
+uma sessão interativa e exportar a ISO após confirmação:
+
+```bash
+bash scripts/tests/manual-debian-mini-iso.sh all
+```
+
+Consulte [GUIA-004 — roteiro manual](docs/guias/GUIA-004-teste-manual-debian-mini-iso.md).
 
 ## Começar
 
