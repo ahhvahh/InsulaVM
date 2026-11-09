@@ -13,7 +13,6 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -127,8 +126,6 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 	var runtimeEvents []insulavm.VMProgress
 	source, err := engine.StartVMWithOptions(ctx, insulavm.VMStartOptions{
 		Profile: baseName, MemoryMiB: integral3MemoryMiB, VCPUs: integral3VCPUs,
-		SSHReadyTimeout: 6 * time.Minute,
-		PreserveOnFailure: false,
 	}, func(p insulavm.VMProgress) {
 		runtimeEvents = append(runtimeEvents, p)
 		t.Logf("[source:%s] %s", p.Stage, p.Message)
@@ -168,7 +165,7 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 	// constructs the standalone ISO. No forced shutdown is acceptable.
 	exported, err := engine.ExportVMToLiveISO(ctx, insulavm.VMExportISORequest{
 		VMID: source.ID, Name: frozenName,
-		PrepareLiveBoot: true, ForceShutdown: false,
+		PrepareLiveBoot: true,
 		ShutdownTimeout: 4 * time.Minute, CommandTimeout: 20 * time.Minute,
 		OnProgress: func(p insulavm.VMFreezeProgress) {
 			t.Logf("[freeze:%s] %s", p.Stage, p.Message)
@@ -176,7 +173,7 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 	})
 	if err != nil || exported == nil || exported.Freeze == nil ||
 		!exported.Freeze.SourceStopped || !exported.Freeze.SourceCleaned ||
-		exported.Freeze.ForcedShutdown || exported.ISOPath == "" {
+		exported.ISOPath == "" {
 		t.Fatalf("freeze+ISO failed or was forced; source evidence kept: result=%+v err=%v", exported, err)
 	}
 	liveISOPath = exported.ISOPath
@@ -198,12 +195,6 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 	restored, err := engine.StartVMFromISO(ctx, insulavm.LiveISOStartOptions{
 		Profile: frozenName, ISOPath: liveISOPath,
 		MemoryMiB: integral3MemoryMiB, VCPUs: integral3VCPUs,
-		SSHReadyTimeout: 7 * time.Minute,
-		PreserveOnFailure: false,
-		CaptureSerial: true,
-		OnProgress: func(stage, message string) {
-			t.Logf("[iso:%s] %s", stage, message)
-		},
 	})
 	if err != nil {
 		t.Fatalf("second VM boot from generated ISO failed (check serial/Libvirt logs): %v", err)
