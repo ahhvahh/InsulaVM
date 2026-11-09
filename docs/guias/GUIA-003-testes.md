@@ -24,7 +24,7 @@ Para comprovar **boot de uma ISO oficial sem Cloud-Init ou SSH**, executar em ho
 ```bash
 bash scripts/tests/alpine-iso.sh --config /etc/insulavm/test-config.yaml
 # Alternativamente, utilizar ISO local confiável:
-bash scripts/tests/alpine-iso.sh --config /etc/insulavm/test-config.yaml \\
+bash scripts/tests/alpine-iso.sh --config /etc/insulavm/test-config.yaml \
   --iso /var/lib/libvirt/images/alpine-virt-3.24.4-x86_64.iso
 ```
 
