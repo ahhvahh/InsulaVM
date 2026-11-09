@@ -17,6 +17,14 @@ bash scripts/tests/unit.sh
 
 O script executa `bash -n`, `go vet ./...`, `go test -race` com relatório de cobertura, compilação do executável, verificação de `help` e compilação da suíte com build tag `integration` **sem executar VMs**. Os testes unitários incluem a matriz da CLI, métodos públicos Go, adaptadores Libvirt/SQLite simulados, escalada de desligamento, exportação ISO simulada, SSH e deploy.
 
+## Teste Integral 3 — Persistência após exportação de ISO
+
+~~~bash
+bash scripts/tests/integral-3-iso-persistence.sh
+~~~
+
+O teste cria um perfil Debian 13 a partir da mini.iso oficial, inicia VM 500 MiB/1 CPU/10 GiB, escreve `/tmp/workspace/created/state.txt`, congela a VM, exporta a ISO Live e inicia outra VM 500 MiB/1 CPU a partir **dessa ISO**. Compara SHA-256 e existência do caminho, depois encerra graciosamente. O instalador precisa de 1024 MiB por contrato; o estado de RAM das VMs de teste permanece 500 MiB. O workflow de PR para `main` publica o check `integral-3-iso-workspace-persistence`. Veja [GUIA-007](GUIA-007-teste-integral-3-iso-persistencia.md).
+
 ## Integrais
 
 **Executar somente em host dedicado** com Libvirt/KVM, rede DHCP, configuração e imagem Debian preparadas. O teste cria e destrói instâncias reais; os perfis criados ficam no storage configurado para inspeção.
