@@ -50,7 +50,7 @@ pacotes Debian pela rede.
 Sucesso exige saída INSULA_INTEGRAL_3_OK e
 INSULA_INTEGRAL_3_CI_OK, com exit code zero.
 
-**Os testes unitários de contrato e as regressões Go não executam nas PRs:** ficam concentrados no workflow `Go tests`, acionado exclusivamente por `push` na `develop`. As PRs executam somente o preflight estático (`bash -n` e `go vet`) e os respectivos testes integrais reais.
+**Os testes unitários de contrato e as regressões Go não executam pelo evento de PR:** o workflow `Go tests` é acionado por `push` em qualquer branch. As PRs executam somente o preflight estático (`bash -n` e `go vet`) e os respectivos testes integrais reais.
 
 ## Integração CI
 
@@ -68,6 +68,7 @@ incorporado à branch-base; homolog ainda não existe e não foi criada.
 ## Diagnóstico e limites
 
 - Verificar boot pelo console serial e logs do convidado antes de culpar DHCP.
+- O runner Ubuntu registrou `cp: cannot open '/boot/vmlinuz-7.0.0-1017-azure' for reading: Permission denied` no `supermin`. Se não houver kernel acessível, o motor tenta kernel e módulos privados obtidos via APT sem alterar permissões do host, somente quando o diagnóstico identifica especificamente esse erro ou kernel ausente. Preservar os logs se a tentativa falhar.
 - O /tmp não possui garantia de persistência em sistemas Linux; o teste deve
   falhar se os dados desaparecerem, sem recolocá-los via host.
 - Em erro de freeze, preservar evidências antes de remover o overlay.

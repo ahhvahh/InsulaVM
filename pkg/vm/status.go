@@ -31,19 +31,25 @@ func InspectRegistered(ctx context.Context, uri string, records []registry.Entry
  if len(records)==0 {return []LiveInfo{},nil}
  output,err:=virsh(ctx,uri,"list","--all","--uuid")
  if err!=nil {return nil,fmt.Errorf("consult Libvirt domain list: %w: %s",err,strings.TrimSpace(string(output)))}
- existing:=make(map[string]bool)
- for _,line:=range strings.Split(string(output),"\n"){
-  uuid:=strings.ToLower(strings.TrimSpace(line))
-  if uuid!=""{existing[uuid]=true}
- }
+ existing:=libvirtDomainUUIDs(output)
  infos:=make([]LiveInfo,0,len(records))
  for _,record:=range records{
   info:=LiveInfo{Record:record,LibvirtState:"absent"}
   if existing[strings.ToLower(record.LibvirtUUID)]{
    state,err:=virsh(ctx,uri,"domstate",record.LibvirtUUID)
    if err!=nil{
-    info.LibvirtState="unknown"
-    info.Warning=fmt.Sprintf("Libvirt domstate: %v: %s",err,strings.TrimSpace(string(state)))
+    // Transient domains may disappear between 'list' and 'domstate'.
+    // Only a second successful list proving absence resolves this race.
+    check,checkErr:=virsh(ctx,uri,"list","--all","--uuid")
+    if checkErr==nil&&!libvirtDomainUUIDs(check)[strings.ToLower(record.LibvirtUUID)]{
+     info.LibvirtState="absent"
+    }else{
+     info.LibvirtState="unknown"
+     info.Warning=fmt.Sprintf("Libvirt domstate: %v: %s",err,strings.TrimSpace(string(state)))
+     if checkErr!=nil{
+      info.Warning+=fmt.Sprintf("; recheck failed: %v: %s",checkErr,strings.TrimSpace(string(check)))
+     }
+    }
    }else{
     info.LibvirtState=strings.ToLower(strings.TrimSpace(string(state)))
     if info.LibvirtState==""{
@@ -67,6 +73,16 @@ func InspectRegistered(ctx context.Context, uri string, records []registry.Entry
   infos=append(infos,info)
  }
  return infos,nil
+}
+
+// libvirtDomainUUIDs parses the canonical machine-readable virsh UUID listing.
+func libvirtDomainUUIDs(output []byte)map[string]bool{
+ result:=make(map[string]bool)
+ for _,line:=range strings.Split(string(output),"\n"){
+  uuid:=strings.ToLower(strings.TrimSpace(line))
+  if uuid!=""{result[uuid]=true}
+ }
+ return result
 }
 
 // ActiveDomainState verifies a freshly created domain while starting or

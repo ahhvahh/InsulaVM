@@ -41,7 +41,7 @@ Erro deixa logs sob data/integral-2-ci/state/logs e provoca saída não zero. Um
 
 ## PRs e execução obrigatória
 
-Workflow: [.github/workflows/integral-2-zip.yml](../../.github/workflows/integral-2-zip.yml). Dispara ao abrir e atualizar PRs destinadas a develop, promolog e main (incluindo cada commit recebido por synchronize). O status estável do job é integral-2-zip-upload-command. O workflow não filtra diretórios nem aceita sucesso parcial; evidências são anexadas à execução.
+Workflow: [.github/workflows/integral-2-zip.yml](../../.github/workflows/integral-2-zip.yml). Dispara ao abrir e atualizar PRs destinadas a develop, homolog e main (incluindo cada commit recebido por synchronize). O status estável do job é integral-2-zip-upload-command. O workflow não filtra diretórios nem aceita sucesso parcial; evidências são anexadas à execução.
 
 Para bloquear merge quando o teste falhar, adicionar integral-2-zip-upload-command aos checks exigidos nas regras da branch de destino. Incorporar o workflow em cada branch-alvo; a branch promolog precisa existir. O Teste Integral 1 (ISO Alpine) permanece separado. Não ativar outros workflows.
 
@@ -53,6 +53,8 @@ Para bloquear merge quando o teste falhar, adicionar integral-2-zip-upload-comma
 - Erro de transferência: analisar estágios uploading/verifying/extracting no log.
 - Conteúdo incorreto: comparar marcadores SHA e contagens produzidos pelo guest.
 - Stop forçado: o teste não passa, mesmo que recursos sejam limpos posteriormente.
+- Race de desligamento em domínio transitório: se `virsh domstate` falhar após um `list`, o motor consulta `virsh list --all --uuid` novamente. Somente ausência confirmada com comando bem-sucedido permite finalizar a limpeza; erro de conexão ou domínio ainda listado preserva os discos.
+- A falha observada no CI ao encerrar após upload e execução (estado Libvirt desconhecido) deve ser revalidada no Integral 2 real; mocks não comprovam desligamento gracioso.
 
 **Limitação importante:** ImportToVM transfere o ZIP como um arquivo único envolto em TAR.GZ temporário, que é extraído automaticamente pela ferramenta. Quem extrai o conteúdo ZIP é um comando posterior enviado à VM; isso é intencional e respeita o contrato atual.
 

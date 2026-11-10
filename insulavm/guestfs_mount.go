@@ -14,7 +14,7 @@ import (
 
 // mountGuestDiskReadOnly uses libguestfs without exposing or modifying the
 // backing image. Some minimal Linux hosts (including CI runners) have KVM but
-// no installed kernel for supermin's *separate* libguestfs appliance. In that
+// no readable kernel for supermin's *separate* libguestfs appliance. In that
 // specific case, provision a distro kernel in a private temporary directory
 // without installing packages, changing the host, or modifying the tests.
 // The returned cleanup must run AFTER guestunmount, never before.
@@ -48,7 +48,7 @@ func mountGuestDiskReadOnly(ctx context.Context, image, mountpoint string) (func
 		return nil, ctx.Err()
 	}
 	diagnostic := tailGuestfsOutput(string(debugOutput))
-	if !strings.Contains(string(debugOutput), "failed to find a suitable kernel") {
+	if !guestfsNeedsReadableKernel(string(debugOutput)) {
 		return nil, fmt.Errorf("%w; libguestfs diagnostics: %s", original, diagnostic)
 	}
 	if os.Getenv("SUPERMIN_KERNEL") != "" || os.Getenv("SUPERMIN_MODULES") != "" {
@@ -57,7 +57,7 @@ func mountGuestDiskReadOnly(ctx context.Context, image, mountpoint string) (func
 
 	kernelEnv, cleanup, prepareErr := prepareGuestfsKernel(ctx)
 	if prepareErr != nil {
-		return nil, fmt.Errorf("%w; supermin has no suitable host kernel; private kernel preparation failed: %v; diagnostics: %s", original, prepareErr, diagnostic)
+		return nil, fmt.Errorf("%w; supermin cannot use a readable host kernel; private kernel preparation failed: %v; diagnostics: %s", original, prepareErr, diagnostic)
 	}
 	retryOutput, retryErr := mount(kernelEnv...)
 	if retryErr != nil {
@@ -68,6 +68,24 @@ func mountGuestDiskReadOnly(ctx context.Context, image, mountpoint string) (func
 		return nil, fmt.Errorf("%w; guestmount with private supermin kernel failed: %v: %s", original, retryErr, tailGuestfsOutput(string(retryOutput)))
 	}
 	return cleanup, nil
+}
+
+// guestfsNeedsReadableKernel only permits a private kernel fallback when
+// supermin reports either no suitable kernel or an unreadable host vmlinuz.
+func guestfsNeedsReadableKernel(debugOutput string) bool {
+ if strings.Contains(debugOutput,"failed to find a suitable kernel"){
+  return true
+ }
+ // A generic Permission denied must never trigger the kernel fallback:
+ // it may be a guest disk, libvirt, or unrelated host access failure.
+ for _,line:=range strings.Split(debugOutput,"\n"){
+  if strings.Contains(line,"cp: cannot open")&&
+   strings.Contains(line,"/vmlinuz-")&&
+   strings.Contains(line,"for reading: Permission denied"){
+   return true
+  }
+ }
+ return false
 }
 
 func tailGuestfsOutput(output string) string {
