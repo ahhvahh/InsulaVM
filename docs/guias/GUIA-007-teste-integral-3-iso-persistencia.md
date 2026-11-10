@@ -1,78 +1,61 @@
 <!-- A-BIOMA-DOC-STANDARD -->
 <!-- A-BIOMA-DOC-REVISADO -->
 
-# GUIA-007 — Teste Integral 3: ISO Live com /tmp/workspace preservado
+# GUIA-007 — Integral 3: freezing QCOW2 comprimido e boot de nova VM
 
-**Estado:** script/CI implementados; boot real deve ser verificado na PR.
+**Estado:** teste/CI migrados; execução real KVM da revisão atual pendente.
 **Fluxo:** [FLUX-008](../fluxos/FLUX-008-teste-integral-iso-persistencia.md).
 
 ## Pré-requisitos
 
-Host amd64 com KVM, Libvirt, rede default DHCP, Go, virt-install,
-qemu-img, libguestfs, guestmount/guestunmount, mksquashfs, grub-mkrescue,
-xorriso, lsinitramfs, openssl, genisoimage e ACL do UID QEMU.
+Host amd64 com KVM/Libvirt, rede Libvirt `default` com DHCP, Go, virt-install, qemu-img, libguestfs/guestmount, OpenSSL, genisoimage e permissões QEMU. O instalador Debian precisa de rede e repositórios acessíveis. **Não** são exigidos grub-mkrescue, mksquashfs ou xorriso para exportação de ISO Live.
 
-## Execução
+## Executar
 
-~~~bash
+```bash
 bash scripts/tests/integral-3-iso-persistence.sh
-~~~
+```
 
-Para usar ISO e configuração privadas de um host de teste:
+Para reutilizar uma ISO instaladora confiável e uma configuração isolada:
 
-~~~bash
+```bash
 bash scripts/tests/integral-3-iso-persistence.sh \
   --config /etc/insulavm/test-config.yaml \
   --installer-iso /isos/debian-13-mini.iso
-~~~
+```
 
-O modo padrão utiliza diretório isolado data/integral-3-ci/state, sem
-acessar armazenamento de produção. Obtém mini.iso Debian 13 amd64 oficial
-(~64 MB), verifica SHA-256 com o manifesto da distribuição e instala
-pacotes Debian pela rede.
+O script usa por padrão `data/integral-3-ci/state`, baixa a mini.iso Debian 13 amd64 (~64 MB), compara o SHA-256 com o manifesto da distribuição e instala o sistema Debian. Os nomes antigos de arquivos do teste e do workflow foram preservados para não modificar desnecessariamente os contratos do CI.
 
-## Verificações
+## Critérios obrigatórios
 
 | Etapa | Aprovação exigida |
 | --- | --- |
-| ISO inicial | Instalação real via mini.iso |
-| Disco | QCOW2 de 10 GiB |
-| Instalação | 1024 MiB no instalador, mínimo da API atual |
-| Primeira VM | 500 MiB/1 vCPU no Libvirt |
-| Criação | mkdir /tmp/workspace/created + arquivo state.txt via ExecVM |
-| Persistência pré-freeze | SHA-256 do arquivo e conteúdo pela conexão SSH |
-| Freeze | Desligamento gracioso, QCOW2 plano e ISO Live criada |
-| Segunda VM | Novo UUID, 500 MiB/1 vCPU e boot real pela ISO gerada |
-| Persistência pós-boot | Pasta/arquivo existem com o mesmo SHA-256, sem reupload |
-| CLI | vm exec confirma arquivo e pasta da VM restaurada |
-| Shutdown final | Sem forced stop, domínio ausente e scratch removido |
+| Instalação inicial | Debian 13 pela ISO instaladora oficial; 1024 MiB/1 vCPU na instalação |
+| Disco instalado | Perfil QCOW2 de 10 GiB virtuais, sem backing |
+| Primeira VM | Boot KVM com 500 MiB/1 vCPU, DHCP, SSH |
+| Escrita | Criar `/home/insula/insulavm/workspace/created/state.txt` dentro da VM |
+| Fonte de dados | `findmnt` mostra filesystem persistente (não `tmpfs`) |
+| Persistência anterior | Confirmação de bytes e SHA-256 em sessão SSH independente |
+| Freeze | `FreezeVM`, QCOW2 comprimido independente, sem ISO, shutdown gracioso |
+| Integridade | `qemu-img info` sem backing; `qemu-img check` bem-sucedido |
+| Segunda VM | Novo UUID e boot real KVM do perfil congelado, 500 MiB/1 vCPU |
+| Persistência posterior | Arquivo e mesmo SHA-256, sem reenvio de dados |
+| CLI/Go | Leitura do arquivo também por `vm exec` |
+| Parada | Shutdown gracioso sem força, domínio ausente e overlay limpo |
 
-Sucesso exige saída INSULA_INTEGRAL_3_OK e
-INSULA_INTEGRAL_3_CI_OK, com exit code zero.
-
-**Os testes unitários de contrato e as regressões Go não executam pelo evento de PR:** o workflow `Go tests` é acionado por `push` em qualquer branch. As PRs executam somente o preflight estático (`bash -n` e `go vet`) e os respectivos testes integrais reais.
+Sucesso exige `INSULA_INTEGRAL_3_OK` e `INSULA_INTEGRAL_3_CI_OK` com código zero. Não considerar produção pronta apenas porque o QCOW2 existe.
 
 ## Integração CI
 
-Workflow: [.github/workflows/integral-3-iso-workspace.yml](../../.github/workflows/integral-3-iso-workspace.yml).
-Somente PRs para **develop, homolog e main**: opened, synchronize (novo commit)
-e reopened. Não executa em push direto, merge, alteração de título, agendamento
-ou disparo manual por workflow_dispatch. Ao entrar outro commit na mesma PR,
-execuções antigas são canceladas para reduzir custo. Status estável:
-**integral-3-iso-workspace-persistence**.
+Workflow: [integral-3-iso-workspace.yml](../../.github/workflows/integral-3-iso-workspace.yml).
+O workflow **só** executa em PRs originadas em `develop` destinadas a `homolog` ou `main`. Não executa em pushes, schedules, disparos manuais ou PRs de outras branches. O check mantém o identificador legado `integral-3-iso-workspace-persistence` para não exigir migração imediata das regras de branch. O teste unitário de contrato valida esses gatilhos.
 
-Para bloquear merge quando falhar, habilitar esse check como obrigatório
-nas regras das branches develop, homolog e main. O workflow precisa estar
-incorporado à branch-base; homolog ainda não existe e não foi criada.
+A suíte normal `Go tests` executa em push e compila os testes com tag `integration`, mas não substitui a verificação com hipervisor real.
 
-## Diagnóstico e limites
+## Diagnóstico
 
-- Verificar boot pelo console serial e logs do convidado antes de culpar DHCP.
-- O runner Ubuntu registrou `cp: cannot open '/boot/vmlinuz-7.0.0-1017-azure' for reading: Permission denied` no `supermin`. Outro diagnóstico comprovou falta de `modules.dep` na árvore de módulos extraída do pacote APT: agora `depmod -b` gera esse índice exclusivamente no diretório temporário antes de iniciar o appliance. A execução seguinte confirmou que o fallback privado foi tentado, mas falhou com mensagem genérica; a tentativa com kernel privado agora habilita o debug de libguestfs e propaga a causa detalhada para o log. Se não houver kernel acessível, o motor tenta kernel e módulos privados obtidos via APT sem alterar permissões do host, somente quando o diagnóstico identifica especificamente esse erro ou kernel ausente. Preservar os logs se a tentativa falhar.
-- O /tmp não possui garantia de persistência em sistemas Linux; o teste deve
-  falhar se os dados desaparecerem, sem recolocá-los via host.
-- Em erro de freeze, preservar evidências antes de remover o overlay.
-- A segunda VM da ISO usa scratch temporário gerado por StartVMFromISO,
-  e não um segundo disco persistente de 10 GiB.
-- Não enviar ISO nem segredos privados como artefatos do CI. Os logs ficam
-  disponíveis no job por sete dias.
+- Preservar os logs do instalador, Libvirt, do guest e do `qemu-img` nos artefatos do job; nunca publicar chaves privadas nem imagens completas.
+- Verificar a última etapa comprovada por logs, sem atribuir automaticamente erro de boot a DHCP.
+- Se `findmnt` indicar `tmpfs`, corrigir o caminho de armazenamento do convidado; um QCOW2 nunca contém arquivos existentes apenas em RAM.
+- Se `qemu-img check` falhar, não iniciar a segunda VM e preservar o overlay quando ainda disponível.
+- A imagem comprimida continua diretamente bootável via QEMU; nenhuma extração é necessária. O recurso ISO Live fica separado para implementação/homologação futura.

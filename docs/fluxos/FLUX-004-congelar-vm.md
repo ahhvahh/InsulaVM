@@ -3,7 +3,7 @@
 
 # FLUX-004 — Congelar VM gerenciada como perfil reutilizável
 
-**Estado:** implementado para gerar QCOW2 independente; a CLI `vm freeze` também tenta produzir ISO Live Debian. Teste integral real ainda pendente.
+**Estado:** congelamento padrão QCOW2 independente com compressão nativa QEMU; teste de boot real da base comprimida pendente.
 **Versão aprovada:** nenhuma.
 **Evidências:** [FreezeVM](../../insulavm/freeze.go), [ShutdownForFreeze](../../pkg/vm/freeze.go), [FreezeFromOverlay](../../pkg/profile/freeze.go) e [testes de conversão](../../pkg/profile/freeze_test.go).
 **Interface CLI:** [INTF-TERM-004](../interfaces/terminal/INTF-TERM-004-gerenciar-vms.md).
@@ -41,7 +41,7 @@ sequenceDiagram
         C->>L: list/domstate
     end
     alt Desligamento comprovado
-        C->>Q: convert -f qcow2 -O qcow2 overlay novo/base.qcow2
+        C->>Q: convert -f qcow2 -O qcow2 -c overlay novo/base.qcow2
         C->>Q: info --output=json
         C->>P: Publica profile.yaml somente após validar disco autônomo
         C->>L: StopVM confirma ausência e limpa origem
@@ -79,40 +79,28 @@ A imagem resultante ainda pode conter tokens, dados privados, arquivos temporár
 
 `FreezeVM(ctx, VMFreezeRequest)` retorna `VMFreezeResult` com `VMID`, `ProfileName`, `ImagePath`, `SourceStopped` e `SourceCleaned`, além de erro quando aplicável. A CLI usa código de saída `0` no sucesso e `1` em erro. Os testes automatizados empregam Libvirt/QEMU simulados; **boot e congelamento completo em KVM real não foram verificados aqui**.
 
-## Contrato de saída do freeze (desligamento, disco e ISO)
+## Contrato de congelamento nativo
 
-Exemplo na pasta de trabalho da CLI:
+O comando padrão **não gera ISO**; é equivalente a `VMFreezeRequest{VMID: id, Name: "debian-preparado"}` no motor Go.
 
 ```bash
-./insula vm freeze \
-  -config ./config.yaml \
-  -id UUID_DA_VM \
-  ./imagens/deb13-abioma-tests-final.iso
+./insula vm freeze -config ./config.yaml -id UUID_DA_VM -name debian-preparado
+./insula vm start -config ./config.yaml -profile debian-preparado
 ```
 
-A CLI recebe o último argumento como `OutputISOPath`; `-output` é equivalente. Um caminho `./` é relativo ao **diretório de execução da CLI**; também aceita caminhos absolutos. Se `-name` for omitido, o nome do perfil é derivado do basename do arquivo, sem a extensão `.iso`. `-name` continua aceito para compatibilidade; `-export-iso=false` exige nome de perfil e proíbe destino de ISO.
+A execução desliga a VM graciosamente, consolida seu overlay com `qemu-img convert -f qcow2 -O qcow2 -c`, valida formato e ausência de backing, e registra `profile.yaml` apenas após a conversão bem-sucedida. A base QCOW2 comprimida é usada diretamente pelo QEMU, sem etapa de descompactação; as novas instâncias escrevem overlays independentes.
 
-A biblioteca expõe `VMFreezeRequest{VMID,Name,ExportISO,OutputISOPath,ShutdownTimeout,...}`; para fluxo com preparo automático, `VMExportISORequest` também expõe `OutputISOPath`, encaminhado para `FreezeVM`. `ExportProfileLiveISOTo(ctx, profile, outputPath)` permite escolher o destino a partir de um QCOW2 registrado. `ExportProfileLiveISO` mantém destino legado.
+**Configurações:** compressão habilitada por padrão. `-compress=false` na CLI e `VMFreezeRequest.DisableQCOW2Compression=true` na biblioteca desabilitam a compressão de forma explícita. `VMFreezeRequest.ExportISO` permanece `false` por padrão; a geração de ISO Live é experimental, fora do teste de aceite atual. Para solicitar ISO Live explicitamente, existem `vm export-iso` e `vm freeze -export-iso=true -prepare-live-boot=true`, ainda sem homologação de boot.
 
-**Ordem operacional:**
+**Armazenamento:** `storage.profiles` em `config.yaml` aceita caminho absoluto para um volume dedicado. Preservar juntos o `profile.yaml` e `versions/v001/base.qcow2`; o volume deve estar montado e acessível por Libvirt antes de iniciar VMs. Não mover/apagar imagem-base referenciada por overlays. Armazenamento virtual de 10 GiB não corresponde ao consumo físico, que depende da ocupação e compressibilidade dos blocos. A conversão pode requerer espaço para origem e destino simultaneamente.
 
-1. Verificar o UUID, registro, espaço de saída e nome exclusivo antes de modificar a VM. Se o convidado ainda não tiver Live Boot, preparar `live-boot` e `live-boot-initramfs-tools` e regenerar o initramfs **antes do desligamento**.
-2. Solicitar poweroff pelo próprio Debian em um job do systemd (quando disponível) e enviar o shutdown gracioso pelo Libvirt, aguardando o domínio transitório desaparecer. Não executar `destroy` sem `-force-freeze-shutdown`.
-3. Com Libvirt confirmando `absent`, converter o overlay QCOW2 em disco independente (`qemu-img convert`), publicá-lo como novo perfil e montar somente-leitura via `guestmount`.
-4. Criar `filesystem.squashfs` e ISO Live com kernel/initramfs e GRUB. Publicar atomicamente no destino solicitado, sem sobrescrever arquivo existente.
-5. **Somente depois de salvar QCOW2 e ISO**, limpar os arquivos temporários da VM original e registrar `destroyed` no SQLite. Se a criação da ISO falhar, o perfil QCOW2 e o overlay original permanecem para recuperação.
+**Persistência:** `FreezeVM` captura o armazenamento de disco, **não** RAM, `tmpfs` nem montagens externas. Antes de congelar, assegurar que dados necessários estejam num filesystem persistente do convidado. O Integral 3 verifica o tipo de filesystem e o SHA-256 após iniciar outra VM real.
 
-Uma ISO Live não é uma cópia bit a bit das partições: preserva o sistema como imagem SquashFS para boot Live e exige os scripts de Live Boot no initramfs. O comando não cria uma ISO inicializável apenas renomeando `.qcow2`. Teste de boot real ainda pendente.
+**Segurança e recuperação:** a conversão não modifica a base/overlay originais. Erros de shutdown, conversão ou publicação preservam o overlay e não aceitam `destroy` sem consentimento explícito. A VM original é removida apenas após salvar o novo perfil. O congelamento limpa identidade Cloud-Init e SSH, mas não apaga segredos das aplicações.
 
-## Desligamento corrigido e ISO Live
+**Testes e evidências:** testes Go verificam compressão, ausência de backing, falhas, CLI/Go e recuperação. O teste KVM atualizado precisa aprovar, na PR de promoção, o boot de outra VM pelo perfil comprimido. Sem esse resultado, não declarar homologação integral.
 
-- A definição XML de novas VMs inclui `<features><acpi/></features>` e canal virtio `org.qemu.guest_agent.0` para o QEMU Guest Agent. Isso aumenta a confiabilidade do desligamento, mas não altera domínios já iniciados.
-- `ShutdownForFreezeWithOptions` tenta desligamento gracioso e verifica continuamente no Libvirt até o domínio transitório desaparecer. Só com `ForceShutdown=true` / CLI `-force-freeze-shutdown` o hipervisor executa `destroy` após exceder o prazo; neste caso há risco de inconsistência, pois equivale a desligamento abrupto.
-- Recuperação específica de falha anterior: `SkipGuestCleanup=true` / `-skip-guest-cleanup` pula a repetição do `cloud-init clean` quando a tentativa anterior já removeu as chaves SSH. O operador deve ter certeza de que a limpeza já ocorreu. `AllowStopped=true` / `-recover-stopped` permite captura de overlay quando a VM tem SQLite `running` e Libvirt `absent`, somente junto com o salto explícito da limpeza; VMs marcadas `destroyed` não são recuperáveis.
-- `VMFreezeRequest.ExportISO=true` e `vm freeze` (padrão `-export-iso=true`) criam ISO Live após registrar QCOW2. A CLI usa também `-prepare-live-boot=true` para instalar/atualizar `live-boot` antes da limpeza de identidade, quando há SSH disponível; em recuperação usar `-prepare-live-boot=false`.
-- Se a preparação do convidado falhar, a VM permanece intacta. Se o exportador Live ISO falhar depois do desligamento, a imagem QCOW2 já publicada **não é removida**: o resultado retorna `ImagePath` e erro com instrução de repetir `insula profile export-iso -name NOME`. `live-boot-initramfs-tools` e seus scripts no initramfs são pré-requisitos de uma **ISO Live inicializável**. O InsulaVM nunca renomeia um QCOW2 para `.iso`.
-- Para salvar apenas o disco use `vm freeze -export-iso=false`, mantendo o contrato de clonagem existente. Para copiar a ISO gerada a `/tmp`, copie o arquivo de `profiles/<nome>/exports/<nome>-live.iso`.
-- Enquanto não houver validação KVM real, não declarar que a ISO foi inicializada com sucesso.
+**Referência QEMU:** [qemu-img convert -c](https://www.qemu.org/docs/master/tools/qemu-img.html).
 
 ## Referências
 

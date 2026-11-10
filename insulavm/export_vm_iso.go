@@ -20,6 +20,7 @@ type VMExportISORequest struct {
  OutputISOPath string
  PrepareLiveBoot bool
  ForceShutdown bool
+ DisableQCOW2Compression bool
  SkipGuestCleanup bool
  AllowStopped bool
  ShutdownTimeout time.Duration
@@ -65,7 +66,7 @@ func(e *Engine)ExportVMToLiveISO(ctx context.Context,req VMExportISORequest)(*VM
  freeze,err:=e.FreezeVM(ctx,VMFreezeRequest{
   VMID:req.VMID,Name:req.Name,ShutdownTimeout:req.ShutdownTimeout,
   ForceShutdown:req.ForceShutdown,SkipGuestCleanup:req.SkipGuestCleanup,
-  AllowStopped:req.AllowStopped,ExportISO:true,OutputISOPath:req.OutputISOPath,OnProgress:req.OnProgress,
+  AllowStopped:req.AllowStopped,ExportISO:true,DisableQCOW2Compression:req.DisableQCOW2Compression,OutputISOPath:req.OutputISOPath,OnProgress:req.OnProgress,
  })
  result:=&VMExportISOResult{Freeze:freeze}
  if freeze!=nil{result.ISOPath=freeze.ISOPath}

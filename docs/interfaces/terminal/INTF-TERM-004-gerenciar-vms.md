@@ -21,7 +21,7 @@ Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatu
 | `insula vm shell` | `-id` obrigatório; `-directory` opcional | Abre shell SSH na VM gerenciada; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `insula vm exec` | `-id`, `-command` obrigatórios; `-workspace`, `-sudo` opcionais | Executa comando e retorna logs; [FLUX-003](../../fluxos/FLUX-003-execucao-sequencial-logs.md) |
 | `insula vm import` | `-id`, `-source` obrigatórios | Copia arquivo/diretório para `guest.destination`; [ARQ-005](../../arquitetura/ARQ-005-importacao-arquivos.md) |
-| `insula vm freeze` | `-id` e `-name` obrigatórios; `-shutdown-timeout` opcional | Congela a VM em perfil QCOW2, encerrando a origem; [FLUX-004](../../fluxos/FLUX-004-congelar-vm.md) |
+| `insula vm freeze` | `-id` e `-name` obrigatórios; `-export-iso=false` e `-compress=true` por padrão; `-shutdown-timeout` opcional | Publica QCOW2 independente, opcionalmente comprimido com QEMU; [FLUX-004](../../fluxos/FLUX-004-congelar-vm.md) |
 | `insula vm stop` | `-id` obrigatório | Encerra e remove disco temporário de uma VM gerenciada; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `insula vm stop-all` | `-dry-run` opcional; não aceita `-id` | Processa somente domínios registrados neste InsulaVM; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 
@@ -48,6 +48,15 @@ Pré-requisito: VM inicializada com `ssh.sudo_mode: passwordless`, Cloud-Init op
 ```
 
 O sucesso de `freeze` imprime `FREEZE SUCCESS: name=... source=...`. A imagem é QCOW2 autônoma, **não ISO Live**. A VM original é removida após registro do novo perfil. Em falha posterior ao registro, a CLI informa o caminho já criado e o erro de limpeza. Consulte [FLUX-004](../../fluxos/FLUX-004-congelar-vm.md) antes de usar esse comando em ambientes com dados importantes.
+
+### Congelamento sem ISO e armazenamento externo
+
+```bash
+./insula vm freeze -id UUIDv7 -name debian-comprimido
+./insula vm start -profile debian-comprimido
+```
+
+A compressão QCOW2 é **padrão** e corresponde a `VMFreezeRequest{...}` na biblioteca. Para desabilitá-la, usar `-compress=false` ou `VMFreezeRequest.DisableQCOW2Compression=true`. O arquivo permanece em formato QCOW2 e pode ser reutilizado imediatamente por novas VMs. O perfil é salvo no caminho `storage.profiles` do YAML; para usar um volume externo, configure ali o caminho absoluto do volume **antes de congelar**. Armazenar o perfil em volume desconectado impede iniciar novas VMs que dependam dele.
 
 ## Exemplo: encerrar VMs gerenciadas
 

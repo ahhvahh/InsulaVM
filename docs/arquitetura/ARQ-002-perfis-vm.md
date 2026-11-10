@@ -108,9 +108,9 @@ Um overlay **não** garante isolamento de rede ou identidade: cada instância de
 
 ## Congelamento de perfil a partir de VM existente — implementado
 
-Além do registro de um QCOW2 já instalado, o InsulaVM permite **congelar** o disco de uma VM gerenciada em um novo perfil nomeado. O método [`Engine.FreezeVM`](../../insulavm/freeze.go) prepara a identidade do convidado, solicita desligamento normal, consolida o overlay por `qemu-img convert` em QCOW2 autônomo, publica `versions/v001/base.qcow2` e só então remove a VM original. O nome de destino não pode colidir com perfil existente. O disco de origem é preservado se a conversão falhar.
+Além do registro de um QCOW2 já instalado, o InsulaVM permite **congelar** o disco de uma VM gerenciada em um novo perfil nomeado. O método [`Engine.FreezeVM`](../../insulavm/freeze.go) prepara a identidade do convidado, solicita desligamento normal, consolida o overlay por `qemu-img convert -c` em QCOW2 autônomo comprimido por padrão, publica `versions/v001/base.qcow2` e só então remove a VM original. O nome de destino não pode colidir com perfil existente. O disco de origem é preservado se a conversão falhar.
 
-As próximas instâncias usam `vm start -profile <nome>` ou [`StartVMWithOptions`](../../insulavm/start_options.go), que permite ajustar RAM/vCPUs **apenas na instância** sem modificar o `profile.yaml` original. O perfil congelado não é ISO de instalação, nem snapshot da memória da VM.
+As próximas instâncias usam `vm start -profile <nome>` ou [`StartVMWithOptions`](../../insulavm/start_options.go), que permite ajustar RAM/vCPUs **apenas na instância** sem modificar o `profile.yaml` original. O perfil congelado não é ISO de instalação, nem snapshot da memória da VM. Para desabilitar compressão, usar `-compress=false` ou `VMFreezeRequest.DisableQCOW2Compression=true`. A ISO Live não participa do freeze padrão.
 
 **Pré-requisitos:** SSH gerenciado, Cloud-Init instalado e `ssh.sudo_mode: passwordless`; o processo limpa cache de Cloud-Init e credenciais SSH, mas **não elimina segredos específicos de aplicativos**. Fluxo e falhas estão em [FLUX-004](../fluxos/FLUX-004-congelar-vm.md); comandos em [INTF-TERM-004](../interfaces/terminal/INTF-TERM-004-gerenciar-vms.md).
 

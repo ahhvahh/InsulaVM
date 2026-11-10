@@ -24,15 +24,14 @@ const (
 	integral3MemoryMiB = 500
 	integral3VCPUs     = 1
 	integral3DiskGiB   = 10
-	integral3GuestDir  = "/tmp/workspace/created"
+	integral3GuestDir  = "/home/insula/insulavm/workspace/created"
 	integral3GuestFile = integral3GuestDir + "/state.txt"
 )
 
-// TestIntegral3ISOWorkspacePersistence exercises the ACTUAL installer ISO,
-// InsulaVM's Go VM lifecycle, FreezeVM+Live ISO conversion, a second KVM boot
-// from the generated ISO, remote SSH commands and the original /tmp data.
-// No host-side copying, bind-mount or re-injection of the marker is permitted.
-func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
+// TestIntegral3QCOW2WorkspacePersistence proves a real Debian ISO install,
+// two genuine KVM boots and persistence from the frozen compressed QCOW2.
+// No host-side copying or re-injection of the guest marker is permitted.
+func TestIntegral3QCOW2WorkspacePersistence(t *testing.T) {
 	configPath := os.Getenv("INSULA_IT3_CONFIG")
 	installerISO := os.Getenv("INSULA_IT3_INSTALLER_ISO")
 	cliPath := os.Getenv("INSULA_IT3_CLI")
@@ -56,8 +55,8 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := engine.Configuration()
-	if cfg.Guest.Destination != "/tmp/workspace" {
-		t.Fatalf("integral-3 requires guest.destination=/tmp/workspace, got %q", cfg.Guest.Destination)
+	if cfg.Guest.Destination != "/home/insula/insulavm/workspace" {
+		t.Fatalf("integral-3 requires guest.destination=/home/insula/insulavm/workspace, got %q", cfg.Guest.Destination)
 	}
 	if cfg.SSH.SudoMode != "passwordless" {
 		t.Fatalf("freeze requires ssh.sudo_mode=passwordless, got %q", cfg.SSH.SudoMode)
@@ -75,11 +74,11 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 	expectedSHA := integral3SHA(marker + "\n")
 	var sourceID, restoredID string
 	var sourceDir, restoredDir string
-	var liveISOPath string
+	var frozenImagePath string
 	defer func() {
 		// Preserve every collected application log, even after a failed test.
-		t.Logf("integral-3 evidence: logs=%s installer_profile=%s frozen_profile=%s iso=%s",
-			cfg.Storage.Logs, baseName, frozenName, liveISOPath)
+		t.Logf("integral-3 evidence: logs=%s installer_profile=%s frozen_profile=%s qcow2=%s",
+			cfg.Storage.Logs, baseName, frozenName, frozenImagePath)
 	}()
 	t.Cleanup(func() {
 		// Only our private, randomly named VM IDs can be considered for cleanup.
@@ -105,7 +104,7 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 	t.Logf("installer ISO=%s; installed disk=10 GiB; running VMs=1 vCPU/500 MiB", installerISO)
 
 	// CreateProfileFromISO intentionally requires 1024 MiB to RUN THE
-	// INSTALLER. The first managed VM and the exported ISO VM are both 500 MiB.
+	// INSTALLER. The first and restored managed VMs are both 500 MiB.
 	// This exception is a published API precondition, not a relaxation of the
 	// runtime resource contract.
 	installed, err := engine.CreateProfileFromISO(ctx, insulavm.CreateProfileFromISORequest{
@@ -156,32 +155,47 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 		"; printf 'INSULA_IT3_SHA=%s\\n' \"$(sha256sum " +
 		integral3GuestFile + " | cut -d' ' -f1)\""
 	integral3ExecGuest(t, ctx, engine, source.ID, hashCommand, "INSULA_IT3_SHA="+expectedSHA)
-	integral3ExecGuest(t, ctx, engine, source.ID,
-		"findmnt -n -o FSTYPE -T "+integral3GuestFile+" && echo INSULA_IT3_FS_PROBED",
-		"INSULA_IT3_FS_PROBED")
+	// Fail explicitly if the selected workspace is memory-backed: a disk freeze
+	// cannot and must not silently claim persistence of tmpfs contents.
+	persistentFSCommand := "set -eu; fs=$(findmnt -n -o FSTYPE -T " + integral3GuestFile + "); " +
+		"case \"$fs\" in tmpfs|ramfs|overlay) echo INSULA_IT3_VOLATILE_FS=$fs; exit 43 ;; esac; " +
+		"printf 'INSULA_IT3_PERSISTENT_FS=%s\\n' \"$fs\""
+	integral3ExecGuest(t, ctx, engine, source.ID, persistentFSCommand, "INSULA_IT3_PERSISTENT_FS=")
 
-	// InsulaVM's canonical Go pipeline prepares live-boot, removes
-	// per-instance identity, requests graceful shutdown, freezes QCOW2 and
-	// constructs the standalone ISO. No forced shutdown is acceptable.
-	exported, err := engine.ExportVMToLiveISO(ctx, insulavm.VMExportISORequest{
+	// Capture the stopped guest overlay into a standalone, natively compressed
+	// QCOW2 profile. Do not build or boot a Live ISO.
+	frozen, err := engine.FreezeVM(ctx, insulavm.VMFreezeRequest{
 		VMID: source.ID, Name: frozenName,
-		PrepareLiveBoot: true,
-		ShutdownTimeout: 4 * time.Minute, CommandTimeout: 20 * time.Minute,
+		ShutdownTimeout: 4 * time.Minute,
 		OnProgress: func(p insulavm.VMFreezeProgress) {
 			t.Logf("[freeze:%s] %s", p.Stage, p.Message)
 		},
 	})
-	if err != nil || exported == nil || exported.Freeze == nil ||
-		!exported.Freeze.SourceStopped || !exported.Freeze.SourceCleaned ||
-		exported.ISOPath == "" {
-		t.Fatalf("freeze+ISO failed or was forced; source evidence kept: result=%+v err=%v", exported, err)
+	if err != nil || frozen == nil ||
+		!frozen.SourceStopped || !frozen.SourceCleaned ||
+		frozen.ForcedShutdown || frozen.ImagePath == "" || frozen.ISOPath != "" {
+		t.Fatalf("QCOW2 freeze failed or was forced; source evidence kept: result=%+v err=%v", frozen, err)
 	}
-	liveISOPath = exported.ISOPath
-	stat, err := os.Stat(liveISOPath)
+	frozenImagePath = frozen.ImagePath
+	stat, err := os.Stat(frozenImagePath)
 	if err != nil || !stat.Mode().IsRegular() || stat.Size() == 0 {
-		t.Fatalf("generated Live ISO missing/empty: %s: %v", liveISOPath, err)
+		t.Fatalf("frozen QCOW2 missing/empty: %s: %v", frozenImagePath, err)
 	}
-	integral3AssertDiskSize(t, exported.Freeze.ImagePath, integral3DiskGiB)
+	integral3AssertDiskSize(t, frozenImagePath, integral3DiskGiB)
+	profile, err := engine.GetProfile(frozenName)
+	if err != nil { t.Fatalf("frozen profile not registered: %v", err) }
+	profileImage, err := profile.ImagePath()
+	if err != nil || profileImage != frozenImagePath {
+		t.Fatalf("frozen profile image not accessible: %s: %v", profileImage, err)
+	}
+	// Validate QCOW2 integrity before the second real KVM boot. The old
+	// instance and its temporary overlay have been cleaned by FreezeVM.
+	checkOutput, checkErr := exec.CommandContext(ctx, "qemu-img", "check", "-f", "qcow2", frozenImagePath).CombinedOutput()
+	if checkErr != nil {
+		t.Fatalf("frozen QCOW2 consistency check failed: %v: %s", checkErr, checkOutput)
+	}
+	t.Logf("[freeze:ready] independent compressed QCOW2=%s file_bytes=%d check=%s",
+		frozenImagePath, stat.Size(), strings.TrimSpace(string(checkOutput)))
 	oldState, err := engine.GetVMStatus(ctx, source.ID)
 	if err != nil || oldState.LibvirtState != "absent" {
 		t.Fatalf("source domain still active after freeze: %+v err=%v", oldState, err)
@@ -190,14 +204,15 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 		t.Fatalf("source transient overlay/keys not deleted: %s err=%v", sourceDir, err)
 	}
 
-	// Boot a DIFFERENT VM from the ACTUAL ISO, not from frozen QCOW2. The
-	// scratch disk is disposable and is never populated with the marker.
-	restored, err := engine.StartVMFromISO(ctx, insulavm.LiveISOStartOptions{
-		Profile: frozenName, ISOPath: liveISOPath,
-		MemoryMiB: integral3MemoryMiB, VCPUs: integral3VCPUs,
+	// Boot a DIFFERENT VM from the frozen QCOW2 profile. StartVMWithOptions
+	// creates its own new writable overlay; it must not inject the marker.
+	restored, err := engine.StartVMWithOptions(ctx, insulavm.VMStartOptions{
+		Profile: frozenName, MemoryMiB: integral3MemoryMiB, VCPUs: integral3VCPUs,
+	}, func(p insulavm.VMProgress) {
+		t.Logf("[restored:%s] %s", p.Stage, p.Message)
 	})
 	if err != nil {
-		t.Fatalf("second VM boot from generated ISO failed (check serial/Libvirt logs): %v", err)
+		t.Fatalf("second KVM VM boot from frozen compressed QCOW2 failed: %v", err)
 	}
 	restoredID, restoredDir = restored.ID, restored.Directory
 	if restored.ID == source.ID || restored.IPAddress == "" {
@@ -214,7 +229,7 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 			"; test \"$(cat "+integral3GuestFile+")\" = '"+marker+
 			"'; printf 'INSULA_IT3_RESTORED_OK\\n'; exit 0",
 		"INSULA_IT3_RESTORED_OK")
-	t.Logf("[ISO] /tmp/workspace persisted with exact SHA-256=%s", expectedSHA)
+	t.Logf("[QCOW2] persistent workspace recovered with exact SHA-256=%s", expectedSHA)
 
 	// Cross-check the same result using the CLI frontend, which shares the
 	// Engine. This also verifies the guest shell exits cleanly between calls.
@@ -225,7 +240,7 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 			" && echo INSULA_IT3_CLI_READ_OK")
 	cliOutput, cliErr := cli.CombinedOutput()
 	if cliErr != nil || !bytes.Contains(cliOutput, []byte("INSULA_IT3_CLI_READ_OK")) {
-		t.Fatalf("CLI / ISO guest parity failed: err=%v output=%q", cliErr, cliOutput)
+		t.Fatalf("CLI / QCOW2 guest parity failed: err=%v output=%q", cliErr, cliOutput)
 	}
 
 	stopped, err := engine.StopVMWithOptions(ctx, insulavm.VMStopOptions{
@@ -241,7 +256,7 @@ func TestIntegral3ISOWorkspacePersistence(t *testing.T) {
 	if _, err := os.Stat(restoredDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("second VM scratch/storage/keys not deleted: %s err=%v", restoredDir, err)
 	}
-	t.Log("INSULA_INTEGRAL_3_OK: mini ISO -> 10GiB installed disk -> 500MiB/1CPU managed guest -> saved /tmp/workspace -> graceful freeze -> Live ISO -> fresh 500MiB/1CPU guest -> same file SHA -> graceful stop")
+	t.Log("INSULA_INTEGRAL_3_OK: mini ISO install -> 10GiB installed disk -> 500MiB/1CPU guest -> disk-backed workspace -> graceful compressed QCOW2 freeze -> fresh 500MiB/1CPU guest with overlay -> same file SHA -> graceful stop")
 }
 
 func integral3SHA(s string) string {
@@ -274,14 +289,15 @@ func integral3AssertDiskSize(t *testing.T, imagePath string, gib int) {
 		t.Fatalf("qemu-img info %s: %v", imagePath, err)
 	}
 	var info struct {
-		VirtualSize int64  `json:"virtual-size"`
-		Format      string `json:"format"`
+		VirtualSize    int64  `json:"virtual-size"`
+		Format         string `json:"format"`
+		BackingFile    string `json:"backing-filename"`
 	}
 	if err := json.Unmarshal(out, &info); err != nil {
 		t.Fatalf("invalid qemu-img info json: %v", err)
 	}
-	if info.Format != "qcow2" || info.VirtualSize != int64(gib)*1024*1024*1024 {
-		t.Fatalf("expected %d GiB qcow2, got size=%d format=%s", gib, info.VirtualSize, info.Format)
+	if info.Format != "qcow2" || info.VirtualSize != int64(gib)*1024*1024*1024 || info.BackingFile != "" {
+		t.Fatalf("expected independent %d GiB qcow2, got size=%d format=%s backing=%q", gib, info.VirtualSize, info.Format, info.BackingFile)
 	}
 }
 
@@ -317,7 +333,7 @@ func TestIntegral3MarkerContract(t *testing.T) {
 		t.Fatal("SHA-256 fixture changed unexpectedly")
 	}
 	if integral3MemoryMiB != 500 || integral3VCPUs != 1 || integral3DiskGiB != 10 ||
-		!strings.HasPrefix(integral3GuestFile, "/tmp/workspace/") {
+		!strings.HasPrefix(integral3GuestFile, "/home/insula/insulavm/workspace/") {
 		t.Fatal("mandatory resource/path contract changed")
 	}
 }

@@ -99,39 +99,27 @@ ISO="$(bash scripts/baixar-debian.sh)"  # baixa e valida SHA256; retorna caminho
 
 Biblioteca Go: `engine.CreateProfileFromISO(ctx, insulavm.CreateProfileFromISORequest{...})`. Dependências adicionais: `virt-install`, `openssl`, `guestmount`, `guestunmount` e acesso ao Libvirt. Veja [INTF-TERM-007](docs/interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md).
 
-## Exportar ISO diretamente de uma instância
+## Preparar e congelar um ambiente em QCOW2
+
+O fluxo padrão do `insula vm freeze` é **disco nativo QCOW2 comprimido**, sem geração de ISO Live. A VM original é desligada normalmente, suas alterações são consolidadas em um novo perfil independente e sua instância temporária é removida somente após o perfil ser salvo. A origem permanece intacta se a conversão falhar.
 
 ```bash
-./insula vm export-iso -id UUID_DA_VM -name debian13-live -prepare-live-boot
+./insula vm start -profile debian13
+# Configure o sistema na VM e salve os dados no DISCO (não em tmpfs).
+./insula vm freeze -config ./config.yaml -id UUID_DA_VM -name debian13-preparado
+./insula profile show -name debian13-preparado
+./insula vm start -config ./config.yaml -profile debian13-preparado -memory-mib 500 -vcpus 1
 ```
 
-Essa operação instala `live-boot` no guest (quando solicitada), congela o QCOW2, **encerra e remove a VM de origem** e exporta uma ISO Live. A biblioteca expõe `ExportVMToLiveISO(ctx, VMExportISORequest)`; se a exportação falhar após o congelamento, o perfil QCOW2 fica preservado para nova tentativa.
+O motor utiliza `qemu-img convert -f qcow2 -O qcow2 -c`. A imagem-base comprimida pode ser usada diretamente por várias VMs, que recebem overlays próprios. Para desabilitar compressão em um caso específico, use `-compress=false`. A biblioteca Go oferece `FreezeVM(ctx, VMFreezeRequest{VMID: id, Name: "debian13-preparado"})` e `DisableQCOW2Compression:true` como opção. Não use `vm stop` antes de congelar: ele apaga o overlay da instância.
 
-## Preparar e congelar um ambiente
+**Armazenamento:** os perfis são salvos em `storage.profiles` (configuração YAML). Pode ser um diretório absoluto em volume dedicado, por exemplo `/srv/insulavm/profiles`. Armazene `profile.yaml` e `versions/v001/base.qcow2` juntos; nunca mova a base durante uso por VMs dependentes. Compare consumo real com `du -h` e `qemu-img info`.
 
-```bash
-# Depois de configurar a VM de origem, desligar normalmente, salvar QCOW2 e ISO Live.
-# -config e -id identificam a instancia; o ultimo argumento e o destino da ISO.
-./insula vm freeze -config ./config.yaml -id UUID_DA_VM ./imagens/debian13-go-testes.iso
+**Persistência:** `tmpfs` e RAM não entram no QCOW2. Guarde os arquivos necessários num filesystem persistente do convidado, por exemplo `/home/insula/insulavm/workspace`. O congelamento também reinicia a identidade do Cloud-Init e as chaves SSH, mas **não** sanitiza segredos de aplicações.
 
-# O perfil reutilizavel se chamara debian13-go-testes
-./insula vm start -config ./config.yaml -profile debian13-go-testes -memory-mib 4096 -vcpus 4
+**ISO Live:** o exportador antigo continua disponível de forma experimental por solicitação explícita (`vm export-iso` ou `vm freeze -export-iso=true -prepare-live-boot=true`), mas não faz parte do fluxo padrão nem do critério atual do Integral 3. Boot de uma ISO Live exportada ainda requer homologação separada.
 
-# Tambem aceita caminho absoluto, ex.: /tmp/debian13-go-testes.iso.
-# Uso antigo com -name continua valido (usa o diretorio exports do perfil).
-./insula vm freeze -config ./config.yaml -id UUID_DA_VM -name debian13-go-testes
-
-# Somente QCOW2, sem Live ISO:
-./insula vm freeze -config ./config.yaml -id UUID_DA_VM -name debian13-go-disco -export-iso=false
-```
-
-Para instalar dependências administrativas durante a primeira inicialização, a API Go oferece `VMStartOptions.StartupScriptPath`: caminho absoluto de script confiável, incluído no Cloud-Init e executado como root antes de a VM ficar pronta. Veja [ARQ-004](docs/arquitetura/ARQ-004-biblioteca-go.md).
-
-O congelamento **encerra e remove a VM original** após consolidar seu overlay em um QCOW2 autônomo. Por padrão, `vm freeze` também prepara e exporta uma ISO Live Debian; se esta segunda etapa falhar, o perfil QCOW2 **permanece salvo**. A ISO gerada fica em `data/profiles/NOME/exports/NOME-live.iso`. Não execute `vm stop` antes de congelar, pois isso apaga o overlay temporário.
-
-**Destino da ISO:** o último argumento do `vm freeze` é um arquivo terminado em `.iso`. Um caminho iniciado com `./` é resolvido a partir da pasta de onde o comando é executado, independentemente da localização de `config.yaml`. O diretório será criado quando necessário; o InsulaVM nunca sobrescreve uma ISO já existente. A preparação do `live-boot` ocorre antes do desligamento e a geração da ISO só começa **depois de o Libvirt confirmar que a VM encerrou**. A origem é removida somente após salvar o QCOW2 e publicar a ISO.
-
-**Desligamento e recuperação:** o domínio recém-criado declara ACPI e canal do QEMU Guest Agent. Se uma VM **antiga** ignorar o desligamento gracioso, use `-force-freeze-shutdown` apenas se aceitar o risco de disco crash-consistent. Após uma tentativa antiga que já tenha limpado chaves SSH, use `-skip-guest-cleanup -prepare-live-boot=false` para não repetir SSH; `-recover-stopped` é permitido somente para disco temporário intacto e domínio já ausente no Libvirt (ver FLUX-004). Sem `-force-freeze-shutdown`, a ferramenta **não** força o desligamento. Leia [FLUX-004](docs/fluxos/FLUX-004-congelar-vm.md).
+**Desligamento e recuperação:** o congelamento exige sudo sem senha na VM de origem, solicita desligamento gracioso, não força encerramento sem `-force-freeze-shutdown` e preserva o overlay em falhas antes de publicar o perfil. Consulte [FLUX-004](docs/fluxos/FLUX-004-congelar-vm.md).
 
 ## Deploy, execução e encerramento
 
@@ -156,15 +144,15 @@ O congelamento **encerra e remove a VM original** após consolidar seu overlay e
 
 A API ainda é experimental, sem compromisso de compatibilidade de versão estável. O projeto utiliza a convenção [A-Bioma Doc Standard](docs/README.md) para organizar a documentação, sem alegar certificação formal.
 
-## Teste Integral 3 — ISO, congelamento e /tmp/workspace
+## Teste Integral 3 — QCOW2 congelado e recuperação real
 
-Somente para PRs destinadas a **develop**, **homolog** ou **main**, o [workflow Integral 3](.github/workflows/integral-3-iso-workspace.yml) instala Debian 13 a partir da **mini.iso (~64 MB)** em um QCOW2 de **10 GiB**, inicia uma VM de **1 vCPU e 500 MiB**, cria um arquivo em `/tmp/workspace` através de `ExecVM`, congela e exporta uma ISO Live, inicializa outra VM pela ISO gerada e confirma o **mesmo SHA-256 do arquivo** sem novo upload. Por fim encerra a segunda VM graciosamente. A instalação inicial usa **1 GiB**, mínimo exigido por `CreateProfileFromISO`; ambas as VMs gerenciadas usam 500 MiB.
+Nas PRs de promoção com origem `develop` e destino `homolog` ou `main`, o [workflow Integral 3](.github/workflows/integral-3-iso-workspace.yml) instala Debian 13 pela mini.iso oficial, inicia uma VM real (500 MiB/1 vCPU/10 GiB), grava um arquivo em **filesystem persistente** via SSH, congela a VM num QCOW2 **comprimido** e inicia outra VM diretamente a partir do perfil gerado. Exige DHCP, SSH, UUID distinto, mesmo SHA-256 sem reenvio, desligamento gracioso e limpeza dos overlays. O instalador recebe 1 GiB por requisito da API; as VMs gerenciadas recebem 500 MiB.
 
-~~~bash
+```bash
 bash scripts/tests/integral-3-iso-persistence.sh
-~~~
+```
 
-**Status de CI:** `integral-3-iso-workspace-persistence`. Para bloquear merges em falha, exigir esse check nas regras de proteção das três branches, após o workflow estar incorporado à branch-base. Os únicos eventos automáticos são abertura, reabertura ou novo commit da PR; execuções anteriores da mesma PR são canceladas. Nenhum push direto, schedule ou edição de PR dispara o teste. O caminho `/tmp` não é inerentemente persistente: o teste falha se os dados não sobreviverem. Ver [FLUX-008](docs/fluxos/FLUX-008-teste-integral-iso-persistencia.md) e [GUIA-007](docs/guias/GUIA-007-teste-integral-3-iso-persistencia.md).
+**Check:** `integral-3-iso-workspace-persistence` (nome legado preservado nas regras de branch); o conteúdo foi migrado para QCOW2. Não testa ISO Live. Veja [FLUX-008](docs/fluxos/FLUX-008-teste-integral-iso-persistencia.md) e [GUIA-007](docs/guias/GUIA-007-teste-integral-3-iso-persistencia.md).
 
 ## Teste Integral 2 — enviar ZIP, executar comandos e encerrar VM
 

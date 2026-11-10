@@ -12,7 +12,7 @@
 | CLI | Biblioteca Go | Entrada | Saída |
 | --- | --- | --- | --- |
 | insula profile clone -source ORIGEM -name NOVO | CloneProfile | Dois nomes de perfil | Perfil clonado |
-| insula vm freeze -config CFG -id UUID ./destino/nome.iso [-name PERFIL] [-force-freeze-shutdown] | FreezeVM / ExportVMToLiveISO | VM gerenciada com overlay intacto; confirmação expressa para forçar | Perfil QCOW2 e, por padrão, ISO Live em exports/ |\n| insula profile export-iso -name PERFIL | ExportProfileLiveISO | Perfil QCOW2 Debian com live-boot | Caminho ISO em exports/ |
+| insula vm freeze -config CFG -id UUID ./destino/nome.iso [-name PERFIL] [-force-freeze-shutdown] | FreezeVM / ExportVMToLiveISO | VM gerenciada com overlay intacto; confirmação expressa para forçar | Perfil QCOW2 e ISO Live apenas com -export-iso=true |\n| insula profile export-iso -name PERFIL | ExportProfileLiveISO | Perfil QCOW2 Debian com live-boot | Caminho ISO em exports/ |
 | insula vm start-iso -profile PERFIL -iso ISO | StartVMFromISO | Perfil registrado e ISO Live com Cloud-Init; script inicial opcional | UUID, IP, SSH |
 | insula vm console -id UUID | OpenConsole | UUID e terminal de origem | Console serial no stdin/stdout/stderr |
 | insula vm stop -id UUID -grace-timeout 30s -force-after-timeout=true | StopVMWithOptions | UUID, timeout e escalada | graceful/forced/timed_out |
@@ -44,22 +44,22 @@ O boot real ainda depende da infraestrutura do usuário e de teste integral apro
 ```bash
 insula vm status -id UUID
 # A tentativa anterior já executou cloud-init clean e apagou authorized_keys.
-insula vm freeze -id UUID -name deb13-abioma-tests-final \
+insula vm freeze -id UUID -name deb13-abioma-tests-final -export-iso=true -prepare-live-boot=true \
   -skip-guest-cleanup -prepare-live-boot=false \
   -force-freeze-shutdown -shutdown-timeout 20s
 # Se já não existir domínio ativo, adicionar -recover-stopped.
 ```
 
-O recurso de força requer aceite consciente: `destroy` não garante limpeza de cache do convidado. Se não houver `live-boot` no QCOW2, a ISO Live falhará, **mas o perfil QCOW2 permanece salvo** para recuperação e nova preparação. Para formato somente QCOW2, usar `-export-iso=false`.
+O recurso de força requer aceite consciente: `destroy` não garante limpeza de cache do convidado. Se não houver `live-boot` no QCOW2, a ISO Live falhará, **mas o perfil QCOW2 permanece salvo** para recuperação e nova preparação. O padrão é somente QCOW2 comprimido; ISO Live requer `-export-iso=true -prepare-live-boot=true` e ainda é experimental.
 
 ## Destino de ISO em `vm freeze`
 
 ```bash
-./insula vm freeze -config ./config.yaml -id UUID_DA_VM ./imagens/minha-vm.iso
+./insula vm freeze -config ./config.yaml -id UUID_DA_VM -export-iso=true -prepare-live-boot=true ./imagens/minha-vm.iso
 # ou:
-./insula vm freeze -config ./config.yaml -id UUID_DA_VM -output /tmp/minha-vm.iso
+./insula vm freeze -config ./config.yaml -id UUID_DA_VM -export-iso=true -prepare-live-boot=true -output /tmp/minha-vm.iso
 # compatibilidade:
-./insula vm freeze -config ./config.yaml -id UUID_DA_VM -name minha-vm
+./insula vm freeze -config ./config.yaml -id UUID_DA_VM -name minha-vm -export-iso=true -prepare-live-boot=true
 ```
 
 O argumento posicional final é o **caminho do arquivo ISO**, não o IP da VM. O UUID identifica a VM. Destinos `./...` são relativos ao diretório de execução e caminhos absolutos são aceitos. Quando o nome do perfil não é informado, é derivado do nome do arquivo. A ISO publicada não substitui arquivo existente. Somente após o `shutdown` ser confirmado no Libvirt, a VM é mapeada em modo leitura para montar a ISO. O QCOW2 e o overlay da origem permanecem em falhas de exportação.
