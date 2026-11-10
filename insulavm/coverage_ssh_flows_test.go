@@ -3,7 +3,6 @@ package insulavm
 import (
     "bytes"
     "context"
-    "errors"
     "net"
     "os"
     "path/filepath"
@@ -155,5 +154,4 @@ func TestEngineSSHOperationValidationAndCancellation(t *testing.T){
     cancel()
     if _,err:=engine.Run(cancelled,RunRequest{});err==nil{t.Fatal("bad manifest allowed on cancelled context")}
     if err:=engine.StopVM(nil,"id");err==nil{t.Fatal("nil StopVM context allowed")}
-    if !errors.Is(context.Canceled,context.Canceled){t.Fatal("unreachable")}
 }
