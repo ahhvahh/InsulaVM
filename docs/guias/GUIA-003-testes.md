@@ -15,6 +15,8 @@ bash scripts/tests/unit.sh
 ```
 
 
+**Execução automática:** [Go tests](../../.github/workflows/go-tests.yml) roda somente quando um commit chega à branch `develop` (evento `push`). Não executa em PR, `main`, `homolog`, criação de tags, agendamento ou disparo manual. A suíte também pode ser executada localmente pelo comando acima.
+
 O script executa `bash -n`, `go vet ./...`, `go test -race` com relatório de cobertura, compilação do executável, verificação de `help` e compilação da suíte com build tag `integration` **sem executar VMs**. Os testes unitários incluem a matriz da CLI, métodos públicos Go, adaptadores Libvirt/SQLite simulados, escalada de desligamento, exportação ISO simulada, SSH e deploy.
 
 ## Teste Integral 3 — Persistência após exportação de ISO

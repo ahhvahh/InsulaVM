@@ -31,12 +31,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Validar fixture ZIP e contratos Go (sem KVM)
+      - name: Validar script e codigo Go antes do teste integral
         shell: bash
         run: |
           set -euo pipefail
+          bash -n scripts/tests/integral-2-zip.sh
           go vet ./...
-          go test -tags integration -count=1 -run '^TestIntegral2ZipFixtureContract$' ./tests/integration
 
       - name: Preparar KVM/Libvirt e rede DHCP
         shell: bash
