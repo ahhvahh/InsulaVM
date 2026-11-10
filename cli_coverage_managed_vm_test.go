@@ -72,7 +72,7 @@ func TestCLIRefusesUnsafeManagedVMChanges(t *testing.T){
     cfg,id,dir:=registeredCLIContext(t)
     for _,tc:=range []struct{name string;args []string;want string}{
         {"sudo unavailable",[]string{"vm","exec","-config",cfg,"-id",id,"-command","whoami","-sudo"},"sudo"},
-        {"freeze without passwordless sudo",[]string{"vm","freeze","-config",cfg,"-id",id,"-name","frozen"},"passwordless"},
+        {"freeze without passwordless sudo",[]string{"vm","freeze","-config",cfg,"-id",id,"-name","frozen","-export-iso=false"},"passwordless"},
         {"ISO export without sudo",[]string{"vm","export-iso","-config",cfg,"-id",id,"-name","will-not-export","-output",filepath.Join(t.TempDir(),"planned.iso"),"-prepare-live-boot=false"},"passwordless"},
         {"stop unknown id",[]string{"vm","stop","-config",cfg,"-id","unknown"},"not found"},
         {"status unknown id",[]string{"vm","status","-config",cfg,"-id","unknown"},"not found"},
