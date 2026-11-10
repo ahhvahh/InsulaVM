@@ -68,7 +68,7 @@ incorporado à branch-base; homolog ainda não existe e não foi criada.
 ## Diagnóstico e limites
 
 - Verificar boot pelo console serial e logs do convidado antes de culpar DHCP.
-- O runner Ubuntu registrou `cp: cannot open '/boot/vmlinuz-7.0.0-1017-azure' for reading: Permission denied` no `supermin`. A execução seguinte confirmou que o fallback privado foi tentado, mas falhou com mensagem genérica; a tentativa com kernel privado agora habilita o debug de libguestfs e propaga a causa detalhada para o log. Se não houver kernel acessível, o motor tenta kernel e módulos privados obtidos via APT sem alterar permissões do host, somente quando o diagnóstico identifica especificamente esse erro ou kernel ausente. Preservar os logs se a tentativa falhar.
+- O runner Ubuntu registrou `cp: cannot open '/boot/vmlinuz-7.0.0-1017-azure' for reading: Permission denied` no `supermin`. Outro diagnóstico comprovou falta de `modules.dep` na árvore de módulos extraída do pacote APT: agora `depmod -b` gera esse índice exclusivamente no diretório temporário antes de iniciar o appliance. A execução seguinte confirmou que o fallback privado foi tentado, mas falhou com mensagem genérica; a tentativa com kernel privado agora habilita o debug de libguestfs e propaga a causa detalhada para o log. Se não houver kernel acessível, o motor tenta kernel e módulos privados obtidos via APT sem alterar permissões do host, somente quando o diagnóstico identifica especificamente esse erro ou kernel ausente. Preservar os logs se a tentativa falhar.
 - O /tmp não possui garantia de persistência em sistemas Linux; o teste deve
   falhar se os dados desaparecerem, sem recolocá-los via host.
 - Em erro de freeze, preservar evidências antes de remover o overlay.

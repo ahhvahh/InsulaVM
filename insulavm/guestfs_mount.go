@@ -199,6 +199,26 @@ func prepareGuestfsKernel(ctx context.Context) ([]string, func(), error) {
 		for _, dir := range []string{"lib", "usr/lib"} {
 			modules := filepath.Join(extracted, dir, "modules", version)
 			if fi, err := os.Stat(modules); err == nil && fi.IsDir() {
+				// Extracted .deb packages do not run post-install hooks. Ubuntu
+				// therefore provides kernel modules but no modules.dep; supermin
+				// cannot construct its initrd without this generated index.
+				// depmod -b writes ONLY inside the private extracted package tree.
+				index := filepath.Join(modules, "modules.dep")
+				if fi, err := os.Stat(index); err != nil || !fi.Mode().IsRegular() {
+					if _, err := exec.LookPath("depmod"); err != nil {
+						cleanup()
+						return nil, nil, fmt.Errorf("depmod required for extracted kernel modules: %w", err)
+					}
+					output, err := exec.CommandContext(ctx, "depmod", "-b", extracted, version).CombinedOutput()
+					if err != nil {
+						cleanup()
+						return nil, nil, fmt.Errorf("depmod private kernel %s failed: %w: %s", version, err, tailGuestfsOutput(string(output)))
+					}
+					if fi, err := os.Stat(index); err != nil || !fi.Mode().IsRegular() {
+						cleanup()
+						return nil, nil, fmt.Errorf("depmod did not generate modules.dep for private kernel %s", version)
+					}
+				}
 				return []string{"SUPERMIN_KERNEL=" + kernel, "SUPERMIN_MODULES=" + modules, "LIBGUESTFS_CACHEDIR=" + cache}, cleanup, nil
 			}
 		}
