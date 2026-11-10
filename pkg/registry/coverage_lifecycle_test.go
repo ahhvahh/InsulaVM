@@ -2,7 +2,6 @@ package registry
 
 import (
     "context"
-    "os"
     "path/filepath"
     "strings"
     "testing"
@@ -12,8 +11,6 @@ func TestRegistryFailedVMHistoryIsRetained(t *testing.T){
     store,err:=Open(filepath.Join(t.TempDir(),"private","insula.db"))
     if err!=nil{t.Fatal(err)}
     defer store.Close()
-    file,err:=os.Stat(filepath.Join(strings.TrimSuffix(filepath.Dir(filepath.Dir("")),""),"nothing"))
-    _=file;_=err
     ctx:=context.Background()
     entry:=Entry{
         ID:"019a5d11-1234-7123-8123-123456789abc",
