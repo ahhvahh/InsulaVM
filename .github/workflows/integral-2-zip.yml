@@ -1,10 +1,10 @@
 # Teste Integral 2 - Exercitar motor InsulaVM real (Go + CLI) com ZIP por SSH.
-# PRs de destino: develop, homolog e main. Cada commit gera nova execução.
+# Somente promocao de develop para homolog ou main no proprio repositorio.
 name: "Integral 2 - ZIP e comandos"
 
 on:
   pull_request:
-    branches: [develop, homolog, main]
+    branches: [homolog, main]
     types: [opened, synchronize, reopened]
 
 concurrency:
@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   integral-2-zip-upload-command:
+    if: ${{ github.head_ref == 'develop' && github.event.pull_request.head.repo.full_name == github.repository }}
     name: integral-2-zip-upload-command
     runs-on: ubuntu-24.04
     timeout-minutes: 18

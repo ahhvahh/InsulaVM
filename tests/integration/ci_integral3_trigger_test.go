@@ -46,7 +46,7 @@ func TestIntegral3PRTriggerContract(t *testing.T) {
    if gotSet[value] != 1 { t.Fatalf("%s: got=%v want=%v",label,got,want) }
   }
  }
- verifySet("allowed PR bases",trigger.Branches,[]string{"develop","homolog","main"})
+ verifySet("allowed PR bases",trigger.Branches,[]string{"homolog","main"})
  verifySet("allowed PR events",trigger.Types,[]string{"opened","synchronize","reopened"})
  if !workflow.Concurrency.Cancel ||
   !strings.Contains(workflow.Concurrency.Group,"github.event.pull_request.number") {
@@ -58,8 +58,15 @@ func TestIntegral3PRTriggerContract(t *testing.T) {
  if len(workflow.Jobs)!=1 {
   t.Fatalf("expected only the expensive integral 3 job, got %v",workflow.Jobs)
  }
- if _, ok := workflow.Jobs["integral-3-iso-workspace-persistence"]; !ok {
+ job, ok := workflow.Jobs["integral-3-iso-workspace-persistence"]
+ if !ok {
   t.Fatalf("stable required-check job missing: %v",workflow.Jobs)
+ }
+ var promoted struct { If string `yaml:"if"` }
+ if err := job.Decode(&promoted); err != nil { t.Fatal(err) }
+ if !strings.Contains(promoted.If,"github.head_ref == 'develop'") ||
+  !strings.Contains(promoted.If,"github.event.pull_request.head.repo.full_name == github.repository") {
+  t.Fatalf("expensive ISO job must require a same-repository develop promotion: %q",promoted.If)
  }
  for _, required := range []string{
   "go vet ./...", "scripts/tests/integral-3-iso-persistence.sh",

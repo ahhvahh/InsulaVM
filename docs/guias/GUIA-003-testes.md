@@ -25,7 +25,7 @@ O script executa `bash -n`, `go vet ./...`, `go test -race` com relatório de co
 bash scripts/tests/integral-3-iso-persistence.sh
 ~~~
 
-O teste cria um perfil Debian 13 a partir da mini.iso oficial, inicia VM 500 MiB/1 CPU/10 GiB, escreve `/tmp/workspace/created/state.txt`, congela a VM, exporta a ISO Live e inicia outra VM 500 MiB/1 CPU a partir **dessa ISO**. Compara SHA-256 e existência do caminho, depois encerra graciosamente. O instalador precisa de 1024 MiB por contrato; o estado de RAM das VMs de teste permanece 500 MiB. O workflow de PR para `develop`, `homolog` ou `main` publica o check `integral-3-iso-workspace-persistence`. Veja [GUIA-007](GUIA-007-teste-integral-3-iso-persistencia.md).
+O teste cria um perfil Debian 13 a partir da mini.iso oficial, inicia VM 500 MiB/1 CPU/10 GiB, escreve `/tmp/workspace/created/state.txt`, congela a VM, exporta a ISO Live e inicia outra VM 500 MiB/1 CPU a partir **dessa ISO**. Compara SHA-256 e existência do caminho, depois encerra graciosamente. O instalador precisa de 1024 MiB por contrato; o estado de RAM das VMs de teste permanece 500 MiB. O workflow executa somente na promoção da origem `develop` para `homolog` ou `main` e publica o check `integral-3-iso-workspace-persistence`. Veja [GUIA-007](GUIA-007-teste-integral-3-iso-persistencia.md).
 
 ## Integral 2 — ZIP e resposta da VM via Go e CLI
 
@@ -51,10 +51,10 @@ A ISO Alpine Virtual 3.24.4 (~67 MB) é baixada do espelho oficial e validada vi
 O runner `integration.sh` chama este teste obrigatoriamente, mesmo com `--skip-live-iso` ou `--skip-go-api`. `--alpine-iso /caminho/absoluto.iso` reutiliza uma ISO local. Este cenário isola a cadeia **ISO → firmware → bootloader → kernel → shell → shutdown**; não valida o provisionamento de SSH/Cloud-Init de `vm start-iso`, que continua coberto por cenários separados. Ver [GUIA-005](GUIA-005-alpine-iso.md).
 
 O workflow [Teste Integral 1](../../.github/workflows/integral-1-alpine-iso.yml) foi
-preparado para PRs destinadas a `develop`, `promolog` e `main`, incluindo
+preparado apenas para PRs com origem `develop` e destino `homolog` ou `main`, incluindo
 novos commits (`synchronize`). Para bloquear merges, configurar o check
 obrigatório `integral-1-alpine-iso` nas regras de proteção e incorporar o
-workflow em cada branch de destino. Veja [GUIA-005](GUIA-005-alpine-iso.md).
+workflow em cada branch de destino (`homolog` e `main`). Veja [GUIA-005](GUIA-005-alpine-iso.md).
 
 ## Integrais
 
