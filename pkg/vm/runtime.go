@@ -140,8 +140,11 @@ func StartWithStartupOptions(ctx context.Context,c *config.Config,p *profile.Pro
    emit("preserved",fmt.Sprintf("VM de diagnostico preservada: id=%s nome=%s pasta=%s; use 'insula test ssh -id %s' e 'insula vm stop -id %s' para liberar recursos",created.ID,created.Name,created.Directory,created.ID,created.ID))
   }
  }()
- id,err:=identity.UUIDv7()
- if err!=nil{return nil,err}
+ // Check the persistent history before assigning a UUID, including IDs
+ // from destroyed VMs. The subsequent SQLite INSERT is the atomic guard
+ // against concurrent allocators using the same registry.
+ id,err:=unusedVMID(ctx,c.Storage.Database,identity.UUIDv7)
+ if err!=nil{return nil,fmt.Errorf("allocate unique VM ID: %w",err)}
  instance.ID=id
  progressID=id
  instance.LibvirtUUID=id
