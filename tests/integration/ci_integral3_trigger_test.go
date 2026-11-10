@@ -9,7 +9,7 @@ import (
  "gopkg.in/yaml.v3"
 )
 
-// TestIntegral3PRTriggerContract ensures expensive ISO installation cannot
+// TestIntegral3PRTriggerContract ensures expensive ISO installation and QCOW2 boot cannot
 // accidentally be started by pushes, edits, schedules, or manual dispatch.
 func TestIntegral3PRTriggerContract(t *testing.T) {
  path := filepath.Join("..", "..", ".github", "workflows", "integral-3-iso-workspace.yml")
@@ -66,7 +66,7 @@ func TestIntegral3PRTriggerContract(t *testing.T) {
  if err := job.Decode(&promoted); err != nil { t.Fatal(err) }
  if !strings.Contains(promoted.If,"github.head_ref == 'develop'") ||
   !strings.Contains(promoted.If,"github.event.pull_request.head.repo.full_name == github.repository") {
-  t.Fatalf("expensive ISO job must require a same-repository develop promotion: %q",promoted.If)
+  t.Fatalf("expensive QCOW2 job must require a same-repository develop promotion: %q",promoted.If)
  }
  for _, required := range []string{
   "go vet ./...", "scripts/tests/integral-3-iso-persistence.sh",
