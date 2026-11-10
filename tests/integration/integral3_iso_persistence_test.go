@@ -72,8 +72,8 @@ func TestIntegral3QCOW2WorkspacePersistence(t *testing.T) {
 	frozenName := "it3-frozen-" + tag
 	marker := "INSULA_IT3_PERSIST_" + tag
 	expectedSHA := integral3SHA(marker + "\n")
-	var sourceID, restoredID string
-	var sourceDir, restoredDir string
+	var sourceID, restoredID, peerID string
+	var sourceDir, restoredDir, peerDir string
 	var frozenImagePath string
 	defer func() {
 		// Preserve every collected application log, even after a failed test.
@@ -82,7 +82,7 @@ func TestIntegral3QCOW2WorkspacePersistence(t *testing.T) {
 	}()
 	t.Cleanup(func() {
 		// Only our private, randomly named VM IDs can be considered for cleanup.
-		for _, id := range []string{restoredID, sourceID} {
+		for _, id := range []string{peerID, restoredID, sourceID} {
 			if id == "" {
 				continue
 			}
@@ -243,6 +243,52 @@ func TestIntegral3QCOW2WorkspacePersistence(t *testing.T) {
 		t.Fatalf("CLI / QCOW2 guest parity failed: err=%v output=%q", cliErr, cliOutput)
 	}
 
+	// A second derived VM remains active alongside the first. Both boot from
+	// the same immutable frozen base but have separate UUIDs, names and overlays.
+	peer, err := engine.StartVMWithOptions(ctx, insulavm.VMStartOptions{
+		Profile: frozenName, MemoryMiB: integral3MemoryMiB, VCPUs: integral3VCPUs,
+	}, func(p insulavm.VMProgress) {
+		t.Logf("[peer:%s] %s", p.Stage, p.Message)
+	})
+	if err != nil {
+		t.Fatalf("parallel test VM cannot boot from shared frozen QCOW2: %v", err)
+	}
+	peerID, peerDir = peer.ID, peer.Directory
+	if peer.ID == restored.ID || peer.ID == source.ID || peer.Name == restored.Name ||
+		peer.Directory == restored.Directory || peer.MACAddress == restored.MACAddress ||
+		peer.IPAddress == "" || peer.IPAddress == restored.IPAddress {
+		t.Fatalf("derived VMs must have distinct identities, names, overlays and IPs: restored=%+v peer=%+v", restored, peer)
+	}
+	integral3AssertDomainResources(t, cfg.Virtualization.LibvirtURI, peer.ID, integral3MemoryMiB, integral3VCPUs)
+	peerStatus, err := engine.GetVMStatus(ctx, restored.ID)
+	if err != nil || !peerStatus.IsRunning() {
+		t.Fatalf("first derived VM stopped during second VM startup: status=%+v err=%v", peerStatus, err)
+	}
+	integral3ExecGuest(t, ctx, engine, peer.ID, hashCommand, "INSULA_IT3_SHA="+expectedSHA)
+	// A write to the peer overlay must not leak to the other running VM.
+	peerOnlyFile := integral3GuestDir + "/peer-only.txt"
+	integral3ExecGuest(t, ctx, engine, peer.ID,
+		"set -eu; printf 'peer-only\\n' > "+peerOnlyFile+"; sync; test -s "+peerOnlyFile+
+		"; echo INSULA_IT3_PEER_WRITTEN", "INSULA_IT3_PEER_WRITTEN")
+	integral3ExecGuest(t, ctx, engine, restored.ID,
+		"set -eu; test ! -e "+peerOnlyFile+"; echo INSULA_IT3_OVERLAY_ISOLATED",
+		"INSULA_IT3_OVERLAY_ISOLATED")
+	peerStopped, err := engine.StopVMWithOptions(ctx, insulavm.VMStopOptions{
+		VMID: peer.ID, GracePeriod: 50 * time.Second, ForceAfterTimeout: false,
+	})
+	if err != nil || peerStopped == nil || !peerStopped.Graceful || peerStopped.Forced || peerStopped.TimedOut {
+		t.Fatalf("parallel derived VM did not stop gracefully: result=%+v err=%v", peerStopped, err)
+	}
+	peerEnd, err := engine.GetVMStatus(ctx, peer.ID)
+	if err != nil || peerEnd.LibvirtState != "absent" {
+		t.Fatalf("parallel derived VM still active: status=%+v err=%v", peerEnd, err)
+	}
+	if _, err := os.Stat(peerDir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("parallel VM overlay/keys not cleaned: %s err=%v", peerDir, err)
+	}
+	// The surviving VM is still usable after destroying the peer.
+	integral3ExecGuest(t, ctx, engine, restored.ID, hashCommand, "INSULA_IT3_SHA="+expectedSHA)
+
 	stopped, err := engine.StopVMWithOptions(ctx, insulavm.VMStopOptions{
 		VMID: restored.ID, GracePeriod: 50 * time.Second, ForceAfterTimeout: false,
 	})
@@ -256,7 +302,7 @@ func TestIntegral3QCOW2WorkspacePersistence(t *testing.T) {
 	if _, err := os.Stat(restoredDir); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("second VM scratch/storage/keys not deleted: %s err=%v", restoredDir, err)
 	}
-	t.Log("INSULA_INTEGRAL_3_OK: mini ISO install -> 10GiB installed disk -> 500MiB/1CPU guest -> disk-backed workspace -> graceful compressed QCOW2 freeze -> fresh 500MiB/1CPU guest with overlay -> same file SHA -> graceful stop")
+	t.Log("INSULA_INTEGRAL_3_OK: mini ISO install -> 10GiB installed disk -> 500MiB/1CPU guest -> disk-backed workspace -> graceful compressed QCOW2 freeze -> two simultaneous 500MiB/1CPU guests with isolated overlays -> same file SHA -> graceful stop")
 }
 
 func integral3SHA(s string) string {
