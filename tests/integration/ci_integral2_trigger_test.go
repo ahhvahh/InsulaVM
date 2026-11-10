@@ -17,11 +17,11 @@ func TestIntegral2PromotionOnlyTriggerContract(t *testing.T){
  if err!=nil{t.Fatal(err)}
  var cfg struct {
   On map[string]struct{
-   Branches []string \`yaml:"branches"\`
-   Types []string \`yaml:"types"\`
-  } \`yaml:"on"\`
-  Jobs map[string]struct{If string \`yaml:"if"\`} \`yaml:"jobs"\`
-  Permissions map[string]string \`yaml:"permissions"\`
+   Branches []string `yaml:"branches"`
+   Types []string `yaml:"types"`
+  } `yaml:"on"`
+  Jobs map[string]struct{If string `yaml:"if"`} `yaml:"jobs"`
+  Permissions map[string]string `yaml:"permissions"`
  }
  if err:=yaml.Unmarshal(raw,&cfg);err!=nil{t.Fatal(err)}
  if len(cfg.On)!=1 {t.Fatalf("expensive ZIP test must be PR-only: %+v",cfg.On)}
