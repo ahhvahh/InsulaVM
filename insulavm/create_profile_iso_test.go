@@ -195,3 +195,37 @@ func TestCreateProfileFromISOAcceptsFiveGiBLab(t *testing.T){
   if !strings.Contains(string(args),want){t.Fatalf("missing %q in installer args: %s",want,args)}
  }
 }
+
+// TestDebianMiniISOInstallerKernelPaths prevents a regression where
+// virt-install on Ubuntu fails with "Couldn't find kernel for install tree".
+// This is a pure CLI argument contract; the KVM end-to-end test proves boot.
+func TestDebianMiniISOInstallerKernelPaths(t *testing.T){
+ tests:=[]struct{
+  name string
+  iso string
+  wantLocation string
+ }{
+  {"official mini ISO","/tmp/debian/netboot/mini.iso",
+   "/tmp/debian/netboot/mini.iso,kernel=linux,initrd=initrd.gz"},
+  {"ordinary netinst ISO","/tmp/debian-13-amd64-netinst.iso",
+   "/tmp/debian-13-amd64-netinst.iso"},
+ }
+ for _,tt:=range tests{
+  t.Run(tt.name,func(t *testing.T){
+   args:=debianVirtInstallArgs("qemu:///system","default","test-vm",
+    "/tmp/install.qcow2","/tmp/preseed.cfg",CreateProfileFromISORequest{
+     ISOPath:tt.iso,MemoryMiB:1024,VCPUs:1,DiskGB:10,
+    })
+   var location string
+   for i:=0;i+1<len(args);i++{
+    if args[i]=="--location"{location=args[i+1];break}
+   }
+   if location!=tt.wantLocation{
+    t.Fatalf("virt-install kernel location mismatch: got=%q want=%q",location,tt.wantLocation)
+   }
+   if !strings.Contains(strings.Join(args,"\n"),"--initrd-inject\n/tmp/preseed.cfg"){
+    t.Fatal("preseed injection was lost while specifying installer boot files")
+   }
+  })
+ }
+}

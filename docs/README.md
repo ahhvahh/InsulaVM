@@ -11,6 +11,8 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 
 **Novo Teste Integral 2:** [FLUX-007 — Transferência ZIP, execução e shutdown](fluxos/FLUX-007-teste-integral-zip-vm.md) e [GUIA-006 — Executar e diagnosticar](guias/GUIA-006-teste-integral-2-zip.md).
 
+**Teste Integral 3:** [FLUX-008 — ISO Live e preservação de /tmp/workspace](fluxos/FLUX-008-teste-integral-iso-persistencia.md) e [GUIA-007 — Executar e diagnosticar](guias/GUIA-007-teste-integral-3-iso-persistencia.md). O check `integral-3-iso-workspace-persistence` é preparado para PRs destinadas apenas a `develop`, `homolog` ou `main`.
+
 ## Mapa de leitura
 
 | Documento | Categoria | Conteúdo |

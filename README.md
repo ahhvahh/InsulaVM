@@ -156,6 +156,16 @@ O congelamento **encerra e remove a VM original** após consolidar seu overlay e
 
 A API ainda é experimental, sem compromisso de compatibilidade de versão estável. O projeto utiliza a convenção [A-Bioma Doc Standard](docs/README.md) para organizar a documentação, sem alegar certificação formal.
 
+## Teste Integral 3 — ISO, congelamento e /tmp/workspace
+
+Somente para PRs destinadas a **develop**, **homolog** ou **main**, o [workflow Integral 3](.github/workflows/integral-3-iso-workspace.yml) instala Debian 13 a partir da **mini.iso (~64 MB)** em um QCOW2 de **10 GiB**, inicia uma VM de **1 vCPU e 500 MiB**, cria um arquivo em `/tmp/workspace` através de `ExecVM`, congela e exporta uma ISO Live, inicializa outra VM pela ISO gerada e confirma o **mesmo SHA-256 do arquivo** sem novo upload. Por fim encerra a segunda VM graciosamente. A instalação inicial usa **1 GiB**, mínimo exigido por `CreateProfileFromISO`; ambas as VMs gerenciadas usam 500 MiB.
+
+~~~bash
+bash scripts/tests/integral-3-iso-persistence.sh
+~~~
+
+**Status de CI:** `integral-3-iso-workspace-persistence`. Para bloquear merges em falha, exigir esse check nas regras de proteção das três branches, após o workflow estar incorporado à branch-base. Os únicos eventos automáticos são abertura, reabertura ou novo commit da PR; execuções anteriores da mesma PR são canceladas. Nenhum push direto, schedule ou edição de PR dispara o teste. O caminho `/tmp` não é inerentemente persistente: o teste falha se os dados não sobreviverem. Ver [FLUX-008](docs/fluxos/FLUX-008-teste-integral-iso-persistencia.md) e [GUIA-007](docs/guias/GUIA-007-teste-integral-3-iso-persistencia.md).
+
 ## Teste Integral 2 — enviar ZIP, executar comandos e encerrar VM
 
 O runner [integral-2-zip.sh](scripts/tests/integral-2-zip.sh) usa um QCOW2 Debian 12 Cloud verificado, inicializa uma VM por Cloud-Init/SSH, envia um ZIP via **API Go**, conta 12 itens no ZIP dentro da VM, descompacta e confirma 12 arquivos extraídos e hashes SHA-256. Repete o teste via **CLI** com outro ZIP, valida respostas de comandos e só aprova o encerramento gracioso (sem destroy). Não modifica o motor: ImportToVM utiliza TAR.GZ como transporte, preservando o ZIP para os comandos posteriores.
