@@ -30,6 +30,7 @@ func TestIntegral1PRWorkflowContract(t *testing.T) {
         } `yaml:"concurrency"`
 		Permissions map[string]string `yaml:"permissions"`
 		Jobs map[string]struct {
+            If string `yaml:"if"`
 			Name   string `yaml:"name"`
 			RunsOn string `yaml:"runs-on"`
 			Steps []struct {
@@ -51,7 +52,7 @@ func TestIntegral1PRWorkflowContract(t *testing.T) {
     if !ok {
         t.Fatalf("pull_request trigger required: %+v", workflow.On)
     }
-    expectedBranches := []string{"develop", "homolog", "main"}
+    expectedBranches := []string{"homolog", "main"}
     if len(pr.Branches) != len(expectedBranches) {
         t.Errorf("exact PR target set required: want=%v got=%v", expectedBranches, pr.Branches)
     }
@@ -83,7 +84,11 @@ func TestIntegral1PRWorkflowContract(t *testing.T) {
 	if !ok {
 		t.Fatal("mandatory named status job integral-1-alpine-iso is missing")
 	}
-	if job.RunsOn != "ubuntu-24.04" || job.Name != "integral-1-alpine-iso" {
+	if !strings.Contains(job.If,"github.head_ref == 'develop'") ||
+        !strings.Contains(job.If,"github.event.pull_request.head.repo.full_name == github.repository") {
+        t.Errorf("expensive Alpine check must require a same-repository develop promotion: %q",job.If)
+    }
+    if job.RunsOn != "ubuntu-24.04" || job.Name != "integral-1-alpine-iso" {
 		t.Errorf("required check must use ephemeral GitHub hosted runner and stable name: %+v", job)
 	}
 	var hasKVMCheck, hasISOTest bool

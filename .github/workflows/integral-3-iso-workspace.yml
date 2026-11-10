@@ -1,11 +1,10 @@
-# Teste Integral 3: somente PRs para develop, homolog e main.
+# Teste Integral 3: somente PRs da develop para homolog ou main.
 # Sem push, workflow_dispatch, schedule, workflow_call ou outros gatilhos.
 name: "Integral 3 - ISO workspace persistence"
 
 on:
   pull_request:
     branches:
-      - develop
       - homolog
       - main
     types:
@@ -23,6 +22,7 @@ permissions:
 
 jobs:
   integral-3-iso-workspace-persistence:
+    if: ${{ github.head_ref == 'develop' && github.event.pull_request.head.repo.full_name == github.repository }}
     name: integral-3-iso-workspace-persistence
     runs-on: ubuntu-24.04
     timeout-minutes: 165

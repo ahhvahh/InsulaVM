@@ -1,11 +1,10 @@
-# Teste Integral 1: boot real da ISO Alpine em todas as PRs protegidas.
-# Deve estar presente em cada branch de destino: develop, homolog e main.
+# Teste Integral 1: somente promocoes da develop para homolog ou main.
+# O job exige a branch develop como origem no mesmo repositorio.
 name: "Integral 1 - Alpine ISO"
 
 on:
   pull_request:
     branches:
-      - develop
       - homolog
       - main
     types:
@@ -24,6 +23,7 @@ permissions:
 
 jobs:
   integral-1-alpine-iso:
+    if: ${{ github.head_ref == 'develop' && github.event.pull_request.head.repo.full_name == github.repository }}
     name: integral-1-alpine-iso
     runs-on: ubuntu-24.04
     timeout-minutes: 15
