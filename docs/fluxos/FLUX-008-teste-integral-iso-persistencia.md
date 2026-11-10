@@ -26,9 +26,9 @@ Comprovar o ciclo real **ISO instaladora Debian 13 → VM preparada → congelam
 2. Iniciar a primeira VM por `StartVMWithOptions` com 500 MiB/1 vCPU. Confirmar domínio real, IP e SSH.
 3. Criar arquivo com marcador aleatório **somente dentro da primeira VM**, via `ExecVM`. Em sessão SSH independente, confirmar conteúdo e SHA-256. Exigir `findmnt` em filesystem não volátil (rejeitar `tmpfs`, `ramfs` e `overlay`).
 4. Chamar `FreezeVM` com compressão nativa padrão `qemu-img convert -c` e `ExportISO=false`. Exigir desligamento gracioso, `ForcedShutdown=false`, QCOW2 independente, ausência de backing, `qemu-img check` sem erros, origem removida **somente após salvar** o novo perfil.
-5. Iniciar segunda VM pelo **perfil QCOW2 congelado**, com overlay gravável próprio, novamente 500 MiB/1 vCPU. Exigir novo UUID, IP e SSH.
+5. Iniciar segunda VM pelo **perfil QCOW2 congelado**, com overlay gravável próprio, novamente 500 MiB/1 vCPU. Exigir novo UUID, nome Libvirt, IP e SSH. Iniciar uma terceira VM derivada **enquanto a segunda está ativa**; comprovar identidades distintas, dois boots reais simultâneos com o mesmo disco-base, SHA-256 preservado em ambas e escrita em uma instância invisível na outra.
 6. Sem enviar ou escrever marcador na segunda VM, confirmar existência da pasta e o mesmo SHA-256 do arquivo. Repetir leitura via CLI `vm exec`, que compartilha o motor Go.
-7. Desligar a segunda VM graciosamente com `ForceAfterTimeout=false`; exigir ausência do domínio Libvirt e remoção do overlay/chaves transitórias.
+7. Desligar as duas VMs derivadas graciosamente com `ForceAfterTimeout=false`; exigir ausência dos domínios Libvirt e remoção dos respectivos overlays/chaves transitórias. Confirmar que a VM remanescente continua funcional depois da parada da outra.
 
 O teste só emite `INSULA_INTEGRAL_3_OK` e `INSULA_INTEGRAL_3_CI_OK` depois de todos os critérios. Erro de KVM, DHCP, SSH, SHA, integridade QCOW2 ou shutdown reprova. Não há fallback mock para o teste real.
 

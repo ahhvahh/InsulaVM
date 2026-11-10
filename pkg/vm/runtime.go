@@ -140,14 +140,19 @@ func StartWithStartupOptions(ctx context.Context,c *config.Config,p *profile.Pro
    emit("preserved",fmt.Sprintf("VM de diagnostico preservada: id=%s nome=%s pasta=%s; use 'insula test ssh -id %s' e 'insula vm stop -id %s' para liberar recursos",created.ID,created.Name,created.Directory,created.ID,created.ID))
   }
  }()
- id,err:=identity.UUIDv7()
- if err!=nil{return nil,err}
+ // Check the persistent history before assigning a UUID, including IDs
+ // from destroyed VMs. The subsequent SQLite INSERT is the atomic guard
+ // against concurrent allocators using the same registry.
+ id,err:=unusedVMID(ctx,c.Storage.Database,identity.UUIDv7)
+ if err!=nil{return nil,fmt.Errorf("allocate unique VM ID: %w",err)}
  instance.ID=id
  progressID=id
  instance.LibvirtUUID=id
  instance.SSHUser=c.SSH.User
  if p.SSH.User!=""{instance.SSHUser=p.SSH.User}
- instance.Name="insula-"+p.Name+"-"+id[:8]
+ // Use the full UUIDv7: its first eight hex digits are timestamp-derived
+ // and can be identical across many concurrent starts of the same profile.
+ instance.Name=vmDomainName(p.Name,id)
  instance.SSHPrivateKeyPath=filepath.Join(dir,"client_ed25519")
  instance.SSHKnownHostsPath=filepath.Join(dir,"known_hosts")
  macBytes:=make([]byte,3)
