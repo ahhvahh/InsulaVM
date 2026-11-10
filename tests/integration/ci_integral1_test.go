@@ -19,12 +19,15 @@ func TestIntegral1PRWorkflowContract(t *testing.T) {
 		t.Fatal(err)
 	}
 	var workflow struct {
-		On struct {
-			PullRequest struct {
-				Branches []string `yaml:"branches"`
-				Types    []string `yaml:"types"`
-			} `yaml:"pull_request"`
-		} `yaml:"on"`
+
+        On map[string]struct {
+            Branches []string `yaml:"branches"`
+            Types []string `yaml:"types"`
+        } `yaml:"on"`
+        Concurrency struct {
+            Group string `yaml:"group"`
+            Cancel bool `yaml:"cancel-in-progress"`
+        } `yaml:"concurrency"`
 		Permissions map[string]string `yaml:"permissions"`
 		Jobs map[string]struct {
 			Name   string `yaml:"name"`
@@ -40,16 +43,35 @@ func TestIntegral1PRWorkflowContract(t *testing.T) {
 	if err := yaml.Unmarshal(data, &workflow); err != nil {
 		t.Fatalf("invalid workflow YAML: %v", err)
 	}
-	for _, target := range []string{"develop", "promolog", "main"} {
-		if !integral1Has(workflow.On.PullRequest.Branches, target) {
-			t.Errorf("missing mandatory PR target %s", target)
-		}
-	}
-	for _, event := range []string{"opened", "synchronize", "reopened", "ready_for_review", "edited"} {
-		if !integral1Has(workflow.On.PullRequest.Types, event) {
-			t.Errorf("missing mandatory pull_request trigger %s", event)
-		}
-	}
+
+    if len(workflow.On) != 1 {
+        t.Fatalf("only pull_request may trigger the real Alpine E2E: %+v", workflow.On)
+    }
+    pr, ok := workflow.On["pull_request"]
+    if !ok {
+        t.Fatalf("pull_request trigger required: %+v", workflow.On)
+    }
+    expectedBranches := []string{"develop", "homolog", "main"}
+    if len(pr.Branches) != len(expectedBranches) {
+        t.Errorf("exact PR target set required: want=%v got=%v", expectedBranches, pr.Branches)
+    }
+    for _, target := range expectedBranches {
+        if !integral1Has(pr.Branches, target) {
+            t.Errorf("missing mandatory PR target %s", target)
+        }
+    }
+    expectedEvents := []string{"opened", "synchronize", "reopened"}
+    if len(pr.Types) != len(expectedEvents) {
+        t.Errorf("exact PR event set required: want=%v got=%v", expectedEvents, pr.Types)
+    }
+    for _, event := range expectedEvents {
+        if !integral1Has(pr.Types, event) {
+            t.Errorf("missing mandatory pull_request trigger %s", event)
+        }
+    }
+    if !workflow.Concurrency.Cancel || !strings.Contains(workflow.Concurrency.Group,"github.event.pull_request.number") {
+        t.Errorf("older runs for the same PR must be cancelled to reduce cost: %+v",workflow.Concurrency)
+    }
 	if !strings.Contains(string(data), "on:\n  pull_request:") ||
 		strings.Contains(string(data), "pull_request_target:") {
 		t.Error("workflow must run as pull_request, not privileged pull_request_target")
@@ -79,9 +101,10 @@ func TestIntegral1PRWorkflowContract(t *testing.T) {
 	if !hasKVMCheck || !hasISOTest {
 		t.Errorf("mandatory KVM preflight and Alpine end-to-end command required (preflight=%v test=%v)", hasKVMCheck, hasISOTest)
 	}
-	if strings.Contains(string(data), "continue-on-error: true") || strings.Contains(string(data), "paths-ignore:") || strings.Contains(string(data), "cancel-in-progress: true") {
-		t.Error("required check must not hide errors, filter commit paths, or cancel prior commit runs")
-	}
+
+    if strings.Contains(string(data),"continue-on-error: true") || strings.Contains(string(data),"paths-ignore:") || strings.Contains(string(data),"paths:") {
+        t.Error("required check must not hide errors or filter PR changed paths")
+    }
 }
 
 func integral1Has(values []string, target string) bool {
