@@ -126,6 +126,11 @@ func prepareGuestfsKernel(ctx context.Context) ([]string, func(), error) {
 	cleanup := func() { _ = os.RemoveAll(root) }
 	downloads := filepath.Join(root, "packages")
 	extracted := filepath.Join(root, "root")
+	cache := filepath.Join(root, "cache")
+	if err := os.Mkdir(cache, 0700); err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	if err := os.Mkdir(downloads, 0700); err != nil {
 		cleanup()
 		return nil, nil, err
@@ -173,7 +178,7 @@ func prepareGuestfsKernel(ctx context.Context) ([]string, func(), error) {
 		for _, dir := range []string{"lib", "usr/lib"} {
 			modules := filepath.Join(extracted, dir, "modules", version)
 			if fi, err := os.Stat(modules); err == nil && fi.IsDir() {
-				return []string{"SUPERMIN_KERNEL=" + kernel, "SUPERMIN_MODULES=" + modules}, cleanup, nil
+				return []string{"SUPERMIN_KERNEL=" + kernel, "SUPERMIN_MODULES=" + modules, "LIBGUESTFS_CACHEDIR=" + cache}, cleanup, nil
 			}
 		}
 	}
