@@ -292,8 +292,6 @@ func cleanupISOInstallerDomain(ctx context.Context,uri,name string)error{
  if out,err:=installerVirsh(ctx,uri,"undefine",name);err!=nil{return fmt.Errorf("remove installer domain: %w: %s",err,out)}
  return nil
 }
-var errInstallerUnmount=errors.New("guest filesystem remains mounted")
-
 func verifyDebianInstalledDisk(ctx context.Context,disk,stage string)error{
  mount:=filepath.Join(stage,"root")
  if err:=os.MkdirAll(mount,0700);err!=nil{return err}
@@ -314,11 +312,9 @@ func verifyDebianInstalledDisk(ctx context.Context,disk,stage string)error{
   }
   return nil
  }()
- unmountCtx,cancel:=context.WithTimeout(context.Background(),40*time.Second)
- defer cancel()
- unmountOutput,unmountErr:=exec.CommandContext(unmountCtx,"guestunmount",mount).CombinedOutput()
- if unmountErr!=nil{return errors.Join(checkErr,fmt.Errorf("%w: guestunmount failed; staging must be retained: %v: %s",errInstallerUnmount,unmountErr,strings.TrimSpace(string(unmountOutput))))}
- guestfsCleanup()
+ if unmountErr:=unmountGuestDiskReadOnly(mount,guestfsCleanup);unmountErr!=nil{
+  return errors.Join(checkErr,unmountErr)
+ }
  return checkErr
 }
 func verifyStandaloneQCOW2(ctx context.Context,disk string)error{

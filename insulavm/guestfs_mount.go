@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // mountGuestDiskReadOnly uses libguestfs without exposing or modifying the
@@ -184,4 +185,23 @@ func prepareGuestfsKernel(ctx context.Context) ([]string, func(), error) {
 	}
 	cleanup()
 	return nil, nil, errors.New("downloaded APT kernel has no matching vmlinuz and /lib/modules; refusing to mount guest disk")
+}
+
+
+// errInstallerUnmount marks an unresolved guestmount/FUSE mount. Callers must
+// preserve staging rather than removing a potentially mounted filesystem.
+var errInstallerUnmount = errors.New("guest filesystem remains mounted")
+
+// unmountGuestDiskReadOnly releases a read-only FUSE mount before removing the
+// private supermin kernel. On unmount failure cleanup MUST NOT be called.
+func unmountGuestDiskReadOnly(mountpoint string, cleanup func()) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+	defer cancel()
+	output, err := exec.CommandContext(ctx, "guestunmount", mountpoint).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%w: guestunmount %s failed: %v: %s",
+			errInstallerUnmount, mountpoint, err, tailGuestfsOutput(string(output)))
+	}
+	cleanup()
+	return nil
 }

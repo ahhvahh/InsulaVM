@@ -10,7 +10,6 @@ import (
  "path/filepath"
  "sort"
  "strings"
- "time"
 
  "github.com/ahhvahh/InsulaVM/pkg/storage"
 )
@@ -27,7 +26,7 @@ func(e *Engine)ExportProfileLiveISO(ctx context.Context,name string)(string,erro
 // outputPath can be absolute or relative to the process working directory.
 // An existing destination is never overwritten. Empty outputPath uses the
 // profile's managed exports directory.
-func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string)(string,error){
+func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string)(isoPath string,runErr error){
  if e==nil{return "",errors.New("engine is required")}
  if ctx==nil{return "",errors.New("context is required")}
  if err:=ctx.Err();err!=nil{return "",err}
@@ -42,7 +41,10 @@ func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string
  }
  work,err:=os.MkdirTemp("","insula-live-iso-*")
  if err!=nil{return "",err}
- defer os.RemoveAll(work)
+ // If a FUSE unmount fails, do not traverse/remove a potentially mounted
+ // guest filesystem. Preserve the staging directory for diagnosis.
+ preserveWork:=false
+ defer func(){if !preserveWork{_ = os.RemoveAll(work)}}()
  mount:=filepath.Join(work,"mount")
  stage:=filepath.Join(work,"iso")
  if err:=os.MkdirAll(mount,0700);err!=nil{return "",err}
@@ -50,11 +52,13 @@ func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string
  if err:=os.MkdirAll(filepath.Join(stage,"boot","grub"),0700);err!=nil{return "",err}
  guestfsCleanup,err:=mountGuestDiskReadOnly(ctx,image,mount)
  if err!=nil{return "",err}
+ mounted:=true
  defer func(){
-  cleanupCtx,cancel:=context.WithTimeout(context.Background(),30*time.Second)
-  defer cancel()
-  if err:=runISOTool(cleanupCtx,"guestunmount",mount);err==nil{
-   guestfsCleanup()
+  if !mounted{return}
+  if unmountErr:=unmountGuestDiskReadOnly(mount,guestfsCleanup);unmountErr!=nil{
+   preserveWork=true
+   runErr=errors.Join(runErr,fmt.Errorf("ISO staging retained at %s: %w",work,unmountErr))
+   isoPath=""
   }
  }()
  kernel,initrd,err:=selectLiveKernel(mount)
@@ -69,6 +73,14 @@ func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string
  if err:=copyISOFile(kernel,filepath.Join(stage,"live","vmlinuz"));err!=nil{return "",err}
  if err:=copyISOFile(initrd,filepath.Join(stage,"live","initrd.img"));err!=nil{return "",err}
  if err:=runISOTool(ctx,"mksquashfs",mount,filepath.Join(stage,"live","filesystem.squashfs"),"-noappend","-comp","xz");err!=nil{return "",err}
+ // Both the kernel/initramfs and SquashFS have now been copied to staging.
+ // A successful ISO must never be published while guestmount is still active.
+ unmountErr:=unmountGuestDiskReadOnly(mount,guestfsCleanup)
+ mounted=false
+ if unmountErr!=nil{
+  preserveWork=true
+  return "",fmt.Errorf("ISO staging retained at %s: %w",work,unmountErr)
+ }
  grub:=liveISOGrubConfig()
  if err:=os.WriteFile(filepath.Join(stage,"boot","grub","grub.cfg"),[]byte(grub),0600);err!=nil{return "",err}
  if err:=os.MkdirAll(filepath.Dir(dest),0700);err!=nil{return "",err}
