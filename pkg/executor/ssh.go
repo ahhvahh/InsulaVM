@@ -81,6 +81,12 @@ func DialContext(ctx context.Context, config DialConfig) (*ssh.Client, error) {
  if err != nil {
   _ = raw.Close()
   if dialCtx.Err() != nil { return nil, fmt.Errorf("SSH handshake/authentication timed out: %w", dialCtx.Err()) }
+  // The socket's read deadline can fire just before dialCtx.Err() is set.
+  // Preserve a meaningful timeout classification in both race orderings.
+  var netErr net.Error
+  if errors.As(err, &netErr) && netErr.Timeout() {
+   return nil, fmt.Errorf("SSH handshake/authentication timed out: %w", err)
+  }
   return nil, fmt.Errorf("SSH handshake/authentication: %w", err)
  }
  // Handshake deadlines must NOT persist on an authenticated session:
