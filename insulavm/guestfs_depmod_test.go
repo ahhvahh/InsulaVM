@@ -80,3 +80,31 @@ func TestPrepareGuestfsKernelRejectsDepmodFailures(t *testing.T){
   })
  }
 }
+
+
+func TestPrepareGuestfsKernelHandlesUsrLibModules(t *testing.T) {
+ bin:=t.TempDir()
+ guestfsExtractedKernelStubs(t,bin)
+ guestfsStub(t,bin,"dpkg-deb",`test "$1" = -x
+case "$2" in
+ *linux-image-*) mkdir -p "$3/boot"; printf kernel > "$3/boot/vmlinuz-6.8.0-99-generic" ;;
+ *linux-modules-*) mkdir -p "$3/usr/lib/modules/6.8.0-99-generic" ;;
+ *) exit 22 ;;
+esac`)
+ guestfsStub(t,bin,"depmod",`test "$1" = -b
+test "$3" = -m
+test "$4" = /usr/lib/modules
+test "$5" = 6.8.0-99-generic
+test -d "$2/usr/lib/modules/$5"
+printf 'text dependencies' > "$2/usr/lib/modules/$5/modules.dep"
+printf 'binary dependencies' > "$2/usr/lib/modules/$5/modules.dep.bin"`)
+ env, cleanup, err:=prepareGuestfsKernel(context.Background())
+ if err!=nil||cleanup==nil||len(env)!=3{t.Fatalf("usr/lib private modules failure: env=%v err=%v",env,err)}
+ defer cleanup()
+ if !strings.Contains(env[1],"/usr/lib/modules/6.8.0-99-generic"){
+  t.Fatalf("wrong module directory: %v",env)
+ }
+ if _,err:=os.Stat(strings.TrimPrefix(env[1],"SUPERMIN_MODULES=")+"/modules.dep.bin");err!=nil{
+  t.Fatalf("missing usr/lib binary index: %v",err)
+ }
+}
