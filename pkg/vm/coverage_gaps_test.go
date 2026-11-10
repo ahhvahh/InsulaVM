@@ -99,6 +99,9 @@ func TestQEMUAccessGuardsAndPermissions(t *testing.T){
     stat,err:=os.Stat(base)
     if err!=nil{t.Fatal(err)}
     if !ownedBy(stat,os.Geteuid()){t.Fatal("local fixture ownership was not recognized")}
+    bin:=t.TempDir()
+    if err:=os.WriteFile(filepath.Join(bin,"setfacl"),[]byte("#!/bin/sh\\nexit 0\\n"),0700);err!=nil{t.Fatal(err)}
+    t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
     if err:=GrantQEMUInstallAccess(context.Background(),os.Geteuid(),base,base);err!=nil{
         t.Fatalf("already owned disk should not need extra permissions: %v",err)
     }
