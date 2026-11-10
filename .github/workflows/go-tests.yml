@@ -1,11 +1,11 @@
 name: Go tests
 
-# Execucao automatica apenas depois de um commit na develop.
-# Nao executar na abertura/atualizacao de PR nem em main, homolog ou outras branches.
+# Executar em todo push para qualquer branch (sem executar em tags).
+# Testes integrais continuam restritos a PRs develop -> homolog/main.
 on:
   push:
     branches:
-      - develop
+      - '**'
 
 permissions:
   contents: read
