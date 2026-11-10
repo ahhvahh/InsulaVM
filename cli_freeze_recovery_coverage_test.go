@@ -89,7 +89,7 @@ func TestCLIRejectsUnsafeFreezeRecoverySwitches(t *testing.T){
  cfg,_,sourceDir:=cliStoppedVMForFreeze(t)
  attempts:=[][]string{
   {"vm","freeze","-config",cfg,"-id",cliLoopbackID,"-name","unsafe",
-   "-recover-stopped","-skip-guest-cleanup"},
+   "-export-iso=true","-prepare-live-boot=true","-recover-stopped","-skip-guest-cleanup"},
   {"vm","freeze","-config",cfg,"-id",cliLoopbackID,"-name","unsafe",
    "-prepare-live-boot=false","-export-iso=false"},
   {"vm","freeze","-config",cfg,"-id",cliLoopbackID,"-name","unsafe",
