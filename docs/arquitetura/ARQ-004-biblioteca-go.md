@@ -71,7 +71,7 @@ O `RunResult` retorna `SSHUser`, `Profile`, `Host`, `VMID`, `VMName`, `LogDirect
 
 ### ID imediato e controle de duplicidade
 
-Toda VM criada a partir de um perfil congelado recebe **UUIDv7 próprio**, independentemente de compartilhar a mesma imagem-base QCOW2 com outras instâncias. O identificador da aplicação e o UUID Libvirt são iguais.
+Toda VM criada a partir de um perfil congelado recebe **UUIDv7 próprio**, independentemente de compartilhar a mesma imagem-base QCOW2 com outras instâncias. O identificador da aplicação e o UUID Libvirt são iguais. O **nome do domínio Libvirt inclui o UUIDv7 completo**, evitando colisão do nome quando várias instâncias são iniciadas na mesma janela de tempo; usar só os primeiros oito dígitos de UUIDv7 seria inseguro, pois essa parte é derivada do timestamp.
 
 A biblioteca devolve `instance.ID` quando o boot, DHCP e SSH estiverem validados. Para obter o ID **antes de o SSH ficar pronto**, usar o callback de progresso: no estágio `registered`, `VMProgress.ID` já foi reservado no SQLite. O callback é síncrono; a aplicação pode executar a criação numa goroutine e encaminhar o ID por um canal. **Atenção:** `registered` não significa `ready`; se a inicialização falhar, o ID permanece no histórico com estado `failed`, e o consumidor deve observar o erro final.
 
