@@ -1,22 +1,24 @@
 # Teste Integral 1: boot real da ISO Alpine em todas as PRs protegidas.
-# Deve estar presente em cada branch de destino: develop, promolog e main.
+# Deve estar presente em cada branch de destino: develop, homolog e main.
 name: "Integral 1 - Alpine ISO"
 
 on:
   pull_request:
     branches:
       - develop
-      - promolog
+      - homolog
       - main
     types:
       - opened
       - synchronize
       - reopened
-      - ready_for_review
-      - edited
 
 # Código de PR, inclusive de forks, nunca recebe token de escrita ou segredos.
 # Não executar em self-hosted: o repositório é público.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 

@@ -8,6 +8,7 @@ bash -n scripts/baixar-debian.sh scripts/tests/test-baixar-debian.sh \
   scripts/tests/manual-debian-mini-iso.sh \
   scripts/tests/integration.sh \
   scripts/tests/alpine-iso.sh \
+  scripts/tests/integral-2-zip.sh \
   scripts/tests/guest/verify.sh \
   scripts/tests/guest/loop.sh \
   scripts/tests/guest/prepare-live.sh \
@@ -21,7 +22,18 @@ trap 'rm -rf -- "$TMP"' EXIT
 go test -race -coverprofile="$TMP/coverage.out" ./...
 go tool cover -func="$TMP/coverage.out" | tail -n 1
 # Compile integration-tagged Go tests without running any real VM in CI.
-go test -tags integration -run '^TestAlpineISO(XMLContract|TranscriptContract)$' ./tests/integration
+go test -tags integration -run '^TestAlpineISO(XMLContract|TranscriptContract)
+go test -tags integration -run '^$' ./tests/integration
+go build -o "$TMP/insula" .
+"$TMP/insula" help >/dev/null
+echo "INSULA_UNIT_OK"
+ ./tests/integration
+go test -tags integration -run '^TestIntegral2ZipFixtureContract
+go test -tags integration -run '^$' ./tests/integration
+go build -o "$TMP/insula" .
+"$TMP/insula" help >/dev/null
+echo "INSULA_UNIT_OK"
+ ./tests/integration
 go test -tags integration -run '^$' ./tests/integration
 go build -o "$TMP/insula" .
 "$TMP/insula" help >/dev/null

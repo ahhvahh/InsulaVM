@@ -9,6 +9,8 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 
 **Roteiro manual Debian mini.iso:** [GUIA-004 — Instalação, preparação e ISO Live](guias/GUIA-004-teste-manual-debian-mini-iso.md). **Testes guiados:** [GUIA-004 — CLI test, SSH e ISO Live](guias/GUIA-004-testes-guiados.md). **Alpine obrigatório:** [GUIA-005 — boot real de ISO Alpine Virtual](guias/GUIA-005-alpine-iso.md). **Instalar Debian por ISO:** [INTF-TERM-007 — Criar perfil Debian via ISO instaladora](interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md). **Novos fluxos e testes:** [FLUX-006 — Testes integrais VM/ISO Live](fluxos/FLUX-006-teste-integral-iso-vm.md), [GUIA-003 — Testes](guias/GUIA-003-testes.md), [INTF-TERM-006 — ISO Live](interfaces/terminal/INTF-TERM-006-iso-live.md).
 
+**Novo Teste Integral 2:** [FLUX-007 — Transferência ZIP, execução e shutdown](fluxos/FLUX-007-teste-integral-zip-vm.md) e [GUIA-006 — Executar e diagnosticar](guias/GUIA-006-teste-integral-2-zip.md).
+
 ## Mapa de leitura
 
 | Documento | Categoria | Conteúdo |
