@@ -39,6 +39,8 @@ O script usa por padrão `data/integral-3-ci/state`, baixa a mini.iso Debian 13 
 | Freeze | `FreezeVM`, QCOW2 comprimido independente, sem ISO, shutdown gracioso |
 | Integridade | `qemu-img info` sem backing; `qemu-img check` bem-sucedido |
 | Segunda VM | Novo UUID e boot real KVM do perfil congelado, 500 MiB/1 vCPU |
+| Outra VM simultânea | Mesmo perfil QCOW2, IDs/nome Libvirt/IP/overlays distintos, SSH em ambas |
+| Isolamento | Arquivo escrito na terceira VM não aparece na segunda, que continua funcional |
 | Persistência posterior | Arquivo e mesmo SHA-256, sem reenvio de dados |
 | CLI/Go | Leitura do arquivo também por `vm exec` |
 | Parada | Shutdown gracioso sem força, domínio ausente e overlay limpo |
