@@ -114,6 +114,27 @@ Uma ISO Live não é uma cópia bit a bit das partições: preserva o sistema co
 - Para salvar apenas o disco use `vm freeze -export-iso=false`, mantendo o contrato de clonagem existente. Para copiar a ISO gerada a `/tmp`, copie o arquivo de `profiles/<nome>/exports/<nome>-live.iso`.
 - Enquanto não houver validação KVM real, não declarar que a ISO foi inicializada com sucesso.
 
+## Congelamento nativo QCOW2 com compressão opcional
+
+O requisito de reutilização de uma VM preparada **não exige ISO Live**. `FreezeVM` pode publicar apenas o disco consolidado, sem backing file, com `ExportISO=false`. O perfil resultante contém `profile.yaml` e `versions/v001/base.qcow2` e é reutilizado diretamente por `vm start`, que cria um overlay gravável separado por VM.
+
+Para reduzir espaço físico da imagem-base, `CompressQCOW2=true` na biblioteca Go ou `-compress` na CLI habilita `qemu-img convert -c -f qcow2 -O qcow2`. A compressão nativa **não exige extração para inicializar**; a imagem-base é imutável e os overlays recebem as novas gravações. A compressão fica **desativada por padrão**, preservando o comportamento anterior. Regravar clusters comprimidos diretamente os torna não comprimidos; por isso a base deve permanecer imutável.
+
+```bash
+./insula vm freeze -config ./config.yaml -id UUID_DA_VM -name debian-preparado -export-iso=false -compress
+./insula vm start -config ./config.yaml -profile debian-preparado
+```
+
+`FreezeVM(ctx, VMFreezeRequest{VMID: id, Name: "debian-preparado", ExportISO: false, CompressQCOW2: true})` fornece a mesma operação pela biblioteca. Se a conversão falhar, o overlay da origem é preservado e o perfil parcial é removido. O tamanho aparente (virtual) do disco não equivale ao consumo físico; verificar com `du -h` e `qemu-img info`.
+
+**Destino:** o local gerenciado é `storage.profiles`, no `config.yaml`. Esse campo já aceita caminho absoluto, inclusive um volume dedicado montado, por exemplo `/srv/insulavm/profiles`. O volume precisa estar montado, ter espaço e permissões para o QEMU/Libvirt antes de iniciar instâncias. Nunca mover ou apagar a imagem-base enquanto houver overlays que a referenciam. Backups externos devem copiar o diretório completo do perfil, preservar `profile.yaml`, e manter uma restauração verificável.
+
+**Limite de persistência:** captura do QCOW2 não preserva `tmpfs`, RAM nem conteúdo de montagens externas. Gravar dados que devem persistir no sistema de arquivos do disco convidado antes do congelamento; `/tmp` pode ser `tmpfs` no Debian testado.
+
+**Testes:** cobertura unitária do comando `-c`, paridade CLI/Go, ausência de backing no perfil e rollback na falha; boot real de uma segunda VM a partir da base comprimida requer teste KVM de integração.
+
+**Documentação oficial:** [QEMU qemu-img](https://www.qemu.org/docs/master/tools/qemu-img.html).
+
 ## Referências
 
 - [INTF-TERM-004 — Gerenciamento de VMs](../interfaces/terminal/INTF-TERM-004-gerenciar-vms.md)
