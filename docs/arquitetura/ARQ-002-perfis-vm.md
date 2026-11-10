@@ -143,4 +143,13 @@ As próximas instâncias usam `vm start -profile <nome>` ou [`StartVMWithOptions
 
 [`CreateProfileFromISO`](../../insulavm/create_profile_iso.go) usa ISO Debian 13 amd64 local, Preseed injetado no initramfs, `virt-install`, QCOW2 temporário e verificação offline de `/etc/os-release`, Cloud-Init, SSH, sudo e live-boot por `guestmount`. O perfil só é registrado após o domínio parar e a verificação passar; rejeita nome repetido e ISO sem assinatura ISO9660. O arquivo original de ISO não é modificado. A credencial do instalador é aleatória, armazenada apenas como hash no Preseed temporário. O SHA256 da ISO é devolvido na operação, sem extensão de schema YAML.
 
+### Libguestfs e ambientes sem kernel local
+
+A inspeção do QCOW2 instalado e a captura de conteúdo para a ISO Live utilizam o mesmo adaptador `mountGuestDiskReadOnly` (`insulavm/guestfs_mount.go`), sempre com `guestmount --ro`. Uma falha do `supermin` aciona uma segunda tentativa com `LIBGUESTFS_DEBUG=1` e `LIBGUESTFS_TRACE=1` para obter a causa exata; não é tratada como falha de DHCP nem como instalação concluída.
+
+**Somente** quando o `supermin` relata ausência de kernel apropriado, o motor pode obter o kernel e módulos da distribuição via índices APT configurados no host. Os pacotes são baixados (sem `sudo` ou instalação), extraídos num diretório temporário com permissões restritas e fornecidos à appliance pelo `SUPERMIN_KERNEL`, `SUPERMIN_MODULES` e `LIBGUESTFS_CACHEDIR`. Os arquivos temporários são removidos após o `guestunmount` bem-sucedido. Configurações explícitas dessas variáveis são respeitadas, sem substituição automática de kernel. Outras falhas de `libguestfs`, falhas APT ou de montagem são propagadas, sem registrar perfil ou publicar ISO como sucesso. O procedimento não altera o QCOW2 de origem nem a configuração do sistema operacional do host.
+
+Referências oficiais: [supermin](https://libguestfs.org/supermin.1.html), [guestfs-faq](https://libguestfs.org/guestfs-faq.1.html) e [variáveis libguestfs](https://libguestfs.org/guestfs.3.html).
+
+
 Diferente do fluxo interativo proposto no restante desta arquitetura, o novo comando **não** pergunta ao usuário se deseja salvar, nem permite editar o sistema pelo console antes da publicação. Esse fluxo futuro permanece em [FLUX-002](../fluxos/FLUX-002-criacao-perfil-vm.md). Veja o contrato de uso em [INTF-TERM-007](../interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md).
