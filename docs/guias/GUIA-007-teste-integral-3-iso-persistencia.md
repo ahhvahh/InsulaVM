@@ -50,7 +50,7 @@ pacotes Debian pela rede.
 Sucesso exige saída INSULA_INTEGRAL_3_OK e
 INSULA_INTEGRAL_3_CI_OK, com exit code zero.
 
-**Os testes unitários de contrato e as regressões Go não executam pelo evento de PR:** o workflow `Go tests` é acionado por `push` em qualquer branch. As PRs executam somente o preflight estático (`bash -n` e `go vet`) e os respectivos testes integrais reais. As PRs executam somente o preflight estático (`bash -n` e `go vet`) e os respectivos testes integrais reais.
+**Os testes unitários de contrato e as regressões Go não executam pelo evento de PR:** o workflow `Go tests` é acionado por `push` em qualquer branch. As PRs executam somente o preflight estático (`bash -n` e `go vet`) e os respectivos testes integrais reais.
 
 ## Integração CI
 
