@@ -30,9 +30,9 @@ type VMFreezeRequest struct {
  // ExportISO creates a Debian Live ISO after publishing the QCOW2.
  // The QCOW2 always survives if ISO creation fails.
  ExportISO bool
- // CompressQCOW2 uses qemu-img convert -c to save space in the frozen,
- // standalone QCOW2 base. New VM overlays remain writable and independent.
- CompressQCOW2 bool
+ // DisableQCOW2Compression opts out of the native compressed QCOW2 base.
+ // By default, FreezeVM converts the stopped overlay with qemu-img convert -c.
+ DisableQCOW2Compression bool
  // OutputISOPath is an optional absolute or CWD-relative .iso destination.
  // Empty preserves the managed profile/exports location.
  OutputISOPath string
@@ -149,7 +149,7 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
  notify("convert","Flattening QCOW2 backing chain into a named independent image")
  frozenProfile:=*original
  frozenProfile.SSH=profile.SSH{User:record.SSHUser}
- image,err:=profile.FreezeFromOverlayWithOptions(ctx,e.config.Storage.Profiles,frozenProfile,req.Name,overlay,profile.FreezeOptions{Compress:req.CompressQCOW2})
+ image,err:=profile.FreezeFromOverlayWithOptions(ctx,e.config.Storage.Profiles,frozenProfile,req.Name,overlay,profile.FreezeOptions{Compress:!req.DisableQCOW2Compression})
  if err!=nil{return result,fmt.Errorf("create frozen profile: %w (original overlay preserved at %s)",err,sourceDir)}
  result.ImagePath=image
  notify("registered","Reusable profile created: "+req.Name)
