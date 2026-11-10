@@ -30,7 +30,7 @@ func TestCLICommandDispatchCoversSafeValidationWithoutHypervisor(t *testing.T){
         {"help",[]string{"help"},""},
         {"config unknown",[]string{"config","bad"},"usage"},
         {"config positional",[]string{"config","check","-config",cfg,"unexpected"},"unexpected arguments"},
-        {"profile bad",[]string{"profile","unknown","-config",cfg},"usage"},
+        {"profile bad",[]string{"profile","unknown","-config",cfg},"expected profile list"},
         {"vm start missing profile",[]string{"vm","start","-config",cfg},"requires -profile"},
         {"vm start iso missing profile",[]string{"vm","start-iso","-config",cfg},"requires -profile"},
         {"vm diagnose missing UUID",[]string{"vm","diagnose","-config",cfg},"requires -id"},
