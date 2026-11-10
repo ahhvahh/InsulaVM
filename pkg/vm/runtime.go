@@ -150,7 +150,9 @@ func StartWithStartupOptions(ctx context.Context,c *config.Config,p *profile.Pro
  instance.LibvirtUUID=id
  instance.SSHUser=c.SSH.User
  if p.SSH.User!=""{instance.SSHUser=p.SSH.User}
- instance.Name="insula-"+p.Name+"-"+id[:8]
+ // Use the full UUIDv7: its first eight hex digits are timestamp-derived
+ // and can be identical across many concurrent starts of the same profile.
+ instance.Name=vmDomainName(p.Name,id)
  instance.SSHPrivateKeyPath=filepath.Join(dir,"client_ed25519")
  instance.SSHKnownHostsPath=filepath.Join(dir,"known_hosts")
  macBytes:=make([]byte,3)
