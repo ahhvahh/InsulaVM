@@ -53,6 +53,8 @@ Para bloquear merge quando o teste falhar, adicionar integral-2-zip-upload-comma
 - Erro de transferência: analisar estágios uploading/verifying/extracting no log.
 - Conteúdo incorreto: comparar marcadores SHA e contagens produzidos pelo guest.
 - Stop forçado: o teste não passa, mesmo que recursos sejam limpos posteriormente.
+- Race de desligamento em domínio transitório: se `virsh domstate` falhar após um `list`, o motor consulta `virsh list --all --uuid` novamente. Somente ausência confirmada com comando bem-sucedido permite finalizar a limpeza; erro de conexão ou domínio ainda listado preserva os discos.
+- A falha observada no CI ao encerrar após upload e execução (estado Libvirt desconhecido) deve ser revalidada no Integral 2 real; mocks não comprovam desligamento gracioso.
 
 **Limitação importante:** ImportToVM transfere o ZIP como um arquivo único envolto em TAR.GZ temporário, que é extraído automaticamente pela ferramenta. Quem extrai o conteúdo ZIP é um comando posterior enviado à VM; isso é intencional e respeita o contrato atual.
 
