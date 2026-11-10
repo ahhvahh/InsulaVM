@@ -28,6 +28,8 @@ trap 'rm -rf -- "$TMP"' EXIT
 go test -count=1 ./...
 go test -race -count=1 -coverprofile="$TMP/coverage.out" ./...
 go tool cover -func="$TMP/coverage.out" | tail -n 1
+# Show zero-coverage functions so new tests target unexercised behavior.
+go tool cover -func="$TMP/coverage.out" | grep -E "[[:space:]]0[.]0%" | head -n 120 || true
 
 # Executar apenas os contratos, e compilar todos os testes marcados 'integration'
 # sem criar VMs, instalar ISO ou transferir arquivos no runner unitario.
