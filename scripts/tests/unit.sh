@@ -34,7 +34,18 @@ go tool cover -func="$TMP/coverage.out" | grep -E "[[:space:]]0[.]0%" | head -n 
 # Executar apenas os contratos, e compilar todos os testes marcados 'integration'
 # sem criar VMs, instalar ISO ou transferir arquivos no runner unitario.
 go test -tags integration -count=1 -run '^(TestAlpineISO(XMLContract|TranscriptContract)|TestIntegral2ZipFixtureContract|TestIntegral3MarkerContract)$' ./tests/integration
-go test -tags integration -run '^$' ./tests/integration
+go test -tags integration -run '^
+
+go build -o "$TMP/insula" .
+"$TMP/insula" help >/dev/null
+echo "INSULA_UNIT_OK"
+ ./tests/integration
+go test -tags integration -run '^
+
+go build -o "$TMP/insula" .
+"$TMP/insula" help >/dev/null
+echo "INSULA_UNIT_OK"
+ ./insulavm
 
 go build -o "$TMP/insula" .
 "$TMP/insula" help >/dev/null
