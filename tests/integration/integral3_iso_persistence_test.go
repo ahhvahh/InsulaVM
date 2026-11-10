@@ -188,9 +188,14 @@ func TestIntegral3QCOW2WorkspacePersistence(t *testing.T) {
 	if err != nil || profileImage != frozenImagePath {
 		t.Fatalf("frozen profile image not accessible: %s: %v", profileImage, err)
 	}
-	// Compare logical guest-visible sectors before removing the source base:
-	// compressed QCOW2 and the original overlay must carry identical content.
-	t.Logf("[freeze:ready] independent compressed QCOW2=%s physical_bytes=%d", frozenImagePath, stat.Size())
+	// Validate QCOW2 integrity before the second real KVM boot. The old
+	// instance and its temporary overlay have been cleaned by FreezeVM.
+	checkOutput, checkErr := exec.CommandContext(ctx, "qemu-img", "check", "-f", "qcow2", frozenImagePath).CombinedOutput()
+	if checkErr != nil {
+		t.Fatalf("frozen QCOW2 consistency check failed: %v: %s", checkErr, checkOutput)
+	}
+	t.Logf("[freeze:ready] independent compressed QCOW2=%s file_bytes=%d check=%s",
+		frozenImagePath, stat.Size(), strings.TrimSpace(string(checkOutput)))
 	oldState, err := engine.GetVMStatus(ctx, source.ID)
 	if err != nil || oldState.LibvirtState != "absent" {
 		t.Fatalf("source domain still active after freeze: %+v err=%v", oldState, err)
@@ -284,14 +289,15 @@ func integral3AssertDiskSize(t *testing.T, imagePath string, gib int) {
 		t.Fatalf("qemu-img info %s: %v", imagePath, err)
 	}
 	var info struct {
-		VirtualSize int64  `json:"virtual-size"`
-		Format      string `json:"format"`
+		VirtualSize    int64  `json:"virtual-size"`
+		Format         string `json:"format"`
+		BackingFile    string `json:"backing-filename"`
 	}
 	if err := json.Unmarshal(out, &info); err != nil {
 		t.Fatalf("invalid qemu-img info json: %v", err)
 	}
-	if info.Format != "qcow2" || info.VirtualSize != int64(gib)*1024*1024*1024 {
-		t.Fatalf("expected %d GiB qcow2, got size=%d format=%s", gib, info.VirtualSize, info.Format)
+	if info.Format != "qcow2" || info.VirtualSize != int64(gib)*1024*1024*1024 || info.BackingFile != "" {
+		t.Fatalf("expected independent %d GiB qcow2, got size=%d format=%s backing=%q", gib, info.VirtualSize, info.Format, info.BackingFile)
 	}
 }
 
