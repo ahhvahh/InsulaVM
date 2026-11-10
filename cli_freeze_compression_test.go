@@ -7,11 +7,19 @@ import (
  "testing"
 )
 
-func TestCLICompressedFreezeUsesNativeQEMU(t *testing.T){
- config,engine,_:=cliStoppedVMForFreeze(t)
- bin:=t.TempDir()
- capture:=filepath.Join(t.TempDir(),"convert-args")
- script:=`#!/bin/sh
+func TestCLIFreezeNativeQCOW2CompressionModes(t *testing.T){
+ for _,tc:=range []struct{
+  name string
+  compress bool
+ }{
+  {name:"default-compressed",compress:true},
+  {name:"explicit-uncompressed",compress:false},
+ }{
+  t.Run(tc.name,func(t *testing.T){
+   config,engine,_:=cliStoppedVMForFreeze(t)
+   bin:=t.TempDir()
+   capture:=filepath.Join(t.TempDir(),"convert-args")
+   script:=`#!/bin/sh
 set -eu
 case "$1" in
  convert)
@@ -23,17 +31,20 @@ case "$1" in
  *) exit 17 ;;
 esac
 `
- if err:=os.WriteFile(filepath.Join(bin,"qemu-img"),[]byte(script),0700);err!=nil{t.Fatal(err)}
- t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
- t.Setenv("INSULA_QEMU_ARGS",capture)
- err:=run([]string{"vm","freeze","-config",config,"-id",cliLoopbackID,
-  "-name","compressed-reusable",
-  "-skip-guest-cleanup","-recover-stopped"})
- if err!=nil{t.Fatalf("CLI compressed freeze failed: %v",err)}
- args,err:=os.ReadFile(capture)
- if err!=nil{t.Fatal(err)}
- if !strings.Contains("\n"+string(args)+"\n","\n-c\n"){t.Fatalf("CLI did not enable qemu-img -c: %s",args)}
- p,err:=engine.GetProfile("compressed-reusable")
- if err!=nil{t.Fatal(err)}
- if _,err:=p.ImagePath();err!=nil{t.Fatalf("CLI output is not a valid reusable QCOW2 profile: %v",err)}
+   if err:=os.WriteFile(filepath.Join(bin,"qemu-img"),[]byte(script),0700);err!=nil{t.Fatal(err)}
+   t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+   t.Setenv("INSULA_QEMU_ARGS",capture)
+   args:=[]string{"vm","freeze","-config",config,"-id",cliLoopbackID,
+    "-name","reusable","-skip-guest-cleanup","-recover-stopped"}
+   if !tc.compress {args=append(args,"-compress=false")}
+   if err:=run(args);err!=nil{t.Fatalf("CLI freeze failed: %v",err)}
+   output,err:=os.ReadFile(capture)
+   if err!=nil{t.Fatal(err)}
+   hasCompression:=strings.Contains("\n"+string(output)+"\n","\n-c\n")
+   if hasCompression!=tc.compress{t.Fatalf("compress=%t, qemu-img args=%s",tc.compress,output)}
+   p,err:=engine.GetProfile("reusable")
+   if err!=nil{t.Fatal(err)}
+   if _,err:=p.ImagePath();err!=nil{t.Fatalf("CLI output not reusable: %v",err)}
+  })
+ }
 }
