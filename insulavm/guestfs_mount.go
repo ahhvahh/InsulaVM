@@ -199,24 +199,40 @@ func prepareGuestfsKernel(ctx context.Context) ([]string, func(), error) {
 		for _, dir := range []string{"lib", "usr/lib"} {
 			modules := filepath.Join(extracted, dir, "modules", version)
 			if fi, err := os.Stat(modules); err == nil && fi.IsDir() {
-				// Extracted .deb packages do not run post-install hooks. Ubuntu
-				// therefore provides kernel modules but no modules.dep; supermin
-				// cannot construct its initrd without this generated index.
-				// depmod -b writes ONLY inside the private extracted package tree.
-				index := filepath.Join(modules, "modules.dep")
-				if fi, err := os.Stat(index); err != nil || !fi.Mode().IsRegular() {
-					if _, err := exec.LookPath("depmod"); err != nil {
-						cleanup()
-						return nil, nil, fmt.Errorf("depmod required for extracted kernel modules: %w", err)
+				// Extraction does not run kernel post-install hooks. Both
+				// indexes are needed by the real libguestfs appliance.
+				indexes := []string{"modules.dep", "modules.dep.bin"}
+				needsDepmod := false
+				for _, name := range indexes {
+					fi, statErr := os.Stat(filepath.Join(modules, name))
+					if statErr != nil || !fi.Mode().IsRegular() {
+						needsDepmod = true
+						break
 					}
-					output, err := exec.CommandContext(ctx, "depmod", "-b", extracted, version).CombinedOutput()
-					if err != nil {
+				}
+				if needsDepmod {
+					depmod, lookupErr := exec.LookPath("depmod")
+					if lookupErr != nil {
 						cleanup()
-						return nil, nil, fmt.Errorf("depmod private kernel %s failed: %w: %s", version, err, tailGuestfsOutput(string(output)))
+						return nil, nil, fmt.Errorf("depmod (kmod package) is required to index extracted kernel modules: %w", lookupErr)
 					}
-					if fi, err := os.Stat(index); err != nil || !fi.Mode().IsRegular() {
+					args := []string{"-b", extracted}
+					if dir == "usr/lib" {
+						// The extracted tree may lack the host's /lib symlink.
+						args = append(args, "-m", "/usr/lib/modules")
+					}
+					args = append(args, version)
+					output, depmodErr := exec.CommandContext(ctx, depmod, args...).CombinedOutput()
+					if depmodErr != nil {
 						cleanup()
-						return nil, nil, fmt.Errorf("depmod did not generate modules.dep for private kernel %s", version)
+						return nil, nil, fmt.Errorf("depmod private kernel %s failed: %w: %s", version, depmodErr, tailGuestfsOutput(string(output)))
+					}
+				}
+				for _, name := range indexes {
+					fi, statErr := os.Stat(filepath.Join(modules, name))
+					if statErr != nil || !fi.Mode().IsRegular() {
+						cleanup()
+						return nil, nil, fmt.Errorf("depmod did not generate %s for private kernel %s", name, version)
 					}
 				}
 				return []string{"SUPERMIN_KERNEL=" + kernel, "SUPERMIN_MODULES=" + modules, "LIBGUESTFS_CACHEDIR=" + cache}, cleanup, nil
