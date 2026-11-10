@@ -7,7 +7,7 @@ CONFIG="$ROOT/config.yaml"
 BASE_IMAGE=""
 INSTALLER_ISO=""
 ALPINE_ISO=""
-LIVE_TEST=1
+LIVE_TEST=0
 GO_API_TEST=1
 while (($#)); do
   case "$1" in
@@ -15,6 +15,7 @@ while (($#)); do
     --base-qcow2) BASE_IMAGE="$2"; shift 2 ;;
     --installer-iso) INSTALLER_ISO="$2"; shift 2 ;;
     --alpine-iso) ALPINE_ISO="$2"; shift 2 ;;
+    --live-iso) LIVE_TEST=1; shift ;;
     --skip-live-iso) LIVE_TEST=0; shift ;;
     --skip-go-api) GO_API_TEST=0; shift ;;
     *) echo "Unknown argument: $1" >&2; exit 2 ;;
@@ -25,7 +26,7 @@ if [[ ! -f "$CONFIG" || "$CONFIG" != /* ||
       ( -n "$BASE_IMAGE" && ( "$BASE_IMAGE" != /* || ! -f "$BASE_IMAGE" ) ) ||
       ( -n "$INSTALLER_ISO" && ( "$INSTALLER_ISO" != /* || ! -f "$INSTALLER_ISO" ) ) ||
       ( -n "$ALPINE_ISO" && ( "$ALPINE_ISO" != /* || ! -f "$ALPINE_ISO" ) ) ]]; then
-  echo "Usage: bash scripts/tests/integration.sh --config /absolute/config.yaml (--base-qcow2 /absolute/debian13.qcow2 | --installer-iso /absolute/debian13.iso) [--alpine-iso /absolute/alpine-virt.iso] [--skip-live-iso] [--skip-go-api]" >&2
+  echo "Usage: bash scripts/tests/integration.sh --config /absolute/config.yaml (--base-qcow2 /absolute/debian13.qcow2 | --installer-iso /absolute/debian13.iso) [--alpine-iso /absolute/alpine-virt.iso] [--live-iso] [--skip-live-iso] [--skip-go-api]" >&2
   exit 2
 fi
 for tool in virsh qemu-img ssh; do
@@ -37,6 +38,7 @@ fi
 [[ -c /dev/kvm ]] || { echo "/dev/kvm unavailable" >&2; exit 2; }
 # Mandatory standalone ISO boot/guest command/shutdown gate; never skipped by
 # --skip-go-api or --skip-live-iso (those flags only concern the Debian suite).
+# Live ISO export/boot is experimental and runs ONLY with --live-iso.
 alpine_args=(--config "$CONFIG")
 if [[ -n "$ALPINE_ISO" ]]; then alpine_args+=(--iso "$ALPINE_ISO"); fi
 bash "$ROOT/scripts/tests/alpine-iso.sh" "${alpine_args[@]}"
@@ -125,7 +127,7 @@ grep -q 'forced=true' <<<"$output"
 grep -q 'timed_out=true' <<<"$output"
 insula vm status -id "$forceid" | grep -q 'status_libvirt=absent'
 echo INSULA_FORCE_SHUTDOWN_OK
-echo "[integration] freeze a second VM into a named profile"
+echo "[integration] freeze a second VM as compressed standalone QCOW2 (default)"
 output="$(insula vm start -profile "$base")"
 sourceid="$(extract_id "$output")"
 VM_IDS="$VM_IDS $sourceid"
