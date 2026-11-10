@@ -69,15 +69,15 @@ bash scripts/tests/integration.sh \
 
 
 - O perfil precisa ter Debian 13 instalado, SSH, Cloud-Init e sudo sem senha.
-- A montagem Live requer guestmount, guestunmount, grub-mkrescue, mksquashfs, lsinitramfs, grub-pc-bin/grub-efi-amd64-bin e xorriso.
-- O guest precisa de acesso ao APT para instalar live-boot e gerar initramfs compatível.
-- O script valida upload, execução com token, congelamento e clonagem, boot da ISO Live e encerramento com timeout de 30 segundos.
+- Para a instalação ISO inicial, são exigidos guestmount/guestunmount; a exportação Live requer ainda grub-mkrescue, mksquashfs, lsinitramfs e xorriso, mas está desabilitada por padrão.
+- O guest precisa de acesso ao APT para instalar live-boot apenas quando o teste experimental `--live-iso` for solicitado.
+- O script valida upload, execução com token, congelamento QCOW2 comprimido e clonagem; boot ISO Live somente com `--live-iso`.
 - Um guest descartável ignora o botão de energia ACPI enquanto executa loop infinito; é obrigatório retornar `forced=true` e `timed_out=true`, com estado `absent` após o prazo de graça de 30 s.
-- Por padrão o teste executa também `go test -tags integration ./tests/integration`, consumindo o `Engine` como biblioteca Go para registro, clone, start, status, exec, import, deploy, stop, freeze, ISO Live e boot da ISO.
-- `--skip-go-api` desativa apenas os cenários reais da API Go. `--skip-live-iso` desativa os cenários Live ISO na CLI e na API Go.
-- Para isolar problemas da ISO, use --skip-live-iso; isso **não** passa no critério de aceite integral da ISO.
+- Por padrão o teste executa também `go test -tags integration ./tests/integration`, consumindo o `Engine` como biblioteca Go para registro, clone, start, status, exec, import, deploy, stop e freeze; o cenário de ISO Live é opt-in.
+- `--skip-go-api` desativa apenas os cenários reais da API Go. `--live-iso` habilita explicitamente a exportação e inicialização experimental de ISO Live; `--skip-live-iso` permanece por compatibilidade.
+- O aceite padrão para clonagem não depende de ISO Live: o Integral 3 exige o boot real a partir do QCOW2 congelado. ISO Live mantém homologação futura independente.
 
-O marcador de êxito é INSULA_INTEGRATION_OK. Em erro, o script termina com código diferente de zero. Não considerar sucesso apenas porque existe uma imagem .iso.
+O marcador de êxito é INSULA_INTEGRATION_OK. Em erro, o script termina com código diferente de zero. Não considerar sucesso apenas porque existe um QCOW2: boot real e integridade precisam ser verificados.
 
 ## Troubleshooting
 
