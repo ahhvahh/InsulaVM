@@ -59,13 +59,15 @@ func mountGuestDiskReadOnly(ctx context.Context, image, mountpoint string) (func
 	if prepareErr != nil {
 		return nil, fmt.Errorf("%w; supermin cannot use a readable host kernel; private kernel preparation failed: %v; diagnostics: %s", original, prepareErr, diagnostic)
 	}
-	retryOutput, retryErr := mount(kernelEnv...)
+	// The private-kernel attempt must also capture libguestfs/supermin trace.
+	// A second generic exit code cannot diagnose a failure in real KVM CI.
+	retryOutput, retryErr := mount(append(kernelEnv, "LIBGUESTFS_DEBUG=1", "LIBGUESTFS_TRACE=1")...)
 	if retryErr != nil {
 		cleanup()
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, fmt.Errorf("%w; guestmount with private supermin kernel failed: %v: %s", original, retryErr, tailGuestfsOutput(string(retryOutput)))
+		return nil, fmt.Errorf("%w; guestmount with private supermin kernel failed: %v; libguestfs diagnostics: %s", original, retryErr, tailGuestfsOutput(string(retryOutput)))
 	}
 	return cleanup, nil
 }
