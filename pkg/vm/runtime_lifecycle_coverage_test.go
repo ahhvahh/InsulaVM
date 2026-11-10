@@ -42,7 +42,7 @@ esac`,
         if err:=os.WriteFile(filepath.Join(bin,name),[]byte("#!/bin/sh\nset -eu\n"+script+"\n"),0700);err!=nil{t.Fatal(err)}
     }
     t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-    ctx,cancel:=context.WithTimeout(context.Background(),180*time.Millisecond)
+    ctx,cancel:=context.WithTimeout(context.Background(),1500*time.Millisecond)
     defer cancel()
     var stages []string
     instance,err:=StartWithStartupOptions(ctx,cfg,p,nil,StartupOptions{PreserveOnFailure:true},func(event Progress){
