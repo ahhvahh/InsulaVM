@@ -44,9 +44,6 @@ jobs:
           set -euo pipefail
           bash -n scripts/tests/integral-3-iso-persistence.sh
           go vet ./...
-          go test -count=1 -run '^TestIntegral3PRTriggerContract$' ./tests/integration
-          go test -count=1 -run '^TestDebianMiniISOInstallerKernelPaths$' ./insulavm
-          go test -tags integration -count=1 -run '^TestIntegral3MarkerContract$' ./tests/integration
 
       - name: Preparar KVM, Libvirt, instalador e exportacao Live ISO
         shell: bash

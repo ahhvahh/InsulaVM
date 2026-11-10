@@ -62,8 +62,7 @@ func TestIntegral3PRTriggerContract(t *testing.T) {
   t.Fatalf("stable required-check job missing: %v",workflow.Jobs)
  }
  for _, required := range []string{
-  "go vet ./...", "TestIntegral3MarkerContract", "TestDebianMiniISOInstallerKernelPaths",
-  "scripts/tests/integral-3-iso-persistence.sh",
+  "go vet ./...", "scripts/tests/integral-3-iso-persistence.sh",
  } {
   if !strings.Contains(string(content),required) {
    t.Errorf("missing preflight or integration test %q",required)
