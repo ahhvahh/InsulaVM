@@ -18,26 +18,26 @@ func TestExportLiveISOUnmountFailureRetainsStaging(t *testing.T) {
 	grubLog := filepath.Join(t.TempDir(), "grub-was-called")
 	t.Setenv("INSULA_TEST_GRUB_LOG", grubLog)
 	isoToolScripts(t, bin, map[string]string{
-	    "guestunmount":  "echo guest-fuse-busy >&2; exit 71",
-	    "grub-mkrescue": "touch \"$INSULA_TEST_GRUB_LOG\"; exit 88",
+		"guestunmount":  "echo guest-fuse-busy >&2; exit 71",
+		"grub-mkrescue": "touch \"$INSULA_TEST_GRUB_LOG\"; exit 88",
 	})
 
 	exported, err := e.ExportProfileLiveISOTo(context.Background(), "isotest", destination)
 	if exported != "" || !errors.Is(err, errInstallerUnmount) {
-	    t.Fatalf("failed unmount accepted: iso=%q err=%v", exported, err)
+		t.Fatalf("failed unmount accepted: iso=%q err=%v", exported, err)
 	}
 	if !strings.Contains(err.Error(), "guest-fuse-busy") || !strings.Contains(err.Error(), "staging retained at") {
-	    t.Fatalf("missing actionable FUSE error and retained path: %v", err)
+		t.Fatalf("missing actionable FUSE error and retained path: %v", err)
 	}
 	if _, statErr := os.Lstat(destination); !errors.Is(statErr, os.ErrNotExist) {
-	    t.Fatalf("ISO was published after failed unmount: %v", statErr)
+		t.Fatalf("ISO was published after failed unmount: %v", statErr)
 	}
 	if _, statErr := os.Lstat(grubLog); !errors.Is(statErr, os.ErrNotExist) {
-	    t.Fatalf("GRUB must not run after failed unmount: %v", statErr)
+		t.Fatalf("GRUB must not run after failed unmount: %v", statErr)
 	}
 	stages, globErr := filepath.Glob(filepath.Join(privateTmp, "insula-live-iso-*"))
 	if globErr != nil || len(stages) != 1 {
-	    t.Fatalf("unresolved FUSE staging removed: %v %v", stages, globErr)
+		t.Fatalf("unresolved FUSE staging removed: %v %v", stages, globErr)
 	}
 }
 
@@ -47,15 +47,15 @@ func TestExportLiveISOUnmountPrecedesGrubPublication(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "unmounted")
 	t.Setenv("INSULA_TEST_UNMOUNT_MARKER", marker)
 	isoToolScripts(t, bin, map[string]string{
-	    "guestunmount":  "printf unmounted > \"$INSULA_TEST_UNMOUNT_MARKER\"",
-	    "grub-mkrescue": "test -s \"$INSULA_TEST_UNMOUNT_MARKER\"; printf iso > \"$2\"",
+		"guestunmount":  "printf unmounted > \"$INSULA_TEST_UNMOUNT_MARKER\"",
+		"grub-mkrescue": "test -s \"$INSULA_TEST_UNMOUNT_MARKER\"; printf iso > \"$2\"",
 	})
 	exported, err := e.ExportProfileLiveISOTo(context.Background(), "isotest", destination)
 	if err != nil || exported != destination {
-	    t.Fatalf("ISO was not published after safe unmount: iso=%q err=%v", exported, err)
+		t.Fatalf("ISO was not published after safe unmount: iso=%q err=%v", exported, err)
 	}
 	if b, readErr := os.ReadFile(destination); readErr != nil || string(b) != "iso" {
-	    t.Fatalf("incorrect safely published ISO: %q %v", b, readErr)
+		t.Fatalf("incorrect safely published ISO: %q %v", b, readErr)
 	}
 }
 
@@ -66,6 +66,6 @@ func TestGuestfsUnmountFailureNeverCleansPrivateKernel(t *testing.T) {
 	called := false
 	err := unmountGuestDiskReadOnly(t.TempDir(), func() { called = true })
 	if !errors.Is(err, errInstallerUnmount) || called || !strings.Contains(err.Error(), "fuse-detach-error") {
-	    t.Fatalf("unmount failure must preserve resources: cleanup=%t err=%v", called, err)
+		t.Fatalf("unmount failure must preserve resources: cleanup=%t err=%v", called, err)
 	}
 }
