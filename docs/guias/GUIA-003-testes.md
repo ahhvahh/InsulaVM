@@ -19,13 +19,13 @@ bash scripts/tests/unit.sh
 
 O script executa `bash -n`, `go vet ./...`, `go test -race` com relatório de cobertura, compilação do executável, verificação de `help` e compilação da suíte com build tag `integration` **sem executar VMs**. Os testes unitários incluem a matriz da CLI, métodos públicos Go, adaptadores Libvirt/SQLite simulados, escalada de desligamento, exportação ISO simulada, SSH e deploy.
 
-## Teste Integral 3 — Persistência após exportação de ISO
+## Teste Integral 3 — Persistência em QCOW2 comprimido
 
 ~~~bash
 bash scripts/tests/integral-3-iso-persistence.sh
 ~~~
 
-O teste cria um perfil Debian 13 a partir da mini.iso oficial, inicia VM 500 MiB/1 CPU/10 GiB, escreve `/tmp/workspace/created/state.txt`, congela a VM, exporta a ISO Live e inicia outra VM 500 MiB/1 CPU a partir **dessa ISO**. Compara SHA-256 e existência do caminho, depois encerra graciosamente. O instalador precisa de 1024 MiB por contrato; o estado de RAM das VMs de teste permanece 500 MiB. O workflow executa somente na promoção da origem `develop` para `homolog` ou `main` e publica o check `integral-3-iso-workspace-persistence`. Veja [GUIA-007](GUIA-007-teste-integral-3-iso-persistencia.md).
+O teste cria um perfil Debian 13 a partir da mini.iso oficial, inicia VM 500 MiB/1 CPU/10 GiB, escreve `/home/insula/insulavm/workspace/created/state.txt` num sistema de arquivos **não volátil**, congela o disco como QCOW2 comprimido e inicia outra VM 500 MiB/1 CPU diretamente por esse perfil. Verifica a integridade QCOW2, ausência de backing, o mesmo SHA-256 sem reenvio e encerramento gracioso. O instalador usa 1024 MiB por requisito da API. O check de CI mantém o nome legado `integral-3-iso-workspace-persistence` para não alterar regras existentes; ele não exporta nem inicializa ISO Live. Executa somente em promoções `develop` → `homolog`/`main`. Veja [GUIA-007](GUIA-007-teste-integral-3-iso-persistencia.md).
 
 ## Integral 2 — ZIP e resposta da VM via Go e CLI
 
