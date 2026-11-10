@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Integral 3: Debian mini ISO -> 10GiB install -> 500MiB VM ->
-# /tmp/workspace -> freeze ISO -> second 500MiB VM -> same bytes.
+# persistent guest workspace -> compressed QCOW2 freeze -> second 500MiB VM -> same bytes.
 set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "$0")/../.." && pwd)"
 STATE="$ROOT/data/integral-3-ci"
@@ -24,8 +24,8 @@ while (($#)); do
   esac
 done
 [[ -c /dev/kvm ]] || { echo "[integral-3] KVM unavailable" >&2; exit 1; }
-for tool in go virsh virt-install qemu-img guestmount guestunmount mksquashfs \
-            grub-mkrescue lsinitramfs openssl genisoimage curl sha256sum awk; do
+for tool in go virsh virt-install qemu-img guestmount guestunmount \
+            openssl genisoimage curl sha256sum awk; do
   command -v "$tool" >/dev/null || { echo "[integral-3] missing $tool" >&2; exit 2; }
 done
 mkdir -p "$STATE"
@@ -42,7 +42,7 @@ storage:
   logs: logs
   database: insula.db
 guest:
-  destination: /tmp/workspace
+  destination: /home/insula/insulavm/workspace
 virtualization:
   provider: kvm
   libvirt_uri: qemu:///system
@@ -92,16 +92,16 @@ cd "$ROOT"
 BIN="$STATE/insula-integral-3"
 go build -o "$BIN" .
 mkdir -p "$STATE/diagnostic"
-echo "[integral-3] executing real ISO install/freeze/second ISO boot"
+echo "[integral-3] executing real ISO install/compressed QCOW2 freeze/second KVM boot"
 set +e
 INSULA_IT3_CONFIG="$CONFIG" INSULA_IT3_INSTALLER_ISO="$INSTALLER_ISO" \
 INSULA_IT3_CLI="$BIN" go test -tags integration -count=1 \
-  -timeout 150m -run '^TestIntegral3ISOWorkspacePersistence$' \
+  -timeout 150m -run '^TestIntegral3QCOW2WorkspacePersistence$' \
   -v ./tests/integration 2>&1 | tee "$STATE/diagnostic/test-output.log"
 rc=$?
 set -e
 if ((rc != 0)) || ! grep -q 'INSULA_INTEGRAL_3_OK:' "$STATE/diagnostic/test-output.log"; then
-  echo "[integral-3] FAILED: ISO install, /tmp preservation, ISO boot or graceful shutdown" >&2
+  echo "[integral-3] FAILED: ISO install, disk-backed workspace, compressed QCOW2 boot or graceful shutdown" >&2
   exit 1
 fi
 echo INSULA_INTEGRAL_3_CI_OK
