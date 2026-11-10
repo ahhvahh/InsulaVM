@@ -92,7 +92,7 @@ func TestDebianInstallerVerificationRefusesInvalidGuest(t *testing.T){
   {"missing os-release",":","exit 0","os-release"},
   {"wrong OS","mkdir -p \"$last/etc\"; echo 'ID=ubuntu' > \"$last/etc/os-release\"","exit 0","not Debian 13"},
   {"missing sshd","mkdir -p \"$last/etc\"; printf 'ID=debian\\nVERSION_ID=\"13\"\\n' > \"$last/etc/os-release\"","exit 0","missing required component"},
-  {"unmount error","mkdir -p \"$last/etc\"; printf 'ID=debian\\nVERSION_ID=\"13\"\\n' > \"$last/etc/os-release\"","echo 'guestunmount refused' >&2; exit 36","guestunmount failed"},
+  {"unmount error","mkdir -p \"$last/etc\" \"$last/usr/bin\" \"$last/usr/sbin\" \"$last/usr/share/initramfs-tools/scripts/live\"; echo 'ID=debian' > \"$last/etc/os-release\"; echo 'VERSION_ID=\"13\"' >> \"$last/etc/os-release\"; touch \"$last/usr/bin/cloud-init\" \"$last/usr/sbin/sshd\" \"$last/usr/bin/sudo\" \"$last/usr/share/initramfs-tools/scripts/live/boot\"","echo 'guestunmount refused' >&2; exit 36","guest filesystem remains mounted"},
  }
  for _,tc:=range cases{
   t.Run(tc.name,func(t *testing.T){
