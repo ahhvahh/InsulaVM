@@ -27,7 +27,7 @@ esac
  t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
  t.Setenv("INSULA_QEMU_ARGS",capture)
  err:=run([]string{"vm","freeze","-config",config,"-id",cliLoopbackID,
-  "-name","compressed-reusable","-export-iso=false","-compress",
+  "-name","compressed-reusable",
   "-skip-guest-cleanup","-recover-stopped"})
  if err!=nil{t.Fatalf("CLI compressed freeze failed: %v",err)}
  args,err:=os.ReadFile(capture)
