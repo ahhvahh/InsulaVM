@@ -58,7 +58,7 @@ insula vm export-iso -config /etc/insulavm/config.yaml \
   -id UUIDv7 -name debian13-live -prepare-live-boot
 ```
 
-A biblioteca usa `ExportVMToLiveISO(ctx, VMExportISORequest{VMID, Name, PrepareLiveBoot:true})`. Essa operação **encerra e remove a VM original** como parte do congelamento; se a montagem Live falhar, o perfil congelado é preservado para novo `profile export-iso -name`.
+A biblioteca usa `ExportVMToLiveISO(ctx, VMExportISORequest{VMID, Name, PrepareLiveBoot:true})`. Essa operação **encerra e remove a VM original** como parte do congelamento; se a montagem ou desmontagem Live falhar, o perfil congelado é preservado para novo `profile export-iso -name`. A exportação da ISO só é publicada após `guestunmount` bem-sucedido; falha preserva o staging no caminho informado no erro, para análise e limpeza segura.
 
 ## Pré-requisitos e limites
 
