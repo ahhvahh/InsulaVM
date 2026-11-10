@@ -15,7 +15,7 @@ bash scripts/tests/unit.sh
 ```
 
 
-**Execução automática:** [Go tests](../../.github/workflows/go-tests.yml) roda somente quando um commit chega à branch `develop` (evento `push`). Não executa em PR, `main`, `homolog`, criação de tags, agendamento ou disparo manual. A suíte também pode ser executada localmente pelo comando acima.
+**Execução automática:** [Go tests](../../.github/workflows/go-tests.yml) roda em cada `push` para **qualquer branch** do repositório (incluindo branches de correção, `develop`, `homolog` e `main`), sem filtro de caminhos. Um push com vários commits gera uma execução para a ponta da branch, não uma execução por commit individual. Não executa em pushes apenas de tags, abertura de PRs, agendamentos ou disparos manuais. A suíte também pode ser executada localmente pelo comando acima. Os testes integrais continuam restritos às PRs de promoção `develop` → `homolog`/`main`.
 
 O script executa `bash -n`, `go vet ./...`, `go test -race` com relatório de cobertura, compilação do executável, verificação de `help` e compilação da suíte com build tag `integration` **sem executar VMs**. Os testes unitários incluem a matriz da CLI, métodos públicos Go, adaptadores Libvirt/SQLite simulados, escalada de desligamento, exportação ISO simulada, SSH e deploy.
 
