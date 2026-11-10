@@ -116,6 +116,6 @@ func TestLiveISOSelectionPrefersNewestMatchingKernel(t *testing.T){
  }
  output:=filepath.Join(t.TempDir(),"copy.img")
  if err:=copyISOFile(kernel,output);err!=nil{t.Fatal(err)}
- if _,err:=copyISOFile(kernel,output);err==nil{t.Fatal("ISO staging overwrote existing file")}
+ if err:=copyISOFile(kernel,output);err==nil{t.Fatal("ISO staging overwrote existing file")}
  if _,err:=os.Stat(output);err!=nil{t.Fatal(err)}
 }
