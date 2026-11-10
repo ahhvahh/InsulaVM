@@ -23,7 +23,7 @@ esac`)
  t.Setenv("INSULA_QEMU_ARGS",capture)
  result,err:=e.FreezeVM(context.Background(),VMFreezeRequest{
   VMID:coverageFrozenVMID,Name:"compressed-profile",
-  CompressQCOW2:true,AllowStopped:true,SkipGuestCleanup:true,
+  AllowStopped:true,SkipGuestCleanup:true,
  })
  if err!=nil{t.Fatal(err)}
  if result==nil||!result.SourceStopped||!result.SourceCleaned||result.ImagePath==""{
