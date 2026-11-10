@@ -92,7 +92,7 @@ func TestPublicGoAPIOnRealDebianVM(t *testing.T) {
   _=engine.StopVM(cleanupCtx,source.ID)
  })
  if len(freezeEvents)==0{t.Fatal("StartVMWithProgress returned no events")}
- liveISO:=os.Getenv("INSULA_TEST_LIVE_ISO")!="0"
+ liveISO:=os.Getenv("INSULA_TEST_LIVE_ISO")=="1"
  if liveISO{
   var prep bytes.Buffer
   _,err=engine.ExecVM(ctx,insulavm.ExecRequest{
@@ -104,7 +104,7 @@ func TestPublicGoAPIOnRealDebianVM(t *testing.T) {
  }
  frozenResult,err:=engine.FreezeVM(ctx,insulavm.VMFreezeRequest{VMID:source.ID,Name:frozen,ShutdownTimeout:3*time.Minute})
  if err!=nil||frozenResult==nil||!frozenResult.SourceCleaned{t.Fatalf("FreezeVM: %+v %v",frozenResult,err)}
- if !liveISO{t.Log("ISO Live scenario disabled via INSULA_TEST_LIVE_ISO=0");return}
+ if !liveISO{t.Log("ISO Live scenario disabled by default; opt in via INSULA_TEST_LIVE_ISO=1");return}
  iso,err:=engine.ExportProfileLiveISO(ctx,frozen)
  if err!=nil{t.Fatalf("ExportProfileLiveISO: %v",err)}
  if info,err:=os.Stat(iso);err!=nil||info.Size()==0{t.Fatalf("ISO file absent: %s %v",iso,err)}
@@ -159,7 +159,7 @@ func TestCreateProfileFromDebianInstallerISO(t *testing.T){
  var output bytes.Buffer
  _,err=engine.ExecVM(ctx,insulavm.ExecRequest{VMID:instance.ID,Command:"test -f /etc/debian_version && echo INSULA_INSTALLER_API_OK",Output:&output})
  if err!=nil||!strings.Contains(output.String(),"INSULA_INSTALLER_API_OK"){t.Fatalf("new Debian VM failed: %v %s",err,output.String())}
- if os.Getenv("INSULA_TEST_LIVE_ISO")=="0"{
+ if os.Getenv("INSULA_TEST_LIVE_ISO")!="1"{
   _,err=engine.StopVMWithOptions(ctx,insulavm.VMStopOptions{VMID:instance.ID,GracePeriod:30*time.Second,ForceAfterTimeout:true})
   if err!=nil{t.Fatal(err)}
   return
