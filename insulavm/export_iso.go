@@ -10,7 +10,8 @@ import (
  "path/filepath"
  "sort"
  "strings"
- "time"
+
+ "github.com/ahhvahh/InsulaVM/pkg/storage"
 )
 
 // ExportProfileLiveISO builds a BIOS/UEFI Debian Live ISO from a saved QCOW2.
@@ -18,9 +19,19 @@ import (
 // with live-boot support before it was frozen. No arbitrary guest execution
 // is performed by the host: libguestfs mounts the image read-only.
 func(e *Engine)ExportProfileLiveISO(ctx context.Context,name string)(string,error){
+ return e.ExportProfileLiveISOTo(ctx,name,"")
+}
+
+// ExportProfileLiveISOTo exports a saved QCOW2 as a Debian Live ISO.
+// outputPath can be absolute or relative to the process working directory.
+// An existing destination is never overwritten. Empty outputPath uses the
+// profile's managed exports directory.
+func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string)(isoPath string,runErr error){
  if e==nil{return "",errors.New("engine is required")}
  if ctx==nil{return "",errors.New("context is required")}
  if err:=ctx.Err();err!=nil{return "",err}
+ dest,err:=e.liveISODestination(name,outputPath)
+ if err!=nil{return "",err}
  p,err:=e.GetProfile(name)
  if err!=nil{return "",err}
  image,err:=p.ImagePath()
@@ -30,17 +41,25 @@ func(e *Engine)ExportProfileLiveISO(ctx context.Context,name string)(string,erro
  }
  work,err:=os.MkdirTemp("","insula-live-iso-*")
  if err!=nil{return "",err}
- defer os.RemoveAll(work)
+ // If a FUSE unmount fails, do not traverse/remove a potentially mounted
+ // guest filesystem. Preserve the staging directory for diagnosis.
+ preserveWork:=false
+ defer func(){if !preserveWork{_ = os.RemoveAll(work)}}()
  mount:=filepath.Join(work,"mount")
  stage:=filepath.Join(work,"iso")
  if err:=os.MkdirAll(mount,0700);err!=nil{return "",err}
  if err:=os.MkdirAll(filepath.Join(stage,"live"),0700);err!=nil{return "",err}
  if err:=os.MkdirAll(filepath.Join(stage,"boot","grub"),0700);err!=nil{return "",err}
- if err:=runISOTool(ctx,"guestmount","--ro","-a",image,"-i",mount);err!=nil{return "",err}
+ guestfsCleanup,err:=mountGuestDiskReadOnly(ctx,image,mount)
+ if err!=nil{return "",err}
+ mounted:=true
  defer func(){
-  cleanupCtx,cancel:=context.WithTimeout(context.Background(),30*time.Second)
-  defer cancel()
-  _=runISOTool(cleanupCtx,"guestunmount",mount)
+  if !mounted{return}
+  if unmountErr:=unmountGuestDiskReadOnly(mount,guestfsCleanup);unmountErr!=nil{
+   preserveWork=true
+   runErr=errors.Join(runErr,fmt.Errorf("ISO staging retained at %s: %w",work,unmountErr))
+   isoPath=""
+  }
  }()
  kernel,initrd,err:=selectLiveKernel(mount)
  if err!=nil{return "",err}
@@ -54,22 +73,77 @@ func(e *Engine)ExportProfileLiveISO(ctx context.Context,name string)(string,erro
  if err:=copyISOFile(kernel,filepath.Join(stage,"live","vmlinuz"));err!=nil{return "",err}
  if err:=copyISOFile(initrd,filepath.Join(stage,"live","initrd.img"));err!=nil{return "",err}
  if err:=runISOTool(ctx,"mksquashfs",mount,filepath.Join(stage,"live","filesystem.squashfs"),"-noappend","-comp","xz");err!=nil{return "",err}
- grub:="set timeout=2\nset default=0\nmenuentry 'InsulaVM Debian Live' {\n linux /live/vmlinuz boot=live components console=tty0 console=ttyS0,115200n8\n initrd /live/initrd.img\n}\n"
+ // Both the kernel/initramfs and SquashFS have now been copied to staging.
+ // A successful ISO must never be published while guestmount is still active.
+ unmountErr:=unmountGuestDiskReadOnly(mount,guestfsCleanup)
+ mounted=false
+ if unmountErr!=nil{
+  preserveWork=true
+  return "",fmt.Errorf("ISO staging retained at %s: %w",work,unmountErr)
+ }
+ grub:=liveISOGrubConfig()
  if err:=os.WriteFile(filepath.Join(stage,"boot","grub","grub.cfg"),[]byte(grub),0600);err!=nil{return "",err}
- exports:=filepath.Join(p.Directory,"exports")
- if err:=os.MkdirAll(exports,0700);err!=nil{return "",err}
- dest:=filepath.Join(exports,p.Name+"-live.iso")
- if _,err:=os.Lstat(dest);err==nil{return "",fmt.Errorf("ISO already exists: %s",dest)}else if !errors.Is(err,os.ErrNotExist){return "",err}
- temp:=filepath.Join(exports,"."+p.Name+"-live.part.iso")
- if _,err:=os.Lstat(temp);err==nil{return "",fmt.Errorf("unfinished export exists: %s",temp)}else if !errors.Is(err,os.ErrNotExist){return "",err}
+ if err:=os.MkdirAll(filepath.Dir(dest),0700);err!=nil{return "",err}
+ // Always recheck after building the SquashFS: a second process may have
+ // published the same output while this image was being assembled.
+ if err:=checkISODestinationVacant(dest);err!=nil{return "",err}
+ staging,err:=os.CreateTemp(filepath.Dir(dest),".insula-live-*.part.iso")
+ if err!=nil{return "",err}
+ temp:=staging.Name()
+ if err:=staging.Close();err!=nil{_ = os.Remove(temp);return "",err}
  defer os.Remove(temp)
  if err:=runISOTool(ctx,"grub-mkrescue","-o",temp,stage);err!=nil{return "",err}
  stat,err:=os.Stat(temp)
  if err!=nil{return "",err}
- if stat.Size()==0{return "",errors.New("empty ISO generated")}
+ if !stat.Mode().IsRegular()||stat.Size()==0{return "",errors.New("empty or invalid ISO generated")}
  if err:=os.Chmod(temp,0600);err!=nil{return "",err}
- if err:=os.Rename(temp,dest);err!=nil{return "",err}
+ // The temp and destination share a filesystem: Link is atomic and fails
+ // rather than overwriting an existing ISO. The temp is removed by defer.
+ if err:=os.Link(temp,dest);err!=nil{return "",fmt.Errorf("publish ISO without overwriting %s: %w",dest,err)}
  return dest,nil
+}
+
+
+// liveISODestination resolves user paths before any guest or VM mutation.
+// Relative output paths use the caller's working directory (not config.yaml).
+func(e *Engine)liveISODestination(name,outputPath string)(string,error){
+ if e==nil{return "",errors.New("engine is required")}
+ if err:=storage.ValidateName(name);err!=nil{return "",fmt.Errorf("invalid ISO profile name: %w",err)}
+ if strings.TrimSpace(outputPath)==""{
+  p,err:=e.GetProfile(name)
+  if err!=nil{return "",err}
+  outputPath=filepath.Join(p.Directory,"exports",name+"-live.iso")
+ }else if !strings.EqualFold(filepath.Ext(outputPath),".iso"){
+  return "",errors.New("ISO destination must end in .iso")
+ }
+ abs,err:=filepath.Abs(outputPath)
+ if err!=nil{return "",fmt.Errorf("resolve ISO output path: %w",err)}
+ if err:=checkISODestinationVacant(abs);err!=nil{return "",err}
+ return abs,nil
+}
+func checkISODestinationVacant(path string)error{
+ if path==""{return errors.New("ISO destination path required")}
+ _,err:=os.Lstat(path)
+ if err==nil{return fmt.Errorf("ISO destination already exists (will not overwrite): %s",path)}
+ if !errors.Is(err,os.ErrNotExist){return fmt.Errorf("inspect ISO output: %w",err)}
+ return nil
+}
+
+
+// liveISOGrubConfig emits early-boot diagnostics to both VGA and ttyS0.
+// The kernel's console=ttyS0 alone is insufficient: GRUB has its own
+// terminal configuration and may stop before loading the kernel.
+func liveISOGrubConfig()string{
+ return "set timeout_style=menu\n"+
+  "set timeout=2\n"+
+  "set default=0\n"+
+  "serial --unit=0 --speed=115200 --word=8 --parity=no --stop=1\n"+
+  "terminal_input serial console\n"+
+  "terminal_output serial console\n"+
+  "menuentry 'InsulaVM Debian Live' {\n"+
+  " linux /live/vmlinuz boot=live components console=tty0 console=ttyS0,115200n8\n"+
+  " initrd /live/initrd.img\n"+
+  "}\n"
 }
 
 func runISOTool(ctx context.Context,name string,args ...string)error{

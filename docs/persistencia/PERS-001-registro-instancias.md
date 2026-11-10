@@ -83,6 +83,17 @@ Os métodos `Insert`, `SetRunning`, `SetFailed` e `SetDestroyed` são a fonte de
 
 `StopAllVMs` usa **apenas registros desta tabela**, nunca VMs externas não registradas. Perfis congelados são armazenados no filesystem sob `storage.profiles`; não criam uma tabela SQL adicional.
 
+## Alocação e exclusividade do ID de VM
+
+- Identidade: `UUIDv7` criptograficamente aleatório, usado igualmente em `vm_instances.id`, `vm_instances.libvirt_uuid`, `VMProgress.ID`, `Instance.ID` e no XML do domínio Libvirt.
+- Antes de atribuir ID a uma nova instância, `unusedVMID` verifica o histórico SQLite. IDs de VMs `failed` e `destroyed` **não são reciclados**; após colisão, outro UUIDv7 é gerado (até oito tentativas).
+- Antes de chamar `virsh create`, a inicialização executa `INSERT` normal, não `INSERT OR REPLACE`. `id PRIMARY KEY`, `libvirt_uuid UNIQUE` e `name UNIQUE` garantem recusa atômica de duplicidade inclusive em criações concorrentes. O registro de outra VM não é alterado.
+- O estágio `registered` do callback `VMProgress` só é emitido **depois** desse `INSERT` ser concluído. O estágio `ready` ocorre após Libvirt, DHCP, SSH e sudo validados.
+- Um domínio Libvirt que não consta do SQLite não é tratado como pertencente ao InsulaVM. Uma eventual recusa do Libvirt durante `virsh create` é erro de inicialização; o motor não assume esse domínio externo como sua VM.
+- Consumidores da biblioteca podem obter detalhes pelo ID em `Engine.GetVM` e `Engine.GetVMStatus`, sem procurar pelo nome do perfil.
+
+**Limite:** a pré-checagem de IDs é otimista, portanto não reserva um UUID globalmente entre bancos de dados ou hospedeiros diferentes. A unicidade atômica é garantida para instâncias que compartilham o mesmo SQLite; o Libvirt rejeita conflito de identidade no mesmo hipervisor.
+
 ## Migração e limitações
 
 A inicialização aplica migrações aditivas para as colunas `host_fingerprint`, `sudo_mode` e `ssh_port` em bancos antigos. Não existe reconciliação automática de divergências SQLite/Libvirt ao iniciar o motor. Após remoção da VM, o histórico permanece no banco, mas os arquivos de credenciais e o overlay temporário são descartados.

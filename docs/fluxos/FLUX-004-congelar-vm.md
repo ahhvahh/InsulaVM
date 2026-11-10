@@ -3,7 +3,7 @@
 
 # FLUX-004 — Congelar VM gerenciada como perfil reutilizável
 
-**Estado:** implementado para gerar um QCOW2 independente de uma VM já instalada; não produz ISO de instalação ou ISO Live.
+**Estado:** congelamento padrão QCOW2 independente com compressão nativa QEMU; teste de boot real da base comprimida pendente.
 **Versão aprovada:** nenhuma.
 **Evidências:** [FreezeVM](../../insulavm/freeze.go), [ShutdownForFreeze](../../pkg/vm/freeze.go), [FreezeFromOverlay](../../pkg/profile/freeze.go) e [testes de conversão](../../pkg/profile/freeze_test.go).
 **Interface CLI:** [INTF-TERM-004](../interfaces/terminal/INTF-TERM-004-gerenciar-vms.md).
@@ -41,7 +41,7 @@ sequenceDiagram
         C->>L: list/domstate
     end
     alt Desligamento comprovado
-        C->>Q: convert -f qcow2 -O qcow2 overlay novo/base.qcow2
+        C->>Q: convert -f qcow2 -O qcow2 -c overlay novo/base.qcow2
         C->>Q: info --output=json
         C->>P: Publica profile.yaml somente após validar disco autônomo
         C->>L: StopVM confirma ausência e limpa origem
@@ -78,6 +78,29 @@ A imagem resultante ainda pode conter tokens, dados privados, arquivos temporár
 ## Resultado
 
 `FreezeVM(ctx, VMFreezeRequest)` retorna `VMFreezeResult` com `VMID`, `ProfileName`, `ImagePath`, `SourceStopped` e `SourceCleaned`, além de erro quando aplicável. A CLI usa código de saída `0` no sucesso e `1` em erro. Os testes automatizados empregam Libvirt/QEMU simulados; **boot e congelamento completo em KVM real não foram verificados aqui**.
+
+## Contrato de congelamento nativo
+
+O comando padrão **não gera ISO**; é equivalente a `VMFreezeRequest{VMID: id, Name: "debian-preparado"}` no motor Go.
+
+```bash
+./insula vm freeze -config ./config.yaml -id UUID_DA_VM -name debian-preparado
+./insula vm start -config ./config.yaml -profile debian-preparado
+```
+
+A execução desliga a VM graciosamente, consolida seu overlay com `qemu-img convert -f qcow2 -O qcow2 -c`, valida formato e ausência de backing, e registra `profile.yaml` apenas após a conversão bem-sucedida. A base QCOW2 comprimida é usada diretamente pelo QEMU, sem etapa de descompactação; as novas instâncias escrevem overlays independentes.
+
+**Configurações:** compressão habilitada por padrão. `-compress=false` na CLI e `VMFreezeRequest.DisableQCOW2Compression=true` na biblioteca desabilitam a compressão de forma explícita. `VMFreezeRequest.ExportISO` permanece `false` por padrão; a geração de ISO Live é experimental, fora do teste de aceite atual. Para solicitar ISO Live explicitamente, existem `vm export-iso` e `vm freeze -export-iso=true -prepare-live-boot=true`, ainda sem homologação de boot.
+
+**Armazenamento:** `storage.profiles` em `config.yaml` aceita caminho absoluto para um volume dedicado. Preservar juntos o `profile.yaml` e `versions/v001/base.qcow2`; o volume deve estar montado e acessível por Libvirt antes de iniciar VMs. Não mover/apagar imagem-base referenciada por overlays. Armazenamento virtual de 10 GiB não corresponde ao consumo físico, que depende da ocupação e compressibilidade dos blocos. A conversão pode requerer espaço para origem e destino simultaneamente.
+
+**Persistência:** `FreezeVM` captura o armazenamento de disco, **não** RAM, `tmpfs` nem montagens externas. Antes de congelar, assegurar que dados necessários estejam num filesystem persistente do convidado. O Integral 3 verifica o tipo de filesystem e o SHA-256 após iniciar outra VM real.
+
+**Segurança e recuperação:** a conversão não modifica a base/overlay originais. Erros de shutdown, conversão ou publicação preservam o overlay e não aceitam `destroy` sem consentimento explícito. A VM original é removida apenas após salvar o novo perfil. O congelamento limpa identidade Cloud-Init e SSH, mas não apaga segredos das aplicações.
+
+**Testes e evidências:** testes Go verificam compressão, ausência de backing, falhas, CLI/Go e recuperação. O teste KVM atualizado precisa aprovar, na PR de promoção, o boot de outra VM pelo perfil comprimido. Sem esse resultado, não declarar homologação integral.
+
+**Referência QEMU:** [qemu-img convert -c](https://www.qemu.org/docs/master/tools/qemu-img.html).
 
 ## Referências
 

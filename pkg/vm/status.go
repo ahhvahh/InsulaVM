@@ -31,19 +31,25 @@ func InspectRegistered(ctx context.Context, uri string, records []registry.Entry
  if len(records)==0 {return []LiveInfo{},nil}
  output,err:=virsh(ctx,uri,"list","--all","--uuid")
  if err!=nil {return nil,fmt.Errorf("consult Libvirt domain list: %w: %s",err,strings.TrimSpace(string(output)))}
- existing:=make(map[string]bool)
- for _,line:=range strings.Split(string(output),"\n"){
-  uuid:=strings.ToLower(strings.TrimSpace(line))
-  if uuid!=""{existing[uuid]=true}
- }
+ existing:=libvirtDomainUUIDs(output)
  infos:=make([]LiveInfo,0,len(records))
  for _,record:=range records{
   info:=LiveInfo{Record:record,LibvirtState:"absent"}
   if existing[strings.ToLower(record.LibvirtUUID)]{
    state,err:=virsh(ctx,uri,"domstate",record.LibvirtUUID)
    if err!=nil{
-    info.LibvirtState="unknown"
-    info.Warning=fmt.Sprintf("Libvirt domstate: %v: %s",err,strings.TrimSpace(string(state)))
+    // Transient domains may disappear between 'list' and 'domstate'.
+    // Only a second successful list proving absence resolves this race.
+    check,checkErr:=virsh(ctx,uri,"list","--all","--uuid")
+    if checkErr==nil&&!libvirtDomainUUIDs(check)[strings.ToLower(record.LibvirtUUID)]{
+     info.LibvirtState="absent"
+    }else{
+     info.LibvirtState="unknown"
+     info.Warning=fmt.Sprintf("Libvirt domstate: %v: %s",err,strings.TrimSpace(string(state)))
+     if checkErr!=nil{
+      info.Warning+=fmt.Sprintf("; recheck failed: %v: %s",checkErr,strings.TrimSpace(string(check)))
+     }
+    }
    }else{
     info.LibvirtState=strings.ToLower(strings.TrimSpace(string(state)))
     if info.LibvirtState==""{
@@ -69,6 +75,16 @@ func InspectRegistered(ctx context.Context, uri string, records []registry.Entry
  return infos,nil
 }
 
+// libvirtDomainUUIDs parses the canonical machine-readable virsh UUID listing.
+func libvirtDomainUUIDs(output []byte)map[string]bool{
+ result:=make(map[string]bool)
+ for _,line:=range strings.Split(string(output),"\n"){
+  uuid:=strings.ToLower(strings.TrimSpace(line))
+  if uuid!=""{result[uuid]=true}
+ }
+ return result
+}
+
 // ActiveDomainState verifies a freshly created domain while starting or
 // waiting for DHCP/SSH. An unexpected stopped/paused/crashed state aborts
 // promptly instead of hiding the failure behind a 3-minute timeout.
@@ -81,4 +97,16 @@ func ActiveDomainState(ctx context.Context,uri,uuid string) (string,error) {
   return state,fmt.Errorf("VM %s is not running in Libvirt (actual state: %s)",uuid,state)
  }
  return state,nil
+}
+
+// LeaseIPv4 obtains a managed guest's Libvirt DHCP lease before SSH readiness.
+// The registry intentionally does not store the IP until startup succeeds.
+func LeaseIPv4(ctx context.Context,uri,domain string)(string,error){
+ if ctx==nil{return "",errors.New("context required")}
+ if strings.TrimSpace(domain)==""{return "",errors.New("domain name required")}
+ out,err:=virsh(ctx,uri,"domifaddr",domain,"--source","lease")
+ if err!=nil{return "",fmt.Errorf("read Libvirt DHCP lease: %w: %s",err,strings.TrimSpace(string(out)))}
+ ip:=parseIPv4(string(out))
+ if ip==""{return "",errors.New("Libvirt DHCP lease has no IPv4 address")}
+ return ip,nil
 }

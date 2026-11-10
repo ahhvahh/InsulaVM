@@ -11,7 +11,7 @@ import (
  "path/filepath"
  "time"
 
- _ "modernc.org/sqlite"
+ sqlite3 "modernc.org/sqlite"
 )
 
 // Entry is VM metadata; PRIVATE KEY CONTENTS are never stored in SQLite.
@@ -73,10 +73,26 @@ func Open(filename string)(*Store,error){
   )`,
   "CREATE INDEX IF NOT EXISTS vm_instances_by_status ON vm_instances(status,created_at)",
  }{
-  if _,err:=db.Exec(query);err!=nil{_ = db.Close();return nil,fmt.Errorf("initialize SQLite registry: %w",err)}
+  if err:=execRegistryInit(db,query);err!=nil{_ = db.Close();return nil,fmt.Errorf("initialize SQLite registry: %w",err)}
  }
  if err:=migrateColumns(db);err!=nil{_ = db.Close();return nil,err}
  return s,nil
+}
+
+// execRegistryInit retries only SQLITE_BUSY/SQLITE_LOCKED while independent
+// CLI or Go processes initialize the same WAL database concurrently. SQLite
+// PRAGMA busy_timeout cannot always wait for journal-mode transitions.
+func execRegistryInit(db *sql.DB,query string)error{
+ var last error
+ for attempt:=0;attempt<20;attempt++{
+  if _,err:=db.Exec(query);err==nil{return nil}else{last=err}
+  var sqliteErr *sqlite3.Error
+  if !errors.As(last,&sqliteErr){return last}
+  code:=sqliteErr.Code()&0xff
+  if code!=5&&code!=6{return last} // SQLITE_BUSY / SQLITE_LOCKED
+  time.Sleep(time.Duration(attempt+1)*10*time.Millisecond)
+ }
+ return last
 }
 
 // migrateColumns updates SQLite registries created by an earlier InsulaVM

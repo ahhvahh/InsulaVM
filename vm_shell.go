@@ -12,6 +12,7 @@ import (
 
  "github.com/ahhvahh/InsulaVM/insulavm"
  "github.com/ahhvahh/InsulaVM/pkg/registry"
+ "github.com/ahhvahh/InsulaVM/pkg/vm"
 )
 
 // vmShellArgs opens an interactive SSH terminal with strict host key checking.
@@ -48,15 +49,24 @@ func vmShell(ctx context.Context,engine *insulavm.Engine,vmID,directory string)e
  if vmID==""{return errors.New("vm shell requires -id")}
  checked,err:=engine.GetVMStatus(ctx,vmID)
  if err!=nil{return fmt.Errorf("consultar VM: %w",err)}
- if !checked.IsRunning()||checked.Record.Status!="running"{
-  return fmt.Errorf("VM nao esta pronta para acesso (SQLite: %s; Libvirt: %s)",checked.Record.Status,checked.LibvirtState)
+ if !checked.IsRunning(){
+  return fmt.Errorf("VM nao esta ativa (SQLite: %s; Libvirt: %s)",checked.Record.Status,checked.LibvirtState)
  }
  record:=checked.Record
+ if record.IP==""{
+  cfg:=engine.Configuration()
+  record.IP,err=vm.LeaseIPv4(ctx,cfg.Virtualization.LibvirtURI,record.Name)
+  if err!=nil{return fmt.Errorf("consultar DHCP da VM: %w",err)}
+ }
  for _,file:=range []string{record.PrivateKeyPath,record.KnownHostsPath}{
   if _,err:=os.Stat(file);err!=nil{return fmt.Errorf("arquivo SSH indisponivel (%s): %w",localPathForCLI(file),err)}
  }
  args,err:=vmShellArgs(record,engine.Configuration().Guest.Destination,directory)
  if err!=nil{return err}
+ if record.Status!="running" {
+  fmt.Fprintf(os.Stderr,"[InsulaVM][aviso] Estado SQLite=%s; abrindo shell de diagnostico sem exigir workspace\n",record.Status)
+  args[len(args)-1]=`exec "${SHELL:-/bin/sh}" -l`
+ }
  fmt.Fprintf(os.Stderr,"[InsulaVM][vm:shell] Abrindo terminal SSH: %s@%s\n",record.SSHUser,record.IP)
  cmd:=exec.CommandContext(ctx,"ssh",args...)
  cmd.Stdin=os.Stdin

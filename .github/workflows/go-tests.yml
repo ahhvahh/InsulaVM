@@ -1,10 +1,14 @@
 name: Go tests
 
+# Executar em todo push para qualquer branch (sem executar em tags).
+# Testes integrais continuam restritos a PRs develop -> homolog/main.
 on:
   push:
-    branches: [main]
-  pull_request:
-  workflow_dispatch:
+    branches:
+      - '**'
+
+permissions:
+  contents: read
 
 jobs:
   unit:

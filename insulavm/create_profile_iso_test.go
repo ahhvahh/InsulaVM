@@ -164,3 +164,68 @@ func TestCreateProfileFromISOUnmountFailureRetainsStaging(t *testing.T){
  if err!=nil||len(temps)!=1{t.Fatalf("mounted staging not retained: %v %v",temps,err)}
  t.Cleanup(func(){_ = os.RemoveAll(temps[0])}) // safe: fake guestmount only
 }
+
+func TestDebianMiniISOUsesExplicitNetbootKernel(t *testing.T) {
+ args:=debianVirtInstallArgs("qemu:///system","default","iso-test","/tmp/test.qcow2","/tmp/preseed.cfg",CreateProfileFromISORequest{
+  Name:"debian-mini",ISOPath:"/isos/mini.iso",MemoryMiB:2048,VCPUs:2,DiskGB:12,
+ })
+ for i,arg:=range args {
+  if arg=="--location" {
+   if i+1>=len(args)||args[i+1]!="/isos/mini.iso,kernel=linux,initrd=initrd.gz"{
+    t.Fatalf("incorrect Debian mini ISO kernel/initrd: %v",args)
+   }
+   return
+  }
+ }
+ t.Fatal("--location argument missing")
+}
+
+func TestCreateProfileFromISOAcceptsFiveGiBLab(t *testing.T){
+ engine,iso,argsLog:=installerFixture(t)
+ result,err:=engine.CreateProfileFromISO(context.Background(),CreateProfileFromISORequest{
+  Name:"deb13-abioma-tests",ISOPath:iso,MemoryMiB:1024,VCPUs:1,DiskGB:5,
+ })
+ if err!=nil{t.Fatal(err)}
+ if result.Profile.MemoryMiB!=1024||result.Profile.VCPUs!=1||result.Profile.DiskGB!=5{
+  t.Fatalf("unexpected lab profile: %+v",result.Profile)
+ }
+ args,err:=os.ReadFile(argsLog)
+ if err!=nil{t.Fatal(err)}
+ for _,want:=range []string{"--memory\n1024\n","--vcpus\n1\n"}{
+  if !strings.Contains(string(args),want){t.Fatalf("missing %q in installer args: %s",want,args)}
+ }
+}
+
+// TestDebianMiniISOInstallerKernelPaths prevents a regression where
+// virt-install on Ubuntu fails with "Couldn't find kernel for install tree".
+// This is a pure CLI argument contract; the KVM end-to-end test proves boot.
+func TestDebianMiniISOInstallerKernelPaths(t *testing.T){
+ tests:=[]struct{
+  name string
+  iso string
+  wantLocation string
+ }{
+  {"official mini ISO","/tmp/debian/netboot/mini.iso",
+   "/tmp/debian/netboot/mini.iso,kernel=linux,initrd=initrd.gz"},
+  {"ordinary netinst ISO","/tmp/debian-13-amd64-netinst.iso",
+   "/tmp/debian-13-amd64-netinst.iso"},
+ }
+ for _,tt:=range tests{
+  t.Run(tt.name,func(t *testing.T){
+   args:=debianVirtInstallArgs("qemu:///system","default","test-vm",
+    "/tmp/install.qcow2","/tmp/preseed.cfg",CreateProfileFromISORequest{
+     ISOPath:tt.iso,MemoryMiB:1024,VCPUs:1,DiskGB:10,
+    })
+   var location string
+   for i:=0;i+1<len(args);i++{
+    if args[i]=="--location"{location=args[i+1];break}
+   }
+   if location!=tt.wantLocation{
+    t.Fatalf("virt-install kernel location mismatch: got=%q want=%q",location,tt.wantLocation)
+   }
+   if !strings.Contains(strings.Join(args,"\n"),"--initrd-inject\n/tmp/preseed.cfg"){
+    t.Fatal("preseed injection was lost while specifying installer boot files")
+   }
+  })
+ }
+}

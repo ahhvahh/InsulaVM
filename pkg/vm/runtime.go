@@ -68,8 +68,21 @@ func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,o
 
 // StartWithStartupScript configures the guest during its initial Cloud-Init
 // provisioning. It returns a ready VM only after the startup script succeeds.
+// StartupOptions controls readiness and inspection of failed starts.
+type StartupOptions struct {
+ SSHReadyTimeout time.Duration
+ PreserveOnFailure bool
+}
+
 func StartWithStartupScript(ctx context.Context,c *config.Config,p *profile.Profile,
- startupScript []byte,onProgress func(Progress))(instance *Instance,runErr error){
+ startupScript []byte,onProgress func(Progress))(*Instance,error){
+ return StartWithStartupOptions(ctx,c,p,startupScript,StartupOptions{},onProgress)
+}
+
+// StartWithStartupOptions leaves a failed Libvirt domain and its overlay
+// intact only when explicitly requested, for diagnostic purposes.
+func StartWithStartupOptions(ctx context.Context,c *config.Config,p *profile.Profile,
+ startupScript []byte,opts StartupOptions,onProgress func(Progress))(instance *Instance,runErr error){
  var progressID string
  emit:=func(stage,message string){
   if onProgress==nil{return}
@@ -108,11 +121,14 @@ func StartWithStartupScript(ctx context.Context,c *config.Config,p *profile.Prof
  success:=false
  defer func(){
   if success{return}
-  emit("cleaning","Limpando recursos da inicializacao malsucedida")
   cleanupCtx,cancel:=context.WithTimeout(context.Background(),25*time.Second)
   defer cancel()
-  if cleanupErr:=created.Cleanup(cleanupCtx);cleanupErr!=nil{
-   runErr=errors.Join(runErr,fmt.Errorf("failed to clean up failed VM: %w",cleanupErr))
+  preserved:=opts.PreserveOnFailure && created.active && registered
+  if !preserved {
+   emit("cleaning","Limpando recursos da inicializacao malsucedida")
+   if cleanupErr:=created.Cleanup(cleanupCtx);cleanupErr!=nil{
+    runErr=errors.Join(runErr,fmt.Errorf("failed to clean up failed VM: %w",cleanupErr))
+   }
   }
   if registered{
    if store,err:=registry.Open(created.registryPath);err==nil{
@@ -120,15 +136,23 @@ func StartWithStartupScript(ctx context.Context,c *config.Config,p *profile.Prof
     _=store.Close()
    }
   }
+  if preserved{
+   emit("preserved",fmt.Sprintf("VM de diagnostico preservada: id=%s nome=%s pasta=%s; use 'insula test ssh -id %s' e 'insula vm stop -id %s' para liberar recursos",created.ID,created.Name,created.Directory,created.ID,created.ID))
+  }
  }()
- id,err:=identity.UUIDv7()
- if err!=nil{return nil,err}
+ // Check the persistent history before assigning a UUID, including IDs
+ // from destroyed VMs. The subsequent SQLite INSERT is the atomic guard
+ // against concurrent allocators using the same registry.
+ id,err:=unusedVMID(ctx,c.Storage.Database,identity.UUIDv7)
+ if err!=nil{return nil,fmt.Errorf("allocate unique VM ID: %w",err)}
  instance.ID=id
  progressID=id
  instance.LibvirtUUID=id
  instance.SSHUser=c.SSH.User
  if p.SSH.User!=""{instance.SSHUser=p.SSH.User}
- instance.Name="insula-"+p.Name+"-"+id[:8]
+ // Use the full UUIDv7: its first eight hex digits are timestamp-derived
+ // and can be identical across many concurrent starts of the same profile.
+ instance.Name=vmDomainName(p.Name,id)
  instance.SSHPrivateKeyPath=filepath.Join(dir,"client_ed25519")
  instance.SSHKnownHostsPath=filepath.Join(dir,"known_hosts")
  macBytes:=make([]byte,3)
@@ -187,51 +211,76 @@ func StartWithStartupScript(ctx context.Context,c *config.Config,p *profile.Prof
   emit("running","Dominio ativo no Libvirt: "+state)
  }
  emit("dhcp","Aguardando endereco IP via DHCP da rede Libvirt")
- bootCtx,cancel:=context.WithTimeout(ctx,3*time.Minute)
- defer cancel()
+ dhcpCtx,stopDHCP:=context.WithTimeout(ctx,3*time.Minute)
  ticker:=time.NewTicker(2*time.Second)
  defer ticker.Stop()
  for {
-  if _,err:=ActiveDomainState(bootCtx,instance.uri,instance.LibvirtUUID);err!=nil{
-   return nil,fmt.Errorf("VM parou enquanto aguardava DHCP: %w",err)
+  if err:=dhcpCtx.Err();err!=nil{
+   stopDHCP()
+   return nil,fmt.Errorf("tempo limite de DHCP (3m): %w",err)
   }
-  out,err:=virsh(bootCtx,instance.uri,"domifaddr",instance.Name,"--source","lease")
+  if _,err:=ActiveDomainState(dhcpCtx,instance.uri,instance.LibvirtUUID);err!=nil{
+   if dhcpCtx.Err()!=nil{
+    stopDHCP()
+    return nil,fmt.Errorf("tempo limite de DHCP (3m): %w",dhcpCtx.Err())
+   }
+   stopDHCP()
+   return nil,fmt.Errorf("verificar estado Libvirt durante DHCP: %w",err)
+  }
+  out,err:=virsh(dhcpCtx,instance.uri,"domifaddr",instance.Name,"--source","lease")
   if err==nil{
    if ip:=parseIPv4(string(out));ip!=""{
     instance.IPAddress=ip
     instance.Address=net.JoinHostPort(ip,"22")
     emit("ip","IP obtido: "+ip)
-    if err:=identity.SaveKnownHost(instance.SSHKnownHostsPath,ip,hostKeys.Public);err!=nil{return nil,err}
+    if err:=identity.SaveKnownHost(instance.SSHKnownHostsPath,ip,hostKeys.Public);err!=nil{
+     stopDHCP()
+     return nil,err
+    }
     break
    }
   }
   select{
-  case <-bootCtx.Done():return nil,fmt.Errorf("waiting for VM DHCP lease: %w",bootCtx.Err())
+  case <-dhcpCtx.Done():
+   stopDHCP()
+   return nil,fmt.Errorf("tempo limite aguardando DHCP (3m): %w",dhcpCtx.Err())
   case <-ticker.C:
   }
  }
+ stopDHCP()
+ sshTimeout:=opts.SSHReadyTimeout
+ if sshTimeout==0{sshTimeout=5*time.Minute}
+ if sshTimeout<0 || sshTimeout>time.Hour{return nil,errors.New("SSHReadyTimeout must be 0..1h")}
+ sshCtx,stopSSH:=context.WithTimeout(ctx,sshTimeout)
+ defer stopSSH()
  emit("ssh","Aguardando SSH autenticado e validando chave do servidor")
- // Verify the per-instance host key through known_hosts. The SSH login key
- // is generated for this VM, not shared with other instances.
  var lastErr error
+ attempt:=0
  for {
-  if _,err:=ActiveDomainState(bootCtx,instance.uri,instance.LibvirtUUID);err!=nil{
-   return nil,fmt.Errorf("VM parou enquanto aguardava SSH: %w",err)
+  if err:=sshCtx.Err();err!=nil{
+   return nil,fmt.Errorf("tempo limite aguardando SSH (%s): %w; ultima tentativa: %v",sshTimeout,err,lastErr)
   }
-  if err:=bootCtx.Err();err!=nil{
-   return nil,fmt.Errorf("waiting for guest SSH/Cloud-Init: %w; last check: %v",err,lastErr)
+  if _,err:=ActiveDomainState(sshCtx,instance.uri,instance.LibvirtUUID);err!=nil{
+   if sshCtx.Err()!=nil{
+    return nil,fmt.Errorf("tempo limite aguardando SSH (%s): %w; ultima tentativa: %v",sshTimeout,sshCtx.Err(),lastErr)
+   }
+   return nil,fmt.Errorf("verificar estado Libvirt durante SSH: %w",err)
   }
-  client,err:=executor.Dial(executor.DialConfig{
+  attempt++
+  client,err:=executor.DialContext(sshCtx,executor.DialConfig{
    Address:instance.Address,User:instance.SSHUser,
    PrivateKeyPath:instance.SSHPrivateKeyPath,
-   KnownHostsPath:instance.SSHKnownHostsPath,Timeout:8*time.Second,
+   KnownHostsPath:instance.SSHKnownHostsPath,Timeout:10*time.Second,
+   HostKeyAlgorithms:[]string{"ssh-ed25519"},
   })
   if err==nil{
    if instance.SudoMode=="passwordless"{
     emit("sudo","Conexao SSH aceita; verificando sudo -n sem senha")
     session,sessionErr:=client.NewSession()
     if sessionErr==nil{
+     cancelSession:=context.AfterFunc(sshCtx,func(){_ = session.Close()})
      sessionErr=session.Run("sudo -n true")
+     cancelSession()
      _=session.Close()
     }
     err=sessionErr
@@ -240,8 +289,12 @@ func StartWithStartupScript(ctx context.Context,c *config.Config,p *profile.Prof
    if err==nil{break}
   }
   lastErr=err
+  if attempt==1 || attempt%5==0{
+   emit("ssh-retry",fmt.Sprintf("Tentativa SSH %d: %v",attempt,err))
+  }
   select{
-  case <-bootCtx.Done():return nil,fmt.Errorf("guest SSH or sudo readiness: %w; last check: %v",bootCtx.Err(),lastErr)
+  case <-sshCtx.Done():
+   return nil,fmt.Errorf("tempo limite aguardando SSH (%s): %w; ultima tentativa: %v",sshTimeout,sshCtx.Err(),lastErr)
   case <-ticker.C:
   }
  }
@@ -270,6 +323,7 @@ func waitStartupScript(ctx context.Context,instance *Instance)error{
   Address:instance.Address,User:instance.SSHUser,
   PrivateKeyPath:instance.SSHPrivateKeyPath,
   KnownHostsPath:instance.SSHKnownHostsPath,Timeout:15*time.Second,
+  HostKeyAlgorithms:[]string{"ssh-ed25519"},
  })
  if err!=nil{return err}
  defer client.Close()
@@ -413,11 +467,12 @@ func domainXMLWithBacking(uuid,name string,memoryMiB,vcpus int,disk,baseImage,se
  }
  return fmt.Sprintf(
   "<domain type='kvm'><name>%s</name>%s<memory unit='MiB'>%d</memory>"+
-   "<vcpu>%d</vcpu><os><type arch='x86_64'>hvm</type></os>"+
+   "<vcpu>%d</vcpu><os><type arch='x86_64'>hvm</type></os><features><acpi/></features>"+
    "<devices><disk type='file' device='disk'><driver name='qemu' type='qcow2'/>"+
    "<source file='%s'/>%s<target dev='vda' bus='virtio'/></disk>%s"+
    "<interface type='network'><mac address='%s'/><source network='%s'/>"+
    "<model type='virtio'/></interface>"+
+   "<channel type='unix'><source mode='bind'/><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"+
    "<serial type='pty'><target port='0'/></serial>"+
    "<console type='pty'><target type='serial' port='0'/></console>"+
    "</devices></domain>",

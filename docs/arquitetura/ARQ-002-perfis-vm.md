@@ -108,9 +108,9 @@ Um overlay **não** garante isolamento de rede ou identidade: cada instância de
 
 ## Congelamento de perfil a partir de VM existente — implementado
 
-Além do registro de um QCOW2 já instalado, o InsulaVM permite **congelar** o disco de uma VM gerenciada em um novo perfil nomeado. O método [`Engine.FreezeVM`](../../insulavm/freeze.go) prepara a identidade do convidado, solicita desligamento normal, consolida o overlay por `qemu-img convert` em QCOW2 autônomo, publica `versions/v001/base.qcow2` e só então remove a VM original. O nome de destino não pode colidir com perfil existente. O disco de origem é preservado se a conversão falhar.
+Além do registro de um QCOW2 já instalado, o InsulaVM permite **congelar** o disco de uma VM gerenciada em um novo perfil nomeado. O método [`Engine.FreezeVM`](../../insulavm/freeze.go) prepara a identidade do convidado, solicita desligamento normal, consolida o overlay por `qemu-img convert -c` em QCOW2 autônomo comprimido por padrão, publica `versions/v001/base.qcow2` e só então remove a VM original. O nome de destino não pode colidir com perfil existente. O disco de origem é preservado se a conversão falhar.
 
-As próximas instâncias usam `vm start -profile <nome>` ou [`StartVMWithOptions`](../../insulavm/start_options.go), que permite ajustar RAM/vCPUs **apenas na instância** sem modificar o `profile.yaml` original. O perfil congelado não é ISO de instalação, nem snapshot da memória da VM.
+As próximas instâncias usam `vm start -profile <nome>` ou [`StartVMWithOptions`](../../insulavm/start_options.go), que permite ajustar RAM/vCPUs **apenas na instância** sem modificar o `profile.yaml` original. O perfil congelado não é ISO de instalação, nem snapshot da memória da VM. Para desabilitar compressão, usar `-compress=false` ou `VMFreezeRequest.DisableQCOW2Compression=true`. A ISO Live não participa do freeze padrão.
 
 **Pré-requisitos:** SSH gerenciado, Cloud-Init instalado e `ssh.sudo_mode: passwordless`; o processo limpa cache de Cloud-Init e credenciais SSH, mas **não elimina segredos específicos de aplicativos**. Fluxo e falhas estão em [FLUX-004](../fluxos/FLUX-004-congelar-vm.md); comandos em [INTF-TERM-004](../interfaces/terminal/INTF-TERM-004-gerenciar-vms.md).
 
@@ -142,5 +142,14 @@ As próximas instâncias usam `vm start -profile <nome>` ou [`StartVMWithOptions
 ## Instalador automático não interativo — estado na develop
 
 [`CreateProfileFromISO`](../../insulavm/create_profile_iso.go) usa ISO Debian 13 amd64 local, Preseed injetado no initramfs, `virt-install`, QCOW2 temporário e verificação offline de `/etc/os-release`, Cloud-Init, SSH, sudo e live-boot por `guestmount`. O perfil só é registrado após o domínio parar e a verificação passar; rejeita nome repetido e ISO sem assinatura ISO9660. O arquivo original de ISO não é modificado. A credencial do instalador é aleatória, armazenada apenas como hash no Preseed temporário. O SHA256 da ISO é devolvido na operação, sem extensão de schema YAML.
+
+### Libguestfs e ambientes sem kernel local
+
+A inspeção do QCOW2 instalado e a captura de conteúdo para a ISO Live utilizam o mesmo adaptador `mountGuestDiskReadOnly` (`insulavm/guestfs_mount.go`), sempre com `guestmount --ro`. Uma falha do `supermin` aciona uma segunda tentativa com `LIBGUESTFS_DEBUG=1` e `LIBGUESTFS_TRACE=1` para obter a causa exata; não é tratada como falha de DHCP nem como instalação concluída.
+
+**Somente** quando o `supermin` relata ausência de kernel apropriado, o motor pode obter o kernel e módulos da distribuição via índices APT configurados no host. Os pacotes são baixados (sem `sudo` ou instalação), extraídos num diretório temporário com permissões restritas e fornecidos à appliance pelo `SUPERMIN_KERNEL`, `SUPERMIN_MODULES` e `LIBGUESTFS_CACHEDIR`. Os arquivos temporários são removidos após o `guestunmount` bem-sucedido. Configurações explícitas dessas variáveis são respeitadas, sem substituição automática de kernel. Outras falhas de `libguestfs`, falhas APT ou de montagem são propagadas, sem registrar perfil ou publicar ISO como sucesso. Tanto a verificação do instalador quanto a exportação Live usam desmontagem compartilhada e obrigatória: falha no `guestunmount` preserva o staging e impede publicar QCOW2/ISO. Na exportação, a desmontagem acontece após gerar o SquashFS, **antes** de invocar `grub-mkrescue` e publicar o arquivo final. O procedimento não altera o QCOW2 de origem nem a configuração do sistema operacional do host.
+
+Referências oficiais: [supermin](https://libguestfs.org/supermin.1.html), [guestfs-faq](https://libguestfs.org/guestfs-faq.1.html) e [variáveis libguestfs](https://libguestfs.org/guestfs.3.html).
+
 
 Diferente do fluxo interativo proposto no restante desta arquitetura, o novo comando **não** pergunta ao usuário se deseja salvar, nem permite editar o sistema pelo console antes da publicação. Esse fluxo futuro permanece em [FLUX-002](../fluxos/FLUX-002-criacao-perfil-vm.md). Veja o contrato de uso em [INTF-TERM-007](../interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md).

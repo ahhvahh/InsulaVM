@@ -87,3 +87,31 @@ func TestCloudInitEmbedsFirstBootInstallationScript(t *testing.T){
   t.Fatal("accepted NUL startup payload")
  }
 }
+
+func TestLiveSeedExplicitDHCPByMAC(t *testing.T){
+ fakeISOBuilder(t)
+ client,err:=identity.GenerateKey()
+ if err!=nil{t.Fatal(err)}
+ host,err:=identity.GenerateKey()
+ if err!=nil{t.Fatal(err)}
+ id,err:=identity.UUIDv7()
+ if err!=nil{t.Fatal(err)}
+ seed,err:=PrepareWithStartupScriptAndNetwork(context.Background(),t.TempDir(),id,
+  "insula","passwordless",client.PublicAuthorized,host,nil,"52:54:00:AB:CD:EF")
+ if err!=nil{t.Fatal(err)}
+ if seed.NetworkConfig==""{t.Fatal("Live ISO seed missing network-config path")}
+ raw,err:=os.ReadFile(seed.NetworkConfig)
+ if err!=nil{t.Fatal(err)}
+ cfg:=string(raw)
+ for _,want:=range []string{
+  "version: 2","ethernets:","insula-nic:","match:",
+  "macaddress: \"52:54:00:ab:cd:ef\"","dhcp4: true","dhcp6: false",
+ }{
+  if !strings.Contains(cfg,want){t.Errorf("missing %q in network config: %s",want,cfg)}
+ }
+ if _,err:=os.Stat(seed.ISO);err!=nil{t.Fatal(err)}
+ if _,err:=PrepareWithStartupScriptAndNetwork(context.Background(),t.TempDir(),id,
+  "insula","passwordless",client.PublicAuthorized,host,nil,"not-a-mac");err==nil{
+  t.Fatal("invalid Ethernet MAC accepted")
+ }
+}

@@ -69,6 +69,30 @@ O `RunResult` retorna `SSHUser`, `Profile`, `Host`, `VMID`, `VMName`, `LogDirect
 
 ## Contratos de ciclo de vida acrescentados
 
+### ID imediato e controle de duplicidade
+
+Toda VM criada a partir de um perfil congelado recebe **UUIDv7 próprio**, independentemente de compartilhar a mesma imagem-base QCOW2 com outras instâncias. O identificador da aplicação e o UUID Libvirt são iguais. O **nome do domínio Libvirt inclui o UUIDv7 completo**, evitando colisão do nome quando várias instâncias são iniciadas na mesma janela de tempo; usar só os primeiros oito dígitos de UUIDv7 seria inseguro, pois essa parte é derivada do timestamp.
+
+A biblioteca devolve `instance.ID` quando o boot, DHCP e SSH estiverem validados. Para obter o ID **antes de o SSH ficar pronto**, usar o callback de progresso: no estágio `registered`, `VMProgress.ID` já foi reservado no SQLite. O callback é síncrono; a aplicação pode executar a criação numa goroutine e encaminhar o ID por um canal. **Atenção:** `registered` não significa `ready`; se a inicialização falhar, o ID permanece no histórico com estado `failed`, e o consumidor deve observar o erro final.
+
+```go
+created, err := engine.StartVMWithOptions(ctx, insulavm.VMStartOptions{
+    Profile: "ambiente-testes",
+}, func(p insulavm.VMProgress) {
+    if p.Stage == "registered" {
+        fmt.Println("UUID reservado:", p.ID)
+    }
+})
+if err != nil {
+    return err
+}
+fmt.Println("VM pronta:", created.ID, created.IPAddress)
+```
+
+Na criação, o motor consulta `storage.database` e gera outro UUIDv7 quando encontra um ID já usado, inclusive por instâncias encerradas. O `INSERT` do SQLite (`id PRIMARY KEY`, `libvirt_uuid UNIQUE`, `name UNIQUE`) continua sendo a barreira **atômica** contra corridas entre processos: uma colisão concorrente é recusada e nenhuma VM existente é substituída. O Libvirt também identifica os domínios pelo UUID; rejeição na criação é tratada como erro, **não** como permissão de reutilizar um domínio externo. Para procurar o estado pelo ID, usar `GetVM(ctx,id)` e `GetVMStatus(ctx,id)`.
+
+A pré-verificação otimista não substitui as restrições atômicas: uma rara colisão gerada simultaneamente pode causar erro seguro na criação, sem reciclar o ID.
+
 ### `StartVMWithOptions`
 
 `VMStartOptions` contém `Profile` (nome registrado), `MemoryMiB` e `VCPUs` (zero mantém o padrão do perfil), `StartupScriptPath` (script administrativo confiável, opcional), `StopOnContextDone` e `OnStopError`. A função devolve `*vm.Instance` (inclui `ID`, `Name`, `IPAddress`, credenciais SSH) e `error`. Sem `StopOnContextDone`, a VM permanece ativa até `StopVM`/`Cleanup`. Quando habilitada, a limpeza ao cancelar o contexto é **assíncrona e de melhor esforço**; use `StopVM` para aguardar a operação e observar erros.

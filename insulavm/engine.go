@@ -276,6 +276,7 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	}
 	result.LogDirectory = logRun.Directory
 
+	managedVM := host == ""
 	if host == "" {
 		// The VM overlay is private to this invocation. Other concurrent
 		// runs using the same read-only backing image get their own overlay.
@@ -305,6 +306,9 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	if user == "" || key == "" || hosts == "" {
 		return result, errors.New("SSH user, private key and known_hosts are required")
 	}
+	// Enforce ED25519 only for managed guests; preserve defaults for external SSH.
+	var managedHostKeyAlgorithms []string
+	if managedVM { managedHostKeyAlgorithms = []string{"ssh-ed25519"} }
 	connectTimeout := time.Duration(e.config.SSH.ConnectTimeoutSeconds) * time.Second
 	client, err := dialWithRetry(ctx, executor.DialConfig{
 		Address: host,
@@ -312,6 +316,7 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 		PrivateKeyPath: key,
 		KnownHostsPath: hosts,
 		Timeout: connectTimeout,
+		HostKeyAlgorithms: managedHostKeyAlgorithms,
 	}, connectTimeout)
 	if err != nil {
 		return result, err

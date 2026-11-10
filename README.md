@@ -12,6 +12,60 @@ O padrão de integração para **ambas** as interfaces está em [CONTR-001 — O
 
 **Atenção:** esta padronização define a API-alvo. O pacote atual implementa apenas parte dela; consulte a matriz de situação nos contratos antes de integrar. Métodos legados da CLI e biblioteca permanecem documentados como implementados. Nenhum método inexistente deve ser considerado disponível apenas por constar na especificação.
 
+## Testes guiados da VM e diagnóstico SSH
+
+A CLI `test` permite instalar, preparar, diagnosticar e exportar uma VM,
+sem depender de GitHub Actions.
+
+```bash
+go build -o insula .
+./insula test doctor
+./insula test download
+./insula test install -profile debian13-mini
+./insula test boot -profile debian13-mini
+./insula test ssh -id UUID_DA_VM
+./insula test shell -id UUID_DA_VM
+./insula test iso -id UUID_DA_VM -name debian13-preparado -confirm
+
+# Do início ao fim, sem interação, usando script confiável:
+./insula test cycle -profile debian13-mini -name debian13-pronto \
+  -startup-script /caminho/preparar.sh -confirm
+```
+
+Erros de autenticação agora informam tentativas e limites independentes de DHCP
+e SSH. `test boot` preserva a VM após falha para diagnóstico.
+A `main` não é modificada. O workflow **Go tests** executa a suíte unitária completa apenas em `push` para `develop`; os testes integrais 1–3 executam separadamente em PRs para `develop`, `homolog` ou `main`.
+Veja [GUIA-004 — comandos test](docs/guias/GUIA-004-testes-guiados.md).
+
+Alternativamente, o roteiro manual de ponta a ponta permite instalar, abrir
+uma sessão interativa e exportar a ISO após confirmação:
+
+```bash
+bash scripts/tests/manual-debian-mini-iso.sh all
+```
+
+Consulte [GUIA-004 — roteiro manual](docs/guias/GUIA-004-teste-manual-debian-mini-iso.md).
+
+## Laboratorio Debian 13 minimo (5 GiB, 1 CPU, 1 GiB RAM)
+
+Na pasta com `./insula` e `config.yaml` ja configurados:
+
+```bash
+bash /CAMINHO/InsulaVM/scripts/preparar-deb13-abioma-tests.sh all
+```
+
+O script usa a `mini.iso` atual da distribuicao `trixie`, com verificacao
+SHA256 pelo metodo `test download`, e cria o perfil
+`deb13-abioma-tests`. Ele abre uma sessao SSH para preparacao manual;
+`exit` sai do terminal sem desligar a VM. Depois pergunta se deve congelar
+a VM, encerrar e salvar `deb13-abioma-tests-preparado` como QCOW2 e ISO Live.
+
+Para reconectar ao shell ou salvar mais tarde, use respectivamente `open`
+e `export` no lugar de `all`. Nao execute `vm stop` antes de exportar:
+isso elimina as alteracoes do overlay. A instalacao minima em disco de 5 GiB
+ainda requer validacao KVM real e pode ficar sem espaco se muitos pacotes forem
+instalados. O script nao habilita GitHub Actions.
+
 ## Começar
 
 Requisitos: **Go 1.23+**, Linux com KVM/QEMU/Libvirt, `virsh`, `qemu-img`, rede Libvirt com DHCP, permissões para operar o hipervisor e geração de ISO NoCloud (`genisoimage` ou `xorriso`). O `config.yaml` é opcional na linha de comando, mas o arquivo precisa existir no local esperado.
@@ -37,32 +91,35 @@ O registro de perfil é necessário apenas se ele ainda não existir. Consulte [
 O comando cria uma VM instaladora temporária, instala Debian 13 em QCOW2 com Preseed, valida os componentes do sistema e registra o perfil. **Requer internet no instalador** para os pacotes de Cloud-Init/SSH/sudo/live-boot; não foi validado em host KVM real.
 
 ```bash
-./insula profile create-from-iso -name debian13 -iso /isos/debian-13-amd64-netinst.iso \
+ISO="$(bash scripts/baixar-debian.sh)"  # baixa e valida SHA256; retorna caminho absoluto
+./insula profile create-from-iso -name debian13 -iso "$ISO" \
   -memory-mib 2048 -vcpus 2 -disk-gb 12 -install-timeout 90m
 ./insula vm start -profile debian13
 ```
 
 Biblioteca Go: `engine.CreateProfileFromISO(ctx, insulavm.CreateProfileFromISORequest{...})`. Dependências adicionais: `virt-install`, `openssl`, `guestmount`, `guestunmount` e acesso ao Libvirt. Veja [INTF-TERM-007](docs/interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md).
 
-## Exportar ISO diretamente de uma instância
+## Preparar e congelar um ambiente em QCOW2
+
+O fluxo padrão do `insula vm freeze` é **disco nativo QCOW2 comprimido**, sem geração de ISO Live. A VM original é desligada normalmente, suas alterações são consolidadas em um novo perfil independente e sua instância temporária é removida somente após o perfil ser salvo. A origem permanece intacta se a conversão falhar.
 
 ```bash
-./insula vm export-iso -id UUID_DA_VM -name debian13-live -prepare-live-boot
+./insula vm start -profile debian13
+# Configure o sistema na VM e salve os dados no DISCO (não em tmpfs).
+./insula vm freeze -config ./config.yaml -id UUID_DA_VM -name debian13-preparado
+./insula profile show -name debian13-preparado
+./insula vm start -config ./config.yaml -profile debian13-preparado -memory-mib 500 -vcpus 1
 ```
 
-Essa operação instala `live-boot` no guest (quando solicitada), congela o QCOW2, **encerra e remove a VM de origem** e exporta uma ISO Live. A biblioteca expõe `ExportVMToLiveISO(ctx, VMExportISORequest)`; se a exportação falhar após o congelamento, o perfil QCOW2 fica preservado para nova tentativa.
+O motor utiliza `qemu-img convert -f qcow2 -O qcow2 -c`. A imagem-base comprimida pode ser usada diretamente por várias VMs, que recebem overlays próprios. Para desabilitar compressão em um caso específico, use `-compress=false`. A biblioteca Go oferece `FreezeVM(ctx, VMFreezeRequest{VMID: id, Name: "debian13-preparado"})` e `DisableQCOW2Compression:true` como opção. Não use `vm stop` antes de congelar: ele apaga o overlay da instância.
 
-## Preparar e congelar um ambiente
+**Armazenamento:** os perfis são salvos em `storage.profiles` (configuração YAML). Pode ser um diretório absoluto em volume dedicado, por exemplo `/srv/insulavm/profiles`. Armazene `profile.yaml` e `versions/v001/base.qcow2` juntos; nunca mova a base durante uso por VMs dependentes. Compare consumo real com `du -h` e `qemu-img info`.
 
-```bash
-# Depois de configurar a VM de origem:
-./insula vm freeze -id UUID_DA_VM -name debian13-go-testes
-./insula vm start -profile debian13-go-testes -memory-mib 4096 -vcpus 4
-```
+**Persistência:** `tmpfs` e RAM não entram no QCOW2. Guarde os arquivos necessários num filesystem persistente do convidado, por exemplo `/home/insula/insulavm/workspace`. O congelamento também reinicia a identidade do Cloud-Init e as chaves SSH, mas **não** sanitiza segredos de aplicações.
 
-Para instalar dependências administrativas durante a primeira inicialização, a API Go oferece `VMStartOptions.StartupScriptPath`: caminho absoluto de script confiável, incluído no Cloud-Init e executado como root antes de a VM ficar pronta. Veja [ARQ-004](docs/arquitetura/ARQ-004-biblioteca-go.md).
+**ISO Live:** o exportador antigo continua disponível de forma experimental por solicitação explícita (`vm export-iso` ou `vm freeze -export-iso=true -prepare-live-boot=true`), mas não faz parte do fluxo padrão nem do critério atual do Integral 3. Boot de uma ISO Live exportada ainda requer homologação separada.
 
-O congelamento **encerra e remove a VM original** após consolidar seu overlay em um QCOW2 autônomo. Não execute `vm stop` antes de congelar, pois isso apaga o overlay temporário. Leia [FLUX-004](docs/fluxos/FLUX-004-congelar-vm.md).
+**Desligamento e recuperação:** o congelamento exige sudo sem senha na VM de origem, solicita desligamento gracioso, não força encerramento sem `-force-freeze-shutdown` e preserva o overlay em falhas antes de publicar o perfil. Consulte [FLUX-004](docs/fluxos/FLUX-004-congelar-vm.md).
 
 ## Deploy, execução e encerramento
 
@@ -87,6 +144,45 @@ O congelamento **encerra e remove a VM original** após consolidar seu overlay e
 
 A API ainda é experimental, sem compromisso de compatibilidade de versão estável. O projeto utiliza a convenção [A-Bioma Doc Standard](docs/README.md) para organizar a documentação, sem alegar certificação formal.
 
+## Teste Integral 3 — QCOW2 congelado e recuperação real
+
+Nas PRs de promoção com origem `develop` e destino `homolog` ou `main`, o [workflow Integral 3](.github/workflows/integral-3-iso-workspace.yml) instala Debian 13 pela mini.iso oficial, inicia uma VM real (500 MiB/1 vCPU/10 GiB), grava um arquivo em **filesystem persistente** via SSH, congela a VM num QCOW2 **comprimido** e inicia outra VM diretamente a partir do perfil gerado. Exige DHCP, SSH, UUID distinto, mesmo SHA-256 sem reenvio, desligamento gracioso e limpeza dos overlays. O instalador recebe 1 GiB por requisito da API; as VMs gerenciadas recebem 500 MiB.
+
+```bash
+bash scripts/tests/integral-3-iso-persistence.sh
+```
+
+**Check:** `integral-3-iso-workspace-persistence` (nome legado preservado nas regras de branch); o conteúdo foi migrado para QCOW2. Não testa ISO Live. Veja [FLUX-008](docs/fluxos/FLUX-008-teste-integral-iso-persistencia.md) e [GUIA-007](docs/guias/GUIA-007-teste-integral-3-iso-persistencia.md).
+
+## Teste Integral 2 — enviar ZIP, executar comandos e encerrar VM
+
+O runner [integral-2-zip.sh](scripts/tests/integral-2-zip.sh) usa um QCOW2 Debian 12 Cloud verificado, inicializa uma VM por Cloud-Init/SSH, envia um ZIP via **API Go**, conta 12 itens no ZIP dentro da VM, descompacta e confirma 12 arquivos extraídos e hashes SHA-256. Repete o teste via **CLI** com outro ZIP, valida respostas de comandos e só aprova o encerramento gracioso (sem destroy). Não modifica o motor: ImportToVM utiliza TAR.GZ como transporte, preservando o ZIP para os comandos posteriores.
+
+~~~bash
+bash scripts/tests/integral-2-zip.sh
+~~~
+
+O [workflow Integral 2](.github/workflows/integral-2-zip.yml) é acionado na abertura e em novos commits de PRs para **develop**, **promolog** e **main**. Para bloquear merges, exigir o status **integral-2-zip-upload-command** nas regras dessas branches. A execução real deve ser verificada no GitHub Actions. Veja [GUIA-006](docs/guias/GUIA-006-teste-integral-2-zip.md).
+
+## Teste integral obrigatório: ISO Alpine Linux
+
+```bash
+bash scripts/tests/alpine-iso.sh --config /caminho/absoluto/config.yaml
+# ou com ISO local:
+bash scripts/tests/alpine-iso.sh --config /caminho/absoluto/config.yaml --iso /isos/alpine-virt-3.24.4-x86_64.iso
+```
+
+Baixa e verifica a ISO oficial Alpine Virtual (~67 MB), inicia **1 CPU/500 MiB** pelo Libvirt/KVM, executa e valida comando no console serial do guest e exige desligamento completo. Esse teste é obrigatório em `scripts/tests/integration.sh` e não depende de SSH/Cloud-Init. Requer um host com `/dev/kvm`; a execução real ainda precisa ser comprovada. Veja [GUIA-005](docs/guias/GUIA-005-alpine-iso.md).
+
+**GitHub Actions / Teste Integral 1:** O workflow
+[`integral-1-alpine-iso.yml`](.github/workflows/integral-1-alpine-iso.yml)
+roda em abertura, reabertura e novo commit de PRs para `develop`,
+`promolog` e `main`. Status do job: `integral-1-alpine-iso`.
+Para impedir merge em caso de falha, exigir esse check em
+**Settings > Rules > Rulesets/Branches** e incluir o workflow nas
+branches de destino. `promolog` ainda não existe; a validação real
+do runner GitHub-hosted com KVM está pendente.
+
 ## ISO Live e testes de integração
 
 Para preparar uma ISO Live, instalar `live-boot` e reconstruir o initramfs **dentro da VM antes de `freeze`**. Depois executar `insula profile export-iso -name PERFIL` e `insula vm start-iso -profile PERFIL`. ISO Debian netinst comum **não** é suportada por `start-iso`; consulte [INTF-TERM-006](docs/interfaces/terminal/INTF-TERM-006-iso-live.md).
@@ -101,3 +197,58 @@ go vet ./...
 ```
 
 Testes automatizados não substituem validação de ciclo completo em um hipervisor KVM/Libvirt real.
+
+## Diagnóstico de ISO Live que não obtém IP
+
+`vm start-iso` aceita o timeout configurável `-ssh-ready-timeout` (padrão 5m).
+Quando a ISO não conclui DHCP/SSH, preserve a VM para inspecionar o console
+sem recorrer diretamente ao `virsh`:
+
+```bash
+./insula vm start-iso -config ./config.yaml \
+  -profile deb13-abioma-tests-final -iso ./deb13-abioma-tests-final.iso \
+  -memory-mib 2048 -vcpus 2 \
+  -ssh-ready-timeout 8m -preserve-on-failure
+
+# A falha imprime um UUID de diagnóstico; use-o nos comandos seguintes:
+./insula vm status -config ./config.yaml -id UUID_DA_VM
+./insula vm console -config ./config.yaml -id UUID_DA_VM
+```
+
+O `start-iso` não garante automaticamente que a ISO esteja inicializável;
+a saída serial preservada é necessária para descobrir problemas de boot.
+`vm stop` remove a VM descartável após o diagnóstico.
+
+## Boot por ISO Live: evidências e recuperação
+
+Uma falha `start-iso` na etapa DHCP **não comprova** que a ISO inicializou.
+Para cada tentativa, os eventos e snapshots são preservados no Linux em
+`storage.logs/live-iso/<UUID>/`. O padrão da CLI `start-iso` agora é
+`-preserve-on-failure=true`; um domínio já iniciado fica disponível para
+investigação após erros de DHCP/SSH. O console serial opcional usa `-serial-log`:
+
+```bash
+./insula vm start-iso -config ./config.yaml \
+  -profile deb13-abioma-tests-final \
+  -iso ./deb13-abioma-tests-final.iso \
+  -memory-mib 1024 -vcpus 1 -serial-log
+# Se falhar, o UUID da instância será impresso:
+./insula vm diagnose -config ./config.yaml -id UUID_DA_VM
+./insula vm console -config ./config.yaml -id UUID_DA_VM
+```
+
+O comando `vm diagnose` coleta estado do domínio, interface e concessão DHCP
+para o MAC exato, exibindo caminhos dos logs e seus últimos 16 KiB.
+`-serial-log` depende de permissões de gravação suportadas pelo host.
+`vm stop` limpa a VM descartável: execute apenas após o diagnóstico.
+
+**Para recriar o Debian instalado mesmo se a ISO Live falhar**, use o
+QCOW2 registrado pelo `freeze`:
+
+```bash
+./insula vm start -config ./config.yaml \
+  -profile deb13-abioma-tests-final -memory-mib 1024 -vcpus 1
+```
+
+Esta inicialização a partir do perfil QCOW2 é distinta do boot da ISO Live.
+Consulte a [interface e diagnóstico de ISO](docs/interfaces/terminal/INTF-TERM-006-iso-live.md).

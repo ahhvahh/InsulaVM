@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"strings"
 	"sync"
@@ -33,38 +34,68 @@ type DialConfig struct {
 	PrivateKeyPath string
 	KnownHostsPath string
 	Timeout        time.Duration
+	// HostKeyAlgorithms selects host key types; empty uses defaults for external hosts.
+	HostKeyAlgorithms []string
 }
 
+// Dial keeps the original API for callers without a cancellation context.
 func Dial(config DialConfig) (*ssh.Client, error) {
-	if config.Address == "" || config.User == "" ||
-		config.PrivateKeyPath == "" || config.KnownHostsPath == "" {
-		return nil, errors.New("SSH address, user, private key and known_hosts are required")
-	}
-	key, err := os.ReadFile(config.PrivateKeyPath)
-	if err != nil {
-		return nil, fmt.Errorf("read private key: %w", err)
-	}
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("parse private key (unencrypted key required): %w", err)
-	}
-	hostKeyCallback, err := knownhosts.New(config.KnownHostsPath)
-	if err != nil {
-		return nil, fmt.Errorf("load known_hosts: %w", err)
-	}
-	if config.Timeout <= 0 {
-		config.Timeout = 15 * time.Second
-	}
-	client, err := ssh.Dial("tcp", config.Address, &ssh.ClientConfig{
-		User:            config.User,
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: hostKeyCallback,
-		Timeout:         config.Timeout,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("connect SSH: %w", err)
-	}
-	return client, nil
+ return DialContext(context.Background(), config)
+}
+
+// DialContext limits TCP connection, SSH handshake AND public-key authentication.
+// ssh.ClientConfig.Timeout alone only limits the TCP dial; a hanging handshake
+// otherwise blocks VM startup until a completely unrelated timeout expires.
+func DialContext(ctx context.Context, config DialConfig) (*ssh.Client, error) {
+ if ctx == nil { return nil, errors.New("SSH context is required") }
+ if err := ctx.Err(); err != nil { return nil, err }
+ if config.Address == "" || config.User == "" ||
+  config.PrivateKeyPath == "" || config.KnownHostsPath == "" {
+  return nil, errors.New("SSH address, user, private key and known_hosts are required")
+ }
+ key, err := os.ReadFile(config.PrivateKeyPath)
+ if err != nil { return nil, fmt.Errorf("read private key: %w", err) }
+ signer, err := ssh.ParsePrivateKey(key)
+ if err != nil { return nil, fmt.Errorf("parse private key (unencrypted key required): %w", err) }
+ hostKeyCallback, err := knownhosts.New(config.KnownHostsPath)
+ if err != nil { return nil, fmt.Errorf("load known_hosts: %w", err) }
+ if config.Timeout <= 0 { config.Timeout = 15 * time.Second }
+
+ dialCtx, cancel := context.WithTimeout(ctx, config.Timeout)
+ defer cancel()
+ raw, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", config.Address)
+ if err != nil { return nil, fmt.Errorf("connect SSH TCP: %w", err) }
+ deadline, _ := dialCtx.Deadline()
+ if err := raw.SetDeadline(deadline); err != nil {
+  _ = raw.Close()
+  return nil, fmt.Errorf("set SSH handshake deadline: %w", err)
+ }
+ stopCancel := context.AfterFunc(dialCtx, func() { _ = raw.Close() })
+ conn, chans, reqs, err := ssh.NewClientConn(raw, config.Address, &ssh.ClientConfig{
+  User:config.User,
+  Auth:[]ssh.AuthMethod{ssh.PublicKeys(signer)},
+  HostKeyCallback:hostKeyCallback,
+  HostKeyAlgorithms:config.HostKeyAlgorithms,
+ })
+ stopCancel()
+ if err != nil {
+  _ = raw.Close()
+  if dialCtx.Err() != nil { return nil, fmt.Errorf("SSH handshake/authentication timed out: %w", dialCtx.Err()) }
+  // The socket's read deadline can fire just before dialCtx.Err() is set.
+  // Preserve a meaningful timeout classification in both race orderings.
+  var netErr net.Error
+  if errors.As(err, &netErr) && netErr.Timeout() {
+   return nil, fmt.Errorf("SSH handshake/authentication timed out: %w", err)
+  }
+  return nil, fmt.Errorf("SSH handshake/authentication: %w", err)
+ }
+ // Handshake deadlines must NOT persist on an authenticated session:
+ // commands, imports and interactive shells may legitimately run for hours.
+ if err := raw.SetDeadline(time.Time{}); err != nil {
+  _ = conn.Close()
+  return nil, fmt.Errorf("clear SSH handshake deadline: %w", err)
+ }
+ return ssh.NewClient(conn, chans, reqs), nil
 }
 
 // Executor streams output to Console and a Recorder while reusing Client.

@@ -10,11 +10,20 @@
 
 ## CLI
 
+Baixe a ISO oficial Debian 13 netinst e valide o SHA256 antes de criar o perfil:
+
+```bash
+ISO="$(bash scripts/baixar-debian.sh)"
+# Opções: --output-dir /isos  e  --force (substituir arquivo com checksum inválido)
+```
+
+O script grava por padrão em `data/isos` (ignorado pelo Git), reutiliza arquivos válidos e escreve somente o caminho absoluto no stdout. Isso não instala o SO; a instalação é realizada pelo comando seguinte.
+
 ```bash
 insula profile create-from-iso \
   -config /etc/insulavm/config.yaml \
   -name debian13-build \
-  -iso /isos/debian-13-amd64-netinst.iso \
+  -iso "$ISO" \
   -memory-mib 2048 -vcpus 2 -disk-gb 12 \
   -install-timeout 90m
 
@@ -49,7 +58,7 @@ insula vm export-iso -config /etc/insulavm/config.yaml \
   -id UUIDv7 -name debian13-live -prepare-live-boot
 ```
 
-A biblioteca usa `ExportVMToLiveISO(ctx, VMExportISORequest{VMID, Name, PrepareLiveBoot:true})`. Essa operação **encerra e remove a VM original** como parte do congelamento; se a montagem Live falhar, o perfil congelado é preservado para novo `profile export-iso -name`.
+A biblioteca usa `ExportVMToLiveISO(ctx, VMExportISORequest{VMID, Name, PrepareLiveBoot:true})`. Essa operação **encerra e remove a VM original** como parte do congelamento; se a montagem ou desmontagem Live falhar, o perfil congelado é preservado para novo `profile export-iso -name`. A exportação da ISO só é publicada após `guestunmount` bem-sucedido; falha preserva o staging no caminho informado no erro, para análise e limpeza segura.
 
 ## Pré-requisitos e limites
 

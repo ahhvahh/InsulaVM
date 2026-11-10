@@ -63,7 +63,7 @@ func (e *Engine) CreateProfileFromISO(ctx context.Context,req CreateProfileFromI
  if err:=checkDebianInstallerISO(req.ISOPath);err!=nil{return nil,err}
  if req.MemoryMiB<1024 || req.MemoryMiB>1024*1024{return nil,errors.New("installer memory_mib must be 1024..1048576")}
  if req.VCPUs<1||req.VCPUs>256{return nil,errors.New("installer vcpus must be 1..256")}
- if req.DiskGB<8||req.DiskGB>4096{return nil,errors.New("installer disk_gb must be 8..4096")}
+ if req.DiskGB<5||req.DiskGB>4096{return nil,errors.New("installer disk_gb must be 5..4096")}
  if req.Timeout<0{return nil,errors.New("installer timeout cannot be negative")}
  if req.Timeout==0{req.Timeout=90*time.Minute}
  if req.Timeout>6*time.Hour{return nil,errors.New("installer timeout exceeds 6 hours")}
@@ -236,6 +236,12 @@ d-i debian-installer/exit/poweroff boolean true
 `,user,hash,late)
 }
 func debianVirtInstallArgs(uri,network,name,disk,preseed string,req CreateProfileFromISORequest)[]string{
+ // Debian netboot mini.iso has /linux and /initrd.gz. virt-install may
+ // not auto-detect them from an ISO; provide documented explicit paths.
+ location:=req.ISOPath
+ if filepath.Base(req.ISOPath)=="mini.iso"{
+  location+=",kernel=linux,initrd=initrd.gz"
+ }
  return []string{
   "--connect",uri,"--name",name,
   "--memory",strconv.Itoa(req.MemoryMiB),"--vcpus",strconv.Itoa(req.VCPUs),
@@ -243,7 +249,7 @@ func debianVirtInstallArgs(uri,network,name,disk,preseed string,req CreateProfil
   "--disk","path="+disk+",format=qcow2,bus=virtio",
   "--network","network="+network+",model=virtio",
   "--osinfo","detect=on,require=off",
-  "--location",req.ISOPath,
+  "--location",location,
   "--initrd-inject",preseed,
   "--extra-args","auto=true priority=critical locale=en_US.UTF-8 console=ttyS0,115200n8 interface=auto netcfg/dhcp_timeout=60 preseed/file=/preseed.cfg",
   "--graphics","none","--console","pty,target_type=serial",
@@ -286,13 +292,11 @@ func cleanupISOInstallerDomain(ctx context.Context,uri,name string)error{
  if out,err:=installerVirsh(ctx,uri,"undefine",name);err!=nil{return fmt.Errorf("remove installer domain: %w: %s",err,out)}
  return nil
 }
-var errInstallerUnmount=errors.New("guest filesystem remains mounted")
-
 func verifyDebianInstalledDisk(ctx context.Context,disk,stage string)error{
  mount:=filepath.Join(stage,"root")
  if err:=os.MkdirAll(mount,0700);err!=nil{return err}
- output,err:=exec.CommandContext(ctx,"guestmount","--ro","-a",disk,"-i",mount).CombinedOutput()
- if err!=nil{return fmt.Errorf("mount installed disk: %w: %s",err,strings.TrimSpace(string(output)))}
+ guestfsCleanup,err:=mountGuestDiskReadOnly(ctx,disk,mount)
+ if err!=nil{return fmt.Errorf("mount installed disk: %w",err)}
  checkErr:=func()error{
   release,err:=os.ReadFile(filepath.Join(mount,"etc","os-release"))
   if err!=nil{return fmt.Errorf("installed system missing /etc/os-release: %w",err)}
@@ -308,10 +312,9 @@ func verifyDebianInstalledDisk(ctx context.Context,disk,stage string)error{
   }
   return nil
  }()
- unmountCtx,cancel:=context.WithTimeout(context.Background(),40*time.Second)
- defer cancel()
- unmountOutput,unmountErr:=exec.CommandContext(unmountCtx,"guestunmount",mount).CombinedOutput()
- if unmountErr!=nil{return errors.Join(checkErr,fmt.Errorf("%w: guestunmount failed; staging must be retained: %v: %s",errInstallerUnmount,unmountErr,strings.TrimSpace(string(unmountOutput))))}
+ if unmountErr:=unmountGuestDiskReadOnly(mount,guestfsCleanup);unmountErr!=nil{
+  return errors.Join(checkErr,unmountErr)
+ }
  return checkErr
 }
 func verifyStandaloneQCOW2(ctx context.Context,disk string)error{
