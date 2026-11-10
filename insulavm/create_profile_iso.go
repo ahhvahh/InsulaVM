@@ -297,8 +297,8 @@ var errInstallerUnmount=errors.New("guest filesystem remains mounted")
 func verifyDebianInstalledDisk(ctx context.Context,disk,stage string)error{
  mount:=filepath.Join(stage,"root")
  if err:=os.MkdirAll(mount,0700);err!=nil{return err}
- output,err:=exec.CommandContext(ctx,"guestmount","--ro","-a",disk,"-i",mount).CombinedOutput()
- if err!=nil{return fmt.Errorf("mount installed disk: %w: %s",err,strings.TrimSpace(string(output)))}
+ guestfsCleanup,err:=mountGuestDiskReadOnly(ctx,disk,mount)
+ if err!=nil{return fmt.Errorf("mount installed disk: %w",err)}
  checkErr:=func()error{
   release,err:=os.ReadFile(filepath.Join(mount,"etc","os-release"))
   if err!=nil{return fmt.Errorf("installed system missing /etc/os-release: %w",err)}
@@ -318,6 +318,7 @@ func verifyDebianInstalledDisk(ctx context.Context,disk,stage string)error{
  defer cancel()
  unmountOutput,unmountErr:=exec.CommandContext(unmountCtx,"guestunmount",mount).CombinedOutput()
  if unmountErr!=nil{return errors.Join(checkErr,fmt.Errorf("%w: guestunmount failed; staging must be retained: %v: %s",errInstallerUnmount,unmountErr,strings.TrimSpace(string(unmountOutput))))}
+ guestfsCleanup()
  return checkErr
 }
 func verifyStandaloneQCOW2(ctx context.Context,disk string)error{
