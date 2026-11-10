@@ -1,10 +1,14 @@
 name: Go tests
 
+# Execucao automatica apenas depois de um commit na develop.
+# Nao executar na abertura/atualizacao de PR nem em main, homolog ou outras branches.
 on:
   push:
-    branches: [main]
-  pull_request:
-  workflow_dispatch:
+    branches:
+      - develop
+
+permissions:
+  contents: read
 
 jobs:
   unit:

@@ -34,7 +34,7 @@ go build -o insula .
 
 Erros de autenticação agora informam tentativas e limites independentes de DHCP
 e SSH. `test boot` preserva a VM após falha para diagnóstico.
-A `main` não é modificada e os workflows permanecem desativados.
+A `main` não é modificada. O workflow **Go tests** executa a suíte unitária completa apenas em `push` para `develop`; os testes integrais 1–3 executam separadamente em PRs para `develop`, `homolog` ou `main`.
 Veja [GUIA-004 — comandos test](docs/guias/GUIA-004-testes-guiados.md).
 
 Alternativamente, o roteiro manual de ponta a ponta permite instalar, abrir
