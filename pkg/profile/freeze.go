@@ -14,10 +14,21 @@ import (
  "gopkg.in/yaml.v3"
 )
 
-// FreezeFromOverlay publishes a fully independent QCOW2 image as a named
-// reusable profile. The original stopped VM overlay is never changed.
-// Registration is exclusive: an existing profile is never overwritten.
+// FreezeOptions controls native QCOW2 base image conversion.
+// Compressed clusters remain readable by QEMU and are used as immutable backing
+// storage for independent writable overlays.
+type FreezeOptions struct {
+ Compress bool
+}
+
+// FreezeFromOverlay preserves the existing default uncompressed behavior.
 func FreezeFromOverlay(ctx context.Context,root string,original Profile,name,overlay string)(string,error){
+ return FreezeFromOverlayWithOptions(ctx,root,original,name,overlay,FreezeOptions{})
+}
+
+// FreezeFromOverlayWithOptions publishes an independent QCOW2 profile.
+// The stopped source overlay is never modified; failed exports are removed.
+func FreezeFromOverlayWithOptions(ctx context.Context,root string,original Profile,name,overlay string,options FreezeOptions)(string,error){
  if ctx==nil {return "",errors.New("context is required")}
  if err:=ctx.Err();err!=nil{return "",err}
  if err:=storage.ValidateName(name);err!=nil{return "",fmt.Errorf("freeze profile name: %w",err)}
@@ -47,7 +58,10 @@ func FreezeFromOverlay(ctx context.Context,root string,original Profile,name,ove
 
  image:=filepath.Join(target,saved.Image)
  if err:=os.MkdirAll(filepath.Dir(image),0700);err!=nil{return "",err}
- output,err:=exec.CommandContext(ctx,"qemu-img","convert","-f","qcow2","-O","qcow2",overlay,image).CombinedOutput()
+ args:=[]string{"convert","-f","qcow2","-O","qcow2"}
+ if options.Compress { args=append(args,"-c") }
+ args=append(args,overlay,image)
+ output,err:=exec.CommandContext(ctx,"qemu-img",args...).CombinedOutput()
  if err!=nil{return "",fmt.Errorf("flatten VM overlay into reusable QCOW2: %w: %s",err,strings.TrimSpace(string(output)))}
  if err:=os.Chmod(image,0600);err!=nil{return "",err}
 
