@@ -1,0 +1,70 @@
+# Teste Integral 1: boot real da ISO Alpine em todas as PRs protegidas.
+# Deve estar presente em cada branch de destino: develop, promolog e main.
+name: "Integral 1 - Alpine ISO"
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - promolog
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - edited
+
+# Código de PR, inclusive de forks, nunca recebe token de escrita ou segredos.
+# Não executar em self-hosted: o repositório é público.
+permissions:
+  contents: read
+
+jobs:
+  integral-1-alpine-iso:
+    name: integral-1-alpine-iso
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout da proposta de merge
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Preparar Libvirt/KVM descartável
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -c /dev/kvm ]]; then
+            echo "::error::Runner sem /dev/kvm. O teste integral obrigatório não pode ser ignorado."
+            exit 1
+          fi
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            libvirt-daemon-system libvirt-clients qemu-system-x86 acl
+          sudo systemctl start libvirtd.service
+          # Permitir apenas ao usuário temporário do runner conectar ao Libvirt.
+          # Evitar chmod global no socket e alterações de grupos da sessão.
+          sudo setfacl -m "u:$(id -un):rw" /run/libvirt/libvirt-sock
+          virsh -c qemu:///system list --all
+
+      - name: Teste Integral 1 - Alpine ISO, comando e desligamento
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/tests/alpine-iso.sh --config "$(realpath config.yaml)"
+
+      - name: Publicar evidências do console serial
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integral-1-alpine-iso-evidencias
+          path: data/logs/alpine-iso-*/
+          if-no-files-found: warn
+          retention-days: 7

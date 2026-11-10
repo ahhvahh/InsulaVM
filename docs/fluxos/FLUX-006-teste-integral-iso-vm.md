@@ -69,6 +69,7 @@ sequenceDiagram
 | Cenário | Critério de sucesso |
 | --- | --- |
 | Teste unitário | Go test -race e go vet terminam sem falha |
+| Alpine ISO oficial obrigatória | Alpine Virtual 3.24.4 inicializa com 1 vCPU/500 MiB, comando real via ttyS0 retorna marcador/exit 0, `poweroff` remove domínio transitório |
 | CloneProfile | Novo nome resolve um QCOW2 próprio |
 | Inicialização QCOW2 | Libvirt ativo, IP DHCP e SSH autenticado |
 | Upload e script | Saída contém INSULA_TEST_OK |
@@ -77,6 +78,10 @@ sequenceDiagram
 | ISO Live | Exportação contém squashfs, kernel, initrd e GRUB; guest inicia por CDROM |
 | Execução dentro da ISO | DeployToVM devolve INSULA_TEST_OK |
 | Desligamento ISO | Instância e armazenamento temporário removidos |
+
+## Cenário Alpine independente
+
+O `scripts/tests/alpine-iso.sh` verifica a ISO Alpine Virtual oficial sem depender de perfil QCOW2, rede DHCP, Cloud-Init ou SSH. Sua execução é parte obrigatória de `scripts/tests/integration.sh` e não é afetada pelas flags de exclusão dos cenários Debian. O teste é implementado em `tests/integration/alpine_iso_test.go`, isolado do motor de VMs gerenciadas (sem novas operações públicas CLI/Go), e gera evidências em `storage.logs`. Comprovar esse boot **não** valida o boot das ISOs Live geradas pelo InsulaVM; ambos os cenários permanecem necessários.
 
 ## Limitações e falhas
 

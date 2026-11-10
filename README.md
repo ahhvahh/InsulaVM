@@ -156,6 +156,25 @@ O congelamento **encerra e remove a VM original** após consolidar seu overlay e
 
 A API ainda é experimental, sem compromisso de compatibilidade de versão estável. O projeto utiliza a convenção [A-Bioma Doc Standard](docs/README.md) para organizar a documentação, sem alegar certificação formal.
 
+## Teste integral obrigatório: ISO Alpine Linux
+
+```bash
+bash scripts/tests/alpine-iso.sh --config /caminho/absoluto/config.yaml
+# ou com ISO local:
+bash scripts/tests/alpine-iso.sh --config /caminho/absoluto/config.yaml --iso /isos/alpine-virt-3.24.4-x86_64.iso
+```
+
+Baixa e verifica a ISO oficial Alpine Virtual (~67 MB), inicia **1 CPU/500 MiB** pelo Libvirt/KVM, executa e valida comando no console serial do guest e exige desligamento completo. Esse teste é obrigatório em `scripts/tests/integration.sh` e não depende de SSH/Cloud-Init. Requer um host com `/dev/kvm`; a execução real ainda precisa ser comprovada. Veja [GUIA-005](docs/guias/GUIA-005-alpine-iso.md).
+
+**GitHub Actions / Teste Integral 1:** O workflow
+[`integral-1-alpine-iso.yml`](.github/workflows/integral-1-alpine-iso.yml)
+roda em abertura, reabertura e novo commit de PRs para `develop`,
+`promolog` e `main`. Status do job: `integral-1-alpine-iso`.
+Para impedir merge em caso de falha, exigir esse check em
+**Settings > Rules > Rulesets/Branches** e incluir o workflow nas
+branches de destino. `promolog` ainda não existe; a validação real
+do runner GitHub-hosted com KVM está pendente.
+
 ## ISO Live e testes de integração
 
 Para preparar uma ISO Live, instalar `live-boot` e reconstruir o initramfs **dentro da VM antes de `freeze`**. Depois executar `insula profile export-iso -name PERFIL` e `insula vm start-iso -profile PERFIL`. ISO Debian netinst comum **não** é suportada por `start-iso`; consulte [INTF-TERM-006](docs/interfaces/terminal/INTF-TERM-006-iso-live.md).
