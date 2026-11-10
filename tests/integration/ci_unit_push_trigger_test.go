@@ -8,9 +8,9 @@ import (
     "gopkg.in/yaml.v3"
 )
 
-// TestUnitWorkflowPushDevelopOnly protects the budget and trigger boundary:
-// the complete unit suite only runs after a commit is pushed to develop.
-func TestUnitWorkflowPushDevelopOnly(t *testing.T) {
+// TestUnitWorkflowPushAllBranches verifies the required all-branch push policy.
+// Tags, PR events, path restrictions and additional triggers remain excluded.
+func TestUnitWorkflowPushAllBranches(t *testing.T) {
     path := filepath.Join("..", "..", ".github", "workflows", "go-tests.yml")
     src, err := os.ReadFile(path)
     if err != nil {
@@ -31,18 +31,25 @@ func TestUnitWorkflowPushDevelopOnly(t *testing.T) {
     if !ok {
         t.Fatalf("only push trigger is allowed: %+v", cfg.On)
     }
-    var filters struct {
-        Branches []string `yaml:"branches"`
-        Tags []string `yaml:"tags"`
-        Paths []string `yaml:"paths"`
-        PathsIgnore []string `yaml:"paths-ignore"`
-    }
+    // Require only the all-branches pattern; all other keys restrict events
+    // or silently add executions outside the intended push policy.
+    var filters map[string]yaml.Node
     if err := push.Decode(&filters); err != nil {
         t.Fatal(err)
     }
-    if len(filters.Branches) != 1 || filters.Branches[0] != "develop" ||
-        len(filters.Tags) != 0 || len(filters.Paths) != 0 || len(filters.PathsIgnore) != 0 {
-        t.Fatalf("unit tests must run on every develop push only: %+v", filters)
+    if len(filters) != 1 {
+        t.Fatalf("unit tests must run on every branch push without other filters: %+v", filters)
+    }
+    branchesNode, ok := filters["branches"]
+    if !ok {
+        t.Fatalf("missing all-branches push filter: %+v", filters)
+    }
+    var branches []string
+    if err := branchesNode.Decode(&branches); err != nil {
+        t.Fatal(err)
+    }
+    if len(branches) != 1 || branches[0] != "**" {
+        t.Fatalf("unit tests must run on pushes to every branch, excluding tags: %v", branches)
     }
     if len(cfg.Permissions) != 1 || cfg.Permissions["contents"] != "read" {
         t.Fatalf("read-only permission required: %+v", cfg.Permissions)
