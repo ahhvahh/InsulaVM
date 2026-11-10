@@ -48,11 +48,14 @@ func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string
  if err:=os.MkdirAll(mount,0700);err!=nil{return "",err}
  if err:=os.MkdirAll(filepath.Join(stage,"live"),0700);err!=nil{return "",err}
  if err:=os.MkdirAll(filepath.Join(stage,"boot","grub"),0700);err!=nil{return "",err}
- if err:=runISOTool(ctx,"guestmount","--ro","-a",image,"-i",mount);err!=nil{return "",err}
+ guestfsCleanup,err:=mountGuestDiskReadOnly(ctx,image,mount)
+ if err!=nil{return "",err}
  defer func(){
   cleanupCtx,cancel:=context.WithTimeout(context.Background(),30*time.Second)
   defer cancel()
-  _=runISOTool(cleanupCtx,"guestunmount",mount)
+  if err:=runISOTool(cleanupCtx,"guestunmount",mount);err==nil{
+   guestfsCleanup()
+  }
  }()
  kernel,initrd,err:=selectLiveKernel(mount)
  if err!=nil{return "",err}
