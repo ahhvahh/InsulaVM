@@ -103,7 +103,30 @@ func TestPublicGoAPIOnRealDebianVM(t *testing.T) {
   if err!=nil||!strings.Contains(prep.String(),"INSULA_LIVE_BOOT_READY"){t.Fatalf("prepare live-boot: %v %s",err,prep.String())}
  }
  frozenResult,err:=engine.FreezeVM(ctx,insulavm.VMFreezeRequest{VMID:source.ID,Name:frozen,ShutdownTimeout:3*time.Minute})
- if err!=nil||frozenResult==nil||!frozenResult.SourceCleaned{t.Fatalf("FreezeVM: %+v %v",frozenResult,err)}
+ if err!=nil||frozenResult==nil||!frozenResult.SourceStopped||!frozenResult.SourceCleaned||
+  frozenResult.ForcedShutdown||frozenResult.ImagePath==""{t.Fatalf("FreezeVM: %+v %v",frozenResult,err)}
+ // A second real KVM guest must boot using the compressed independent QCOW2.
+ restored,err:=engine.StartVMWithOptions(ctx,insulavm.VMStartOptions{Profile:frozen},nil)
+ if err!=nil{t.Fatalf("boot second VM from frozen compressed QCOW2: %v",err)}
+ t.Cleanup(func(){
+  cleanupCtx,done:=context.WithTimeout(context.Background(),45*time.Second)
+  defer done()
+  _,_=engine.StopVMWithOptions(cleanupCtx,insulavm.VMStopOptions{VMID:restored.ID,GracePeriod:5*time.Second,ForceAfterTimeout:true})
+ })
+ var restoredOutput bytes.Buffer
+ _,err=engine.ExecVM(ctx,insulavm.ExecRequest{
+  VMID:restored.ID,Command:"test -f /etc/debian_version && echo INSULA_FROZEN_QCOW2_BOOT_OK",Output:&restoredOutput,
+ })
+ if err!=nil||!strings.Contains(restoredOutput.String(),"INSULA_FROZEN_QCOW2_BOOT_OK"){
+  t.Fatalf("restored QCOW2 guest validation: %v %s",err,restoredOutput.String())
+ }
+ restoredStop,err:=engine.StopVMWithOptions(ctx,insulavm.VMStopOptions{
+  VMID:restored.ID,GracePeriod:50*time.Second,ForceAfterTimeout:false,
+ })
+ if err!=nil||restoredStop==nil||!restoredStop.Graceful||restoredStop.Forced{
+  t.Fatalf("restored guest did not stop gracefully: %+v %v",restoredStop,err)
+ }
+ t.Log("INSULA_GO_API_QCOW2_RESTORE_OK")
  if !liveISO{t.Log("ISO Live scenario disabled by default; opt in via INSULA_TEST_LIVE_ISO=1");return}
  iso,err:=engine.ExportProfileLiveISO(ctx,frozen)
  if err!=nil{t.Fatalf("ExportProfileLiveISO: %v",err)}
