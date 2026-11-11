@@ -6,17 +6,21 @@ import (
  "fmt"
  "io"
  "os"
+ "path"
  "time"
 
  "github.com/ahhvahh/InsulaVM/pkg/executor"
+ "github.com/ahhvahh/InsulaVM/pkg/profile"
  "github.com/ahhvahh/InsulaVM/pkg/transfer"
  "golang.org/x/crypto/ssh"
 )
 
 // ImportRequest identifies a host file or directory and a running Linux VM.
-// The guest directory is configured ONCE in config.yaml guest.destination.
+// Destination overrides the legacy global default for unmanaged hosts.
+// Managed VM imports resolve the directory from their VM profile.
 type ImportRequest struct {
  SourcePath string
+ Destination string
  Host string
  User string
  PrivateKey string
@@ -54,7 +58,10 @@ type ImportResult struct {
 // path; the caller may cancel using ctx. When using Engine.StartVM, pass the
 // Instance.Address from that VM as request.Host, then Cleanup the instance.
 func(e *Engine)ImportPath(ctx context.Context,request ImportRequest)(result *ImportResult,runErr error){
- destination:=e.config.Guest.Destination
+ destination:=request.Destination
+ if destination==""{destination=e.config.Guest.Destination}
+ if err:=profile.ValidateGuestDestination(destination);err!=nil{return nil,fmt.Errorf("invalid import destination: %w",err)}
+ destination=path.Clean(destination)
  reporter:=importReporter{out:request.Output,callback:request.OnProgress,source:request.SourcePath,destination:destination}
  defer func(){
   if runErr!=nil{reporter.send("failed","Falha na importacao: "+runErr.Error(),0,0,0)}

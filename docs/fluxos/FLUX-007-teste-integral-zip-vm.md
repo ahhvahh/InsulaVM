@@ -17,7 +17,7 @@ Provar que o InsulaVM gerencia uma VM real, transfere um ZIP local pelo transpor
 
 - Host Linux amd64 com KVM/Libvirt, rede default ativa e DHCP, Go 1.23+, qemu-img, genisoimage, virsh e ACL de acesso ao UID QEMU.
 - QCOW2 Debian 12 Cloud com Cloud-Init, SSH e Python 3: obtido do espelho oficial e validado por SHA-512 pelo runner, ou fornecido pelo operador.
-- Configuração e SQLite isolados, diretório de workspace configurado em guest.destination.
+- Configuração e SQLite isolados, diretório de workspace configurado no guest.destination do perfil.
 - Sem credenciais pré-compartilhadas: o InsulaVM gera SSH/host keys por VM no NoCloud seed.
 
 ## Sequência

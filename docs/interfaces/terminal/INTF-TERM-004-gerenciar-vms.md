@@ -20,7 +20,7 @@ Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatu
 | `insula vm status` | `-id` obrigatório | Exibe identidade/SSH e estados; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 | `insula vm shell` | `-id` obrigatório; `-directory` opcional | Abre shell SSH na VM gerenciada; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `insula vm exec` | `-id`, `-command` obrigatórios; `-workspace`, `-sudo` opcionais | Executa comando e retorna logs; [FLUX-003](../../fluxos/FLUX-003-execucao-sequencial-logs.md) |
-| `insula vm import` | `-id`, `-source` obrigatórios | Copia arquivo/diretório para `guest.destination`; [ARQ-005](../../arquitetura/ARQ-005-importacao-arquivos.md) |
+| `insula vm import` | `-id`, `-source` obrigatórios | Copia arquivo/diretório para `guest.destination` do perfil; [ARQ-005](../../arquitetura/ARQ-005-importacao-arquivos.md) |
 | `insula vm freeze` | `-id` e `-name` obrigatórios; `-export-iso=false` e `-compress=true` por padrão; `-shutdown-timeout` opcional | Publica QCOW2 independente, opcionalmente comprimido com QEMU; [FLUX-004](../../fluxos/FLUX-004-congelar-vm.md) |
 | `insula vm stop` | `-id` obrigatório | Encerra e remove disco temporário de uma VM gerenciada; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `insula vm stop-all` | `-dry-run` opcional; não aceita `-id` | Processa somente domínios registrados neste InsulaVM; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |

@@ -39,6 +39,7 @@ func testFreezeBase(t *testing.T)(string,string,Profile){
 
 func TestFreezeFromOverlayCreatesStandaloneReusableProfile(t *testing.T){
  root,overlay,p:=testFreezeBase(t)
+ p.Guest=Guest{Destination:"/srv/frozen-workspace"}
  mockQEMUImageForFreeze(t,`{"format":"qcow2"}`,false)
  image,err:=FreezeFromOverlay(context.Background(),root,p,"my-build-v1",overlay)
  if err!=nil{t.Fatal(err)}
@@ -48,6 +49,7 @@ func TestFreezeFromOverlayCreatesStandaloneReusableProfile(t *testing.T){
  if saved.MemoryMiB!=2048||saved.VCPUs!=2||saved.Name!="my-build-v1"{
   t.Fatalf("profile changed unexpectedly: %+v",saved)
  }
+ if saved.Guest.Destination!="/srv/frozen-workspace"{t.Fatalf("frozen profile lost guest workspace: %+v",saved.Guest)}
  if saved.SSH.PrivateKey!=""||saved.SSH.KnownHosts!=""||saved.SSH.User!="insula"{
   t.Fatalf("source identity leaked into new profile: %+v",saved.SSH)
  }

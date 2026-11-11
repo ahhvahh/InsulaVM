@@ -32,6 +32,7 @@ type CreateProfileFromISORequest struct {
  MemoryMiB int
  VCPUs int
  DiskGB int
+ GuestDestination string
  Timeout time.Duration
  OnProgress func(ProfileISOProgress)
 }
@@ -55,6 +56,7 @@ func (e *Engine) CreateProfileFromISO(ctx context.Context,req CreateProfileFromI
  if ctx==nil{return nil,errors.New("context is required")}
  if err:=ctx.Err();err!=nil{return nil,err}
  if err:=storage.ValidateName(req.Name);err!=nil{return nil,fmt.Errorf("invalid profile name: %w",err)}
+ if err:=profile.ValidateGuestDestination(req.GuestDestination);err!=nil{return nil,fmt.Errorf("invalid guest destination: %w",err)}
  if !linuxInstallerUser.MatchString(e.config.SSH.User){return nil,errors.New("ssh.user must be a valid Linux account name for Debian Installer")}
  if !filepath.IsAbs(req.ISOPath){return nil,errors.New("ISO path must be absolute")}
  stat,err:=os.Lstat(req.ISOPath)
@@ -144,6 +146,7 @@ func (e *Engine) CreateProfileFromISO(ctx context.Context,req CreateProfileFromI
  p:=Profile{
   Name:req.Name,OS:"debian",MemoryMiB:req.MemoryMiB,VCPUs:req.VCPUs,
   DiskGB:req.DiskGB,ISO:req.ISOPath,SSH:profile.SSH{User:e.config.SSH.User},
+   Guest:profile.Guest{Destination:req.GuestDestination},
  }
  if err:=e.RegisterProfile(p,disk);err!=nil{return nil,fmt.Errorf("publish installed profile: %w",err)}
  saved,err:=e.GetProfile(req.Name)

@@ -148,6 +148,7 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
 
  notify("convert","Flattening QCOW2 backing chain into a named independent image")
  frozenProfile:=*original
+ if frozenProfile.Guest.Destination=="" {frozenProfile.Guest.Destination=e.config.Guest.Destination}
  frozenProfile.SSH=profile.SSH{User:record.SSHUser}
  image,err:=profile.FreezeFromOverlayWithOptions(ctx,e.config.Storage.Profiles,frozenProfile,req.Name,overlay,profile.FreezeOptions{Compress:!req.DisableQCOW2Compression})
  if err!=nil{return result,fmt.Errorf("create frozen profile: %w (original overlay preserved at %s)",err,sourceDir)}

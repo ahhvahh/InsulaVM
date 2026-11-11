@@ -86,8 +86,8 @@ func configCommand(args []string) error {
 		return err
 	}
 	c := engine.Configuration()
-	fmt.Printf("Valid: profiles=%s runs=%s logs=%s provider=%s guest_destination=%s ssh_user=%s\n",
-		localPathForCLI(c.Storage.Profiles), localPathForCLI(c.Storage.Runs), localPathForCLI(c.Storage.Logs), c.Virtualization.Provider, c.Guest.Destination, c.SSH.User)
+	fmt.Printf("Valid: profiles=%s runs=%s logs=%s provider=%s ssh_user=%s\n",
+  localPathForCLI(c.Storage.Profiles), localPathForCLI(c.Storage.Runs), localPathForCLI(c.Storage.Logs), c.Virtualization.Provider, c.SSH.User)
 	return nil
 }
 
@@ -110,6 +110,7 @@ func profileCommand(args []string) error {
 	installTimeout := fs.Duration("install-timeout", 90*time.Minute, "Debian ISO installer maximum duration")
 	address := fs.String("address", "", "existing guest SSH address (optional)")
 	user := fs.String("user", "", "guest SSH user (optional)")
+ destination := fs.String("destination", "", "absolute Linux guest workspace for a new profile")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -139,6 +140,7 @@ func profileCommand(args []string) error {
 		}
 		fmt.Printf("name=%s os=%s memory_mib=%d vcpus=%d disk_gb=%d version=%s image=%s\n",
 			p.Name, p.OS, p.MemoryMiB, p.VCPUs, p.DiskGB, p.Version, p.Image)
+  fmt.Printf("guest_destination=%s\n",p.GuestDestination(engine.Configuration().Guest.Destination))
 	case "register":
 		if *name == "" || *image == "" {
 			return errors.New("profile register requires -name and -image")
@@ -151,6 +153,7 @@ func profileCommand(args []string) error {
 			DiskGB: *disk,
 			ISO: *iso,
 			SSH: profile.SSH{Address: *address, User: *user},
+   Guest: profile.Guest{Destination:*destination},
 		}
 		if err := engine.RegisterProfile(p, *image); err != nil {
 			return err
@@ -173,7 +176,7 @@ func profileCommand(args []string) error {
 		defer cancel()
 		result, err := engine.CreateProfileFromISO(ctx, insulavm.CreateProfileFromISORequest{
 			Name:*name, ISOPath:*iso, MemoryMiB:ram, VCPUs:cores,
-			DiskGB:size, Timeout:*installTimeout,
+			DiskGB:size, GuestDestination:*destination, Timeout:*installTimeout,
 			OnProgress:func(p insulavm.ProfileISOProgress) {
 				fmt.Fprintf(os.Stderr, "[InsulaVM][iso:%s] %s\n",p.Stage,p.Message)
 			},

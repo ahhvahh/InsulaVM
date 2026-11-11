@@ -8,12 +8,6 @@ storage:
   # SQLite shared by CLI and imported Go library; no credentials stored here.
   database: insula.db
 
-# Single destination directory INSIDE every VM, shared across all imports
-# and used as the default directory for commands and Actions.
-# This is a guest Linux path, not a path on the host.
-guest:
-  destination: /tmp/insulavm/workspace
-
 virtualization:
   provider: kvm
   libvirt_uri: qemu:///system

@@ -39,12 +39,12 @@ func vmCommand(args []string)error{
  freezeOutput:=fs.String("output","","ISO destination (.iso); absolute or relative to the current directory")
  shutdownTimeout:=fs.Duration("shutdown-timeout",3*time.Minute,"graceful guest shutdown deadline for freeze")
  commandText:=fs.String("command","","shell command inside the VM")
- workspace:=fs.String("workspace","","guest working directory; default: config.yaml guest.destination")
- directory:=fs.String("directory","","guest subdirectory for interactive vm shell (relative to guest.destination)")
+ workspace:=fs.String("workspace","","guest working directory; default: profile.yaml guest.destination")
+ directory:=fs.String("directory","","guest subdirectory for interactive vm shell (relative to profile guest.destination)")
  sudo:=fs.Bool("sudo",false,"execute as root via sudo -n (requires passwordless mode)")
  source:=fs.String("source","","host file/directory to import")
  script:=fs.String("script","","local Bash file to upload and execute after deploy")
- extract:=fs.Bool("extract",false,"extract trusted .tar.gz/.tgz source in guest.destination before executing script")
+ extract:=fs.Bool("extract",false,"extract trusted .tar.gz/.tgz source in profile guest.destination before executing script")
  cmdTimeout:=fs.Duration("command-timeout",30*time.Minute,"timeout for each remote deploy step")
  if err:=fs.Parse(args[1:]);err!=nil{return err}
  if command=="freeze"||command=="export-iso"{
@@ -147,7 +147,7 @@ func vmCommand(args []string)error{
   if result!=nil{fmt.Println("Logs:",localPathForCLI(result.LogDirectory))}
   return presentCLIError(err,root)
  case "import":
-  if *id==""||*source==""{return errors.New("vm import requires -id and -source; destination comes from config.yaml")}
+  if *id==""||*source==""{return errors.New("vm import requires -id and -source; destination comes from the VM profile.yaml")}
   result,err:=engine.ImportToVM(ctx,insulavm.VMImportRequest{
    VMID:*id,SourcePath:*source,Output:os.Stdout,
   })

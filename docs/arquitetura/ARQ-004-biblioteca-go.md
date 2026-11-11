@@ -143,7 +143,7 @@ if result != nil { fmt.Println("Logs:", result.LogDirectory) }
 return err
 ```
 
-O destino físico **dentro do convidado** é sempre o `guest.destination` global do `config.yaml`, compartilhado entre todas as importações e utilizado por padrão para os jobs. O método `Engine.ImportToVM` recebe apenas `VMID` e `SourcePath`, recuperando IP, chave e usuário do SQLite. O manifesto não contém `destination`, senha ou chave SSH.
+O destino físico **dentro do convidado** é o `guest.destination` do `profile.yaml` selecionado. `Engine.ImportToVM` recebe apenas `VMID` e `SourcePath`, consulta o perfil da VM e resolve o destino, recuperando IP, chave e usuário do SQLite. Para hosts SSH não gerenciados, `Engine.ImportPath` aceita `ImportRequest.Destination` opcional. Perfis antigos sem destino usam o fallback legado de `config.yaml` (ou `/tmp/insulavm/workspace`). O manifesto não contém `destination`, senha ou chave SSH.
 
 A biblioteca permite executar `Engine.Run` com `SSH.User` por Action ou, se omitido, o usuário global `insula`. Para perfil gerenciado, o Cloud-Init cria o usuário escolhido e configura as credenciais específicas da instância. Consulte [ARQ-005](ARQ-005-importacao-arquivos.md).
 

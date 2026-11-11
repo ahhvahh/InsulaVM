@@ -34,7 +34,7 @@ O script recebe o nome-base do pacote em `$1` e só é executado após a transfe
 
 ## Enviar arquivo para VM ativa e executar comandos em sequência
 
-O script [`scripts/enviar-executar-vm.sh`](../../scripts/enviar-executar-vm.sh) usa `insula vm import`, aguarda o fim do envio, pode extrair `.tar.gz`/`.tgz`, executa cada comando com `insula vm exec` e opcionalmente abre `insula vm shell`. **Não inicia nem interrompe a VM**. O destino é sempre `guest.destination` do `config.yaml` (padrão: `/tmp/insulavm/workspace`).
+O script [`scripts/enviar-executar-vm.sh`](../../scripts/enviar-executar-vm.sh) usa `insula vm import`, aguarda o fim do envio, pode extrair `.tar.gz`/`.tgz`, executa cada comando com `insula vm exec` e opcionalmente abre `insula vm shell`. **Não inicia nem interrompe a VM**. O destino é o `guest.destination` do `profile.yaml` da VM (fallback legado: `/tmp/insulavm/workspace`).
 
 ```bash
 bash scripts/enviar-executar-vm.sh \
@@ -137,16 +137,17 @@ O SQLite é compartilhado entre CLI e biblioteca no caminho `storage.database` (
 
 O modo `ssh.sudo_mode: passwordless` no `config.yaml` habilita `sudo -n`, sem senha ou prompt. Use somente em VMs confiáveis; omitir a opção desabilita sudo por padrão. A biblioteca oferece `Engine.StartVM`, `GetVM`, `ListVMs`, `ExecVM` e `StopVM`. Veja [ARQ-006 — Identidade, SQLite e sudo](../../docs/arquitetura/ARQ-006-identidade-registro-sudo.md).
 
-## Destino compartilhado e usuário da Action
+## Destino por perfil e usuário da Action
 
-Defina **uma única pasta Linux dentro da VM** em [`config.yaml`](../../config.yaml). Todas as importações locais e os jobs sem `workspace` explícito usarão esse caminho em cada nova VM:
+Defina uma pasta Linux **para cada perfil** em `data/profiles/<nome>/profile.yaml`. As importações locais e os jobs sem `workspace` explícito usarão esse caminho nas VMs criadas a partir do perfil:
 
 ```yaml
+# profile.yaml
 guest:
   destination: /tmp/insulavm/workspace
-ssh:
-  user: insula
 ```
+
+O usuário SSH padrão continua em `config.yaml` (`ssh.user: insula`). Perfis antigos que não declaram `guest.destination` herdam o valor legado de `config.yaml`, ou `/tmp/insulavm/workspace` se não existir.
 
 O destino é criado no convidado pelo usuário SSH; não é uma pasta do hospedeiro. Se escolher um local protegido como `/opt`, prepare as permissões no perfil QCOW2 antes de executar.
 

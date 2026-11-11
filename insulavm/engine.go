@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"time"
 
 	"github.com/ahhvahh/InsulaVM/pkg/config"
@@ -76,10 +77,21 @@ func (e *Engine) GetProfile(name string) (*Profile, error) {
 // RegisterProfile copies a fully installed QCOW2 image to the profile store.
 // It does not install an OS. Existing profile names are never overwritten.
 func (e *Engine) RegisterProfile(p Profile, sourceQCOW2 string) error {
+ if p.Guest.Destination=="" {p.Guest.Destination=e.config.Guest.Destination}
 	if p.DiskGB == 0 {
 		p.DiskGB = e.config.Virtualization.DefaultDiskGB
 	}
 	return profile.Register(e.config.Storage.Profiles, p, sourceQCOW2)
+}
+
+// GuestDestinationForProfile resolves the directory inside a profile VM.
+// Missing legacy profile metadata retains the host-wide fallback for existing VMs.
+func (e *Engine) GuestDestinationForProfile(name string)(string,error){
+ if name=="" {return e.config.Guest.Destination,nil}
+ p,err:=e.GetProfile(name)
+ if errors.Is(err,os.ErrNotExist) {return e.config.Guest.Destination,nil}
+ if err!=nil{return "",fmt.Errorf("load profile %s guest destination: %w",name,err)}
+ return p.GuestDestination(e.config.Guest.Destination),nil
 }
 
 // StartVM creates a disposable Libvirt domain from the named QCOW2 profile.
@@ -322,13 +334,13 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 		return result, err
 	}
 	defer client.Close()
-	// Every run prepares one shared destination even if no import was declared.
-	if err:=ensureGuestWorkspace(ctx,client,e.config.Guest.Destination);err!=nil{
+	// Prepare the selected profile workspace even when no import was declared.
+ destination:=p.GuestDestination(e.config.Guest.Destination)
+	if err:=ensureGuestWorkspace(ctx,client,destination);err!=nil{
 		return result,err
 	}
 
 	for _, item := range m.Imports {
-		destination := e.config.Guest.Destination
 		reporter := importReporter{out: request.Output,callback: request.OnImportProgress,
 			source: item.Source,destination: destination}
 		imported,importErr := importWithClient(ctx,client,item.Source,destination,reporter)
@@ -344,7 +356,7 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	}
 	workspace := m.Workspace
 	if workspace == "" {
-		workspace = e.config.Guest.Destination
+		workspace = destination
 	}
 	runner := &executor.Executor{
 		Client: client,

@@ -21,7 +21,7 @@ func TestVMShellArgsUsePinnedHostAndGuestDirectory(t *testing.T){
   "UserKnownHostsFile=/srv/insula/runs/id/known_hosts",
   "StrictHostKeyChecking=yes","IdentitiesOnly=yes",
   "-p 22","insula@192.168.122.107",
-  "cd -- '/tmp/insulavm/workspace/InsulaVM' && exec",
+  "mkdir -p -- '/tmp/insulavm/workspace/InsulaVM' && cd -- '/tmp/insulavm/workspace/InsulaVM' && exec",
  }{
   if !strings.Contains(joined,want){t.Errorf("missing %q: %q",want,joined)}
  }
@@ -32,7 +32,7 @@ func TestVMShellRejectsPathTraversalAndInvalidPort(t *testing.T){
   IP:"127.0.0.1",SSHUser:"insula",SSHPort:22,
   PrivateKeyPath:"/tmp/key",KnownHostsPath:"/tmp/known_hosts",
  }
- for _,dir:=range []string{"..","../etc","x/../../etc","/etc"}{
+ for _,dir:=range []string{"..","../etc","x/../../etc","/etc","bad\npath","bad\x00path"}{
   if _,err:=vmShellArgs(good,"/tmp/workspace",dir);err==nil{
    t.Fatalf("accepted guest directory traversal %q",dir)
   }

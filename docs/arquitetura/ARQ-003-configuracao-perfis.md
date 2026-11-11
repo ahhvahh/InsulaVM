@@ -11,18 +11,20 @@
 
 | Arquivo | Escopo | Quando é lido |
 | --- | --- | --- |
-| [`config.yaml`](../../config.yaml) | Caminhos, `guest.destination` comum às VMs, Libvirt, SQLite, usuário SSH padrão e sudo | CLI e biblioteca Go |
-| `data/profiles/<nome>/profile.yaml` | Nome, OS, RAM (MiB), vCPUs, disco, versão, caminho QCOW2 e eventuais overrides SSH | Consulta, registro e execução do perfil |
+| [`config.yaml`](../../config.yaml) | Caminhos, Libvirt, SQLite, usuário SSH padrão, sudo e fallback legado do diretório do guest | CLI e biblioteca Go |
+| `data/profiles/<nome>/profile.yaml` | Nome, OS, RAM (MiB), vCPUs, disco, versão, caminho QCOW2, `guest.destination` e overrides SSH | Consulta, registro e execução do perfil |
 | [`insula.yaml`](../../insula.yaml.example) | Perfil, `ssh.user` opcional, imports de origens locais, setup e jobs; sem destino nem chaves SSH | Execução da Action |
 
-O destino dos arquivos é configurado apenas uma vez em `config.yaml`:
+O destino de trabalho é definido individualmente no `profile.yaml` de cada VM:
 
 ```yaml
+name: debian-minimal
+# ... demais campos do perfil
 guest:
-  destination: /tmp/insulavm/workspace
-ssh:
-  user: insula
+  destination: /srv/workspaces/debian
 ```
+
+O caminho é absoluto **dentro da VM**, não um ponto de montagem do host. É usado por `run`, `vm exec`, `vm import`, `vm deploy` e `vm shell`. Perfis antigos sem esse campo continuam usando `config.yaml` `guest.destination` como fallback legado; sem a chave global, o fallback é `/tmp/insulavm/workspace`. Perfis novos persistem `guest.destination` no próprio YAML.
 
 O manifesto de Action pode trazer `ssh.user: buildagent`, caso deseje outro usuário não-root; se omitido, a configuração global prevalece. Nas VMs novas, esse usuário e sua chave pública são provisionados automaticamente pelo Cloud-Init. Arquivos adicionais enviados por `vm import -id ... -source ...` são extraídos no mesmo destino.
 
@@ -99,7 +101,7 @@ O registro das VMs, seus estados históricos e a verificação conjunta SQLite/L
 - O usuário/daemon Libvirt precisa de permissões apropriadas para atravessar as pastas e abrir o QCOW2. A aplicação cria pastas privadas; configure ACLs/grupos explicitamente, **não** libere leitura ou escrita irrestrita em imagens.
 - O InsulaVM cria a identidade SSH de cada convidado, injeta no Cloud-Init e gera o `known_hosts` correspondente antes da autenticação. A imagem-base precisa ter o cache Cloud-Init limpo antes do registro e ser adequada à clonagem.
 - Apenas discos QCOW2 são suportados; imagens de instalação ISO não são diretamente executáveis como perfil pronto.
-- O InsulaVM prepara `guest.destination` por SSH antes de executar a Action e pode importar arquivos locais. **Não clona** automaticamente um repositório Git remoto. O usuário SSH precisa de permissão para criar o destino escolhido.
+- O InsulaVM prepara o `guest.destination` do perfil por SSH antes de executar a Action e pode importar arquivos locais. **Não clona** automaticamente um repositório Git remoto. O usuário SSH precisa de permissão para criar o destino escolhido.
 - Para segurança, erros de destruição que não permitam confirmar a parada da VM bloqueiam remoção do overlay.
 
 ## Pendências
