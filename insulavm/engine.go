@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+ "path/filepath"
 	"time"
 
 	"github.com/ahhvahh/InsulaVM/pkg/config"
@@ -47,6 +48,7 @@ type VMProgress = vm.Progress
 // same Engine concurrently; each run creates its own log directory and VM.
 type Engine struct {
 	config config.Config
+	configDir string
 }
 
 // New reads a global config.yaml file without creating any VM or directory.
@@ -55,7 +57,9 @@ func New(configPath string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Engine{config: *cfg}, nil
+	absolute,err:=filepath.Abs(configPath)
+ if err!=nil{return nil,err}
+ return &Engine{config: *cfg,configDir:filepath.Dir(absolute)}, nil
 }
 
 // Configuration returns a copy of the loaded global settings.
