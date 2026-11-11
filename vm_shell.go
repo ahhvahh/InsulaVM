@@ -16,7 +16,7 @@ import (
 )
 
 // vmShellArgs opens an interactive SSH terminal with strict host key checking.
-// -directory is a subdirectory of profile.yaml guest.destination, never a host path.
+// -directory is relative to the profile workspace destination, never a host path.
 func vmShellArgs(record registry.Entry, workspace,directory string)([]string,error){
  if record.IP==""||record.SSHUser==""||record.SSHPort<1||record.SSHPort>65535 {
   return nil,errors.New("VM sem IP, usuario ou porta SSH validos")
@@ -32,7 +32,7 @@ func vmShellArgs(record registry.Entry, workspace,directory string)([]string,err
   return nil,errors.New("-directory deve ser relativo a guest.destination, sem escapar com ..")
  }
  guestDir:=path.Join(workspace,cleaned)
- remote:="mkdir -p -- "+shellQuote(guestDir)+" && cd -- "+shellQuote(guestDir)+" && exec \"${SHELL:-/bin/sh}\" -l"
+ remote:=`cd "${HOME:-/}" 2>/dev/null || cd / || exit 1; if cd -- `+shellQuote(guestDir)+` 2>/dev/null; then :; else printf '[InsulaVM][vm:shell] Diretorio %s indisponivel; mantendo sessao em %s\n' `+shellQuote(guestDir)+` "$PWD" >&2; fi; exec "${SHELL:-/bin/sh}" -l`
  return []string{
   "-tt",
   "-i",record.PrivateKeyPath,
@@ -61,8 +61,11 @@ func vmShell(ctx context.Context,engine *insulavm.Engine,vmID,directory string)e
  for _,file:=range []string{record.PrivateKeyPath,record.KnownHostsPath}{
   if _,err:=os.Stat(file);err!=nil{return fmt.Errorf("arquivo SSH indisponivel (%s): %w",localPathForCLI(file),err)}
  }
- workspace,err:=engine.GuestDestinationForProfile(record.Profile)
- if err!=nil{return err}
+ workspace,workspaceErr:=engine.ResolveVMWorkspace(record.Profile)
+ if workspaceErr!=nil{
+  fmt.Fprintf(os.Stderr,"[InsulaVM][aviso] Nao foi possivel consultar workspace do perfil %q: %v; usando configuracao global\n",record.Profile,workspaceErr)
+  workspace=engine.Configuration().Guest.Destination
+ }
  args,err:=vmShellArgs(record,workspace,directory)
  if err!=nil{return err}
  if record.Status!="running" {

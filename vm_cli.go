@@ -1,11 +1,11 @@
 package main
 
 import (
- "context"
  "bufio"
  "encoding/json"
  "io"
  "strings"
+ "context"
  "errors"
  "flag"
  "fmt"
@@ -17,7 +17,7 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|start-iso|list|status|diagnose|shell|shell-command|shell-session|shell-history|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
+ if len(args)==0{return errors.New("usage: insula vm start|start-iso|install-iso|list|status|diagnose|shell|shell-command|shell-session|shell-history|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -43,13 +43,13 @@ func vmCommand(args []string)error{
  freezeOutput:=fs.String("output","","ISO destination (.iso); absolute or relative to the current directory")
  shutdownTimeout:=fs.Duration("shutdown-timeout",3*time.Minute,"graceful guest shutdown deadline for freeze")
  commandText:=fs.String("command","","shell command inside the VM")
- workspace:=fs.String("workspace","","guest working directory; default: profile.yaml guest.destination")
+ workspace:=fs.String("workspace","","guest working directory; default: profile.yaml workspace.destination or guest.destination")
  shellID:=fs.String("shell-id","","shell session UUID for history lookup")
- directory:=fs.String("directory","","guest subdirectory for interactive vm shell (relative to profile guest.destination)")
+ directory:=fs.String("directory","","guest subdirectory for interactive vm shell (relative to guest.destination)")
  sudo:=fs.Bool("sudo",false,"execute as root via sudo -n (requires passwordless mode)")
  source:=fs.String("source","","host file/directory to import")
  script:=fs.String("script","","local Bash file to upload and execute after deploy")
- extract:=fs.Bool("extract",false,"extract trusted .tar.gz/.tgz source in profile guest.destination before executing script")
+ extract:=fs.Bool("extract",false,"extract trusted .tar.gz/.tgz source in guest.destination before executing script")
  cmdTimeout:=fs.Duration("command-timeout",30*time.Minute,"timeout for each remote deploy step")
  if err:=fs.Parse(args[1:]);err!=nil{return err}
  if command=="freeze"||command=="export-iso"{
@@ -83,6 +83,20 @@ func vmCommand(args []string)error{
    instance.ID,instance.Profile,instance.IPAddress,instance.MACAddress,instance.SSHUser,instance.SudoMode)
   fmt.Println("SSH:",sshCommandForCLI(instance.SSHPrivateKeyPath,instance.SSHKnownHostsPath,instance.SSHUser,instance.IPAddress))
   fmt.Println("Para encerrar: insula vm stop -id",instance.ID)
+ case "install-iso":
+  if *profileName==""{return errors.New("vm install-iso requires -profile")}
+  instance,err:=engine.StartVMFromInstallerISO(ctx,*profileName,func(p insulavm.VMProgress){
+   fmt.Fprintf(os.Stderr,"[InsulaVM][install-iso:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
+  })
+  if err!=nil{
+   if instance!=nil{
+    fmt.Fprintf(os.Stderr,"[InsulaVM][aviso] Falha com VM preservada: id=%s nome=%s\n",instance.ID,instance.Name)
+   }
+   return presentCLIError(err,root)
+  }
+  fmt.Printf("VM ISO iniciada no Libvirt: id=%s profile=%s nome=%s disco=%s\n",instance.ID,instance.Profile,instance.Name,localPathForCLI(instance.Directory))
+  fmt.Println("Verificar boot no console: ./insula vm console -id",instance.ID)
+  fmt.Println("ATENCAO: 'vm stop' remove o disco temporario. Salve dados importantes antes.")
  case "start-iso":
   if *profileName==""{return errors.New("vm start-iso requires -profile")}
   instance,err:=engine.StartVMFromISO(ctx,insulavm.LiveISOStartOptions{

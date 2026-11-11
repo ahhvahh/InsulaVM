@@ -11,12 +11,13 @@
 package insulavm
 
 import (
+ "os"
+ "sync"
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"sync"
+ "path/filepath"
 	"time"
 
 	"github.com/ahhvahh/InsulaVM/pkg/config"
@@ -48,7 +49,8 @@ type VMProgress = vm.Progress
 // Engine holds immutable host configuration. Multiple Run calls may use the
 // same Engine concurrently; each run creates its own log directory and VM.
 type Engine struct {
- config config.Config
+	config config.Config
+	configDir string
  shellMu sync.Mutex
  shells map[string]*managedShell
  shellsClosed bool
@@ -60,7 +62,9 @@ func New(configPath string) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Engine{config: *cfg}, nil
+	absolute,err:=filepath.Abs(configPath)
+ if err!=nil{return nil,err}
+ return &Engine{config: *cfg,configDir:filepath.Dir(absolute)}, nil
 }
 
 // Configuration returns a copy of the loaded global settings.
@@ -81,19 +85,20 @@ func (e *Engine) GetProfile(name string) (*Profile, error) {
 // RegisterProfile copies a fully installed QCOW2 image to the profile store.
 // It does not install an OS. Existing profile names are never overwritten.
 func (e *Engine) RegisterProfile(p Profile, sourceQCOW2 string) error {
- if p.Guest.Destination=="" {p.Guest.Destination=e.config.Guest.Destination}
+ if p.Guest.Destination=="" && p.Workspace.Destination=="" {p.Guest.Destination=e.config.Guest.Destination}
 	if p.DiskGB == 0 {
 		p.DiskGB = e.config.Virtualization.DefaultDiskGB
 	}
 	return profile.Register(e.config.Storage.Profiles, p, sourceQCOW2)
 }
 
-// GuestDestinationForProfile resolves the directory inside a profile VM.
-// Missing legacy profile metadata retains the host-wide fallback for existing VMs.
+// GuestDestinationForProfile resolves the guest directory for a profile.
+// Existing workspace.destination takes precedence over guest.destination.
 func (e *Engine) GuestDestinationForProfile(name string)(string,error){
- if name=="" {return e.config.Guest.Destination,nil}
+ if e==nil{return "",errors.New("engine is required")}
+ if name==""{return e.config.Guest.Destination,nil}
  p,err:=e.GetProfile(name)
- if errors.Is(err,os.ErrNotExist) {return e.config.Guest.Destination,nil}
+ if errors.Is(err,os.ErrNotExist){return e.config.Guest.Destination,nil}
  if err!=nil{return "",fmt.Errorf("load profile %s guest destination: %w",name,err)}
  return p.GuestDestination(e.config.Guest.Destination),nil
 }
@@ -340,13 +345,15 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 		return result, err
 	}
 	defer client.Close()
-	// Prepare the selected profile workspace even when no import was declared.
- destination:=p.GuestDestination(e.config.Guest.Destination)
-	if err:=ensureGuestWorkspace(ctx,client,destination);err!=nil{
+	// For managed VMs, the profile workspace overrides the global legacy default.
+	guestDestination:=e.config.Guest.Destination
+	if managedVM && p!=nil {guestDestination=p.GuestDestination(e.config.Guest.Destination)}
+	if err:=ensureGuestWorkspace(ctx,client,guestDestination);err!=nil{
 		return result,err
 	}
 
 	for _, item := range m.Imports {
+		destination := guestDestination
 		reporter := importReporter{out: request.Output,callback: request.OnImportProgress,
 			source: item.Source,destination: destination}
 		imported,importErr := importWithClient(ctx,client,item.Source,destination,reporter)
@@ -362,7 +369,7 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	}
 	workspace := m.Workspace
 	if workspace == "" {
-		workspace = destination
+		workspace = guestDestination
 	}
 	runner := &executor.Executor{
 		Client: client,

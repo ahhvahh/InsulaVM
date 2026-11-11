@@ -48,15 +48,16 @@ func run(args []string) error {
 			fmt.Println("       insula vm list -config config.yaml")
 			fmt.Println("       insula vm status -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm shell -config config.yaml -id UUIDv7 [-directory InsulaVM]")
+            fmt.Println("       insula vm shell-command -id UUIDv7 -command \"ls\"")
+            fmt.Println("       insula vm shell-session -id UUIDv7 < commands.txt")
+            fmt.Println("       insula vm shell-history -shell-id SHELL_UUID  # or -id VM_UUID")
 			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7 [-grace-timeout 30s] [-force-after-timeout=true]")
 			fmt.Println("       insula vm start-iso -profile debian-go [-iso debian-go-live.iso]")
+            fmt.Println("       insula vm install-iso -config config.yaml -profile alpine-virt")
 			fmt.Println("       insula vm console -id UUIDv7")
 			fmt.Println("       insula vm stop-all -config config.yaml [-dry-run]")
 			fmt.Println("       insula vm freeze -id UUIDv7 -name debian13-tests [-shutdown-timeout 3m]")
 			fmt.Println("       insula vm exec -id UUIDv7 -command \"id -u\" [-sudo]")
-            fmt.Println("       insula vm shell-command -id UUIDv7 -command \"ls\"")
-            fmt.Println("       insula vm shell-session -id UUIDv7 < commands.txt")
-            fmt.Println("       insula vm shell-history -shell-id SHELL_UUID  # or -id VM_UUID")
 			fmt.Println("       insula vm import -id UUIDv7 -source /host/projeto")
 			fmt.Println("       insula vm deploy -config config.yaml -id UUIDv7 -source pacote.tar.gz -script instalar.sh [-extract] [-sudo]")
 			fmt.Println("       insula profile list -config config.yaml")
@@ -89,8 +90,8 @@ func configCommand(args []string) error {
 		return err
 	}
 	c := engine.Configuration()
-	fmt.Printf("Valid: profiles=%s runs=%s logs=%s provider=%s ssh_user=%s\n",
-  localPathForCLI(c.Storage.Profiles), localPathForCLI(c.Storage.Runs), localPathForCLI(c.Storage.Logs), c.Virtualization.Provider, c.SSH.User)
+	fmt.Printf("Valid: profiles=%s runs=%s logs=%s provider=%s guest_destination=%s ssh_user=%s\n",
+		localPathForCLI(c.Storage.Profiles), localPathForCLI(c.Storage.Runs), localPathForCLI(c.Storage.Logs), c.Virtualization.Provider, c.Guest.Destination, c.SSH.User)
 	return nil
 }
 
@@ -138,9 +139,13 @@ func profileCommand(args []string) error {
 		}
 	case "show":
 		p, err := engine.GetProfile(*name)
-		if err != nil {
-			return err
-		}
+        if err != nil {
+            installer,installErr:=profile.ReadInstaller(engine.Configuration().Storage.Profiles,*name)
+            if installErr!=nil{return err}
+            fmt.Printf("name=%s type=installer-iso os=%s memory_mib=%d vcpus=%d disk_gb=%d iso=%s\n",
+                installer.Name,installer.OS,installer.Hardware.RAM.MiB,installer.Hardware.CPU.Quantity,installer.Disk.SizeGB,installer.Disk.StartISO)
+            return nil
+        }
 		fmt.Printf("name=%s os=%s memory_mib=%d vcpus=%d disk_gb=%d version=%s image=%s\n",
 			p.Name, p.OS, p.MemoryMiB, p.VCPUs, p.DiskGB, p.Version, p.Image)
   fmt.Printf("guest_destination=%s\n",p.GuestDestination(engine.Configuration().Guest.Destination))
