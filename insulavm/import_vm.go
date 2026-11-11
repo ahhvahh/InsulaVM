@@ -33,8 +33,11 @@ func(e *Engine)ImportToVM(ctx context.Context,request VMImportRequest)(*ImportRe
  if record.IP==""||record.SSHPort<1||record.SSHPort>65535{
   return nil,errors.New("VM has no valid SSH address in registry")
  }
+ destination,err:=e.ResolveVMWorkspace(record.Profile)
+ if err!=nil{return nil,fmt.Errorf("resolve VM workspace: %w",err)}
  return e.ImportPath(ctx,ImportRequest{
   SourcePath:request.SourcePath,
+  Destination:destination,
   Host:net.JoinHostPort(record.IP,strconv.Itoa(record.SSHPort)),
   User:record.SSHUser,
   PrivateKey:record.PrivateKeyPath,
