@@ -16,7 +16,7 @@ func TestInstallerISODomainXMLContract(t *testing.T){
  for _,part:=range []string{
   "<domain type='kvm'>","<uuid>"+uuid+"</uuid>","<memory unit='MiB'>500</memory>",
   "<vcpu>1</vcpu>","<boot dev='cdrom'/>","<boot dev='hd'/>",
-  "device='cdrom'","<readonly/>","type='qcow2'","bus='virtio'",
+  "device='cdrom'","<readonly/>","<seclabel model='dac' relabel='no'/>","type='qcow2'","bus='virtio'",
   "guest&#39;s &amp; disk.qcow2","alpine&#39;s &amp; installer.iso",
   "<serial type='pty'>","<console type='pty'>","<source network='default'/>",
  }{
