@@ -7,6 +7,7 @@ import (
  "fmt"
  "io"
  "os"
+ "path"
  "path/filepath"
  "sort"
  "strings"
@@ -22,6 +23,12 @@ type SSH struct {
  KnownHosts string `yaml:"known_hosts,omitempty"`
 }
 
+// Workspace stores the guest working directory for this profile.
+// It does not need to exist before an SSH shell connection.
+type Workspace struct {
+ Destination string `yaml:"destination,omitempty"`
+}
+
 type Profile struct {
  Name string `yaml:"name"`
  OS string `yaml:"os,omitempty"`
@@ -31,6 +38,7 @@ type Profile struct {
  Version string `yaml:"version"`
  Image string `yaml:"image"`
  ISO string `yaml:"iso,omitempty"`
+ Workspace Workspace `yaml:"workspace,omitempty"`
  SSH SSH `yaml:"ssh,omitempty"`
  Directory string `yaml:"-"`
 }
@@ -40,6 +48,9 @@ func (p *Profile) Validate()error{
  if p.MemoryMiB<128 || p.MemoryMiB>1024*1024 {return errors.New("memory_mib must be between 128 and 1048576")}
  if p.VCPUs<1 || p.VCPUs>256 {return errors.New("vcpus must be between 1 and 256")}
  if p.DiskGB<1 {return errors.New("disk_gb must be positive")}
+ if dest:=p.Workspace.Destination;dest!="" && (!path.IsAbs(dest)||path.Clean(dest)=="/"||strings.ContainsAny(dest,"\r\n\x00")){
+  return errors.New("workspace.destination must be an absolute guest path other than /")
+ }
  if err:=storage.ValidateName(p.Version);err!=nil{return fmt.Errorf("profile.version: %w",err)}
  if strings.TrimSpace(p.Image)==""||filepath.IsAbs(p.Image){return errors.New("profile.image must be a relative path inside the profile directory")}
  if strings.ContainsAny(p.Image,"\r\n\x00") {return errors.New("profile.image includes unsafe characters")}
