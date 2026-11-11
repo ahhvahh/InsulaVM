@@ -112,7 +112,10 @@ func List(root string)([]string,error){
  for _,entry:=range entries {
   if !entry.IsDir()||storage.ValidateName(entry.Name())!=nil{continue}
   p,err:=Read(root,entry.Name())
-  if err==nil && p!=nil{names=append(names,entry.Name())}
+  if err==nil && p!=nil{names=append(names,entry.Name());continue}
+  if installer,installErr:=ReadInstaller(root,entry.Name());installErr==nil&&installer!=nil{
+   names=append(names,entry.Name())
+  }
  }
  sort.Strings(names)
  return names,nil
