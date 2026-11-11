@@ -32,7 +32,7 @@ func vmShellArgs(record registry.Entry, workspace,directory string)([]string,err
   return nil,errors.New("-directory deve ser relativo a guest.destination, sem escapar com ..")
  }
  guestDir:=path.Join(workspace,cleaned)
- remote:="cd -- "+shellQuote(guestDir)+" && exec \"${SHELL:-/bin/sh}\" -l"
+ remote:=`cd "${HOME:-/}" 2>/dev/null || cd / || exit 1; if cd -- `+shellQuote(guestDir)+` 2>/dev/null; then :; else printf '[InsulaVM][vm:shell] Diretorio %s indisponivel; mantendo sessao em %s\n' `+shellQuote(guestDir)+` "$PWD" >&2; fi; exec "${SHELL:-/bin/sh}" -l`
  return []string{
   "-tt",
   "-i",record.PrivateKeyPath,
@@ -61,7 +61,12 @@ func vmShell(ctx context.Context,engine *insulavm.Engine,vmID,directory string)e
  for _,file:=range []string{record.PrivateKeyPath,record.KnownHostsPath}{
   if _,err:=os.Stat(file);err!=nil{return fmt.Errorf("arquivo SSH indisponivel (%s): %w",localPathForCLI(file),err)}
  }
- args,err:=vmShellArgs(record,engine.Configuration().Guest.Destination,directory)
+ workspace,workspaceErr:=engine.ResolveVMWorkspace(record.Profile)
+ if workspaceErr!=nil{
+  fmt.Fprintf(os.Stderr,"[InsulaVM][aviso] Nao foi possivel consultar workspace do perfil %q: %v; usando configuracao global\n",record.Profile,workspaceErr)
+  workspace=engine.Configuration().Guest.Destination
+ }
+ args,err:=vmShellArgs(record,workspace,directory)
  if err!=nil{return err}
  if record.Status!="running" {
   fmt.Fprintf(os.Stderr,"[InsulaVM][aviso] Estado SQLite=%s; abrindo shell de diagnostico sem exigir workspace\n",record.Status)
