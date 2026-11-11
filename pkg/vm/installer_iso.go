@@ -140,7 +140,7 @@ func installerISODomainXML(id,name string,memoryMiB,vcpus int,disk,iso,mac strin
   "<disk type='file' device='disk'><driver name='qemu' type='qcow2'/>"+
   "<source file='%s'/><target dev='vda' bus='virtio'/></disk>"+
   "<disk type='file' device='cdrom'><driver name='qemu' type='raw'/>"+
-  "<source file='%s'/><target dev='sda' bus='sata'/><readonly/></disk>"+
+  "<source file='%s'><seclabel model='dac' relabel='no'/></source><target dev='sda' bus='sata'/><readonly/></disk>"+
   "%s<serial type='pty'><target port='0'/></serial>"+
   "<console type='pty'><target type='serial' port='0'/></console>"+
   "</devices></domain>",
