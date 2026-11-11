@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/ahhvahh/InsulaVM/pkg/config"
@@ -47,7 +48,10 @@ type VMProgress = vm.Progress
 // Engine holds immutable host configuration. Multiple Run calls may use the
 // same Engine concurrently; each run creates its own log directory and VM.
 type Engine struct {
-	config config.Config
+ config config.Config
+ shellMu sync.Mutex
+ shells map[string]*managedShell
+ shellsClosed bool
 }
 
 // New reads a global config.yaml file without creating any VM or directory.
@@ -159,7 +163,9 @@ func (e *Engine) StartVMWithProgress(ctx context.Context,name string,callback fu
 
 // StopVM destroys a disposable instance (by UUIDv7) and marks its history.
 func(e *Engine)StopVM(ctx context.Context,id string)error{
- return vm.StopByID(ctx,&e.config,id)
+ err:=vm.StopByID(ctx,&e.config,id)
+ if err!=nil{return err}
+ return e.closeShellsForVM(id)
 }
 
 // RunRequest selects the action to run and optionally overrides SSH settings.

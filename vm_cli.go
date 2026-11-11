@@ -2,6 +2,10 @@ package main
 
 import (
  "context"
+ "bufio"
+ "encoding/json"
+ "io"
+ "strings"
  "errors"
  "flag"
  "fmt"
@@ -13,7 +17,7 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|start-iso|list|status|diagnose|shell|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
+ if len(args)==0{return errors.New("usage: insula vm start|start-iso|list|status|diagnose|shell|shell-command|shell-session|shell-history|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -40,6 +44,7 @@ func vmCommand(args []string)error{
  shutdownTimeout:=fs.Duration("shutdown-timeout",3*time.Minute,"graceful guest shutdown deadline for freeze")
  commandText:=fs.String("command","","shell command inside the VM")
  workspace:=fs.String("workspace","","guest working directory; default: profile.yaml guest.destination")
+ shellID:=fs.String("shell-id","","shell session UUID for history lookup")
  directory:=fs.String("directory","","guest subdirectory for interactive vm shell (relative to profile guest.destination)")
  sudo:=fs.Bool("sudo",false,"execute as root via sudo -n (requires passwordless mode)")
  source:=fs.String("source","","host file/directory to import")
@@ -139,6 +144,73 @@ func vmCommand(args []string)error{
   }
  case "shell":
   return vmShell(ctx,engine,*id,*directory)
+ case "shell-command":
+  if *id==""||*commandText==""{return errors.New("vm shell-command requires -id and -command")}
+  result,err:=engine.ExecuteShellCommand(ctx,insulavm.ShellCommandRequest{
+   VMID:*id,ShellID:*shellID,Command:*commandText,CommandTimeout:*cmdTimeout,
+  })
+  if result!=nil{
+   _,_ = os.Stdout.Write(result.Output)
+   fmt.Fprintf(os.Stderr,"shell_id=%s command_id=%s exit_code=%d completed=%t\n",
+    result.ShellID,result.CommandID,result.ExitCode,result.Completed)
+  }
+  if closeErr:=engine.Close();closeErr!=nil{err=errors.Join(err,closeErr)}
+  if err!=nil{return err}
+  if result.ExitCode!=0{return fmt.Errorf("remote command exited with code %d",result.ExitCode)}
+  return nil
+ case "shell-session":
+  if *id==""{return errors.New("vm shell-session requires -id")}
+  if *shellID!=""{return errors.New("cannot reattach a shell from a previous CLI process; use one long-lived vm shell-session invocation")}
+  reader:=bufio.NewReader(os.Stdin)
+  active:=""
+  defer func(){if err:=engine.Close();err!=nil{fmt.Fprintln(os.Stderr,"[InsulaVM][shell] close:",err)}}()
+  for{
+   line,readErr:=reader.ReadString('\n')
+   if readErr!=nil&&!errors.Is(readErr,io.EOF){return readErr}
+   line=strings.TrimSuffix(line,"\n")
+   line=strings.TrimSuffix(line,"\r")
+   if strings.TrimSpace(line)!=""{
+    result,runErr:=engine.ExecuteShellCommand(ctx,insulavm.ShellCommandRequest{
+     VMID:*id,ShellID:active,Command:line,CommandTimeout:*cmdTimeout,
+    })
+    if result!=nil{
+     active=result.ShellID
+     _,_=os.Stdout.Write(result.Output)
+     fmt.Fprintf(os.Stderr,"shell_id=%s command_id=%s exit_code=%d completed=%t\n",
+      result.ShellID,result.CommandID,result.ExitCode,result.Completed)
+    }
+    if runErr!=nil{return runErr}
+   }
+   if errors.Is(readErr,io.EOF){break}
+  }
+  return nil
+ case "shell-history":
+  if *shellID==""{
+   if *id==""{return errors.New("vm shell-history requires -shell-id or -id")}
+   sessions,err:=engine.ShellSessionsForVM(ctx,*id)
+   if err!=nil{return err}
+   encoder:=json.NewEncoder(os.Stdout)
+   for _,session:=range sessions{if err:=encoder.Encode(session);err!=nil{return err}}
+   return nil
+  }
+  history,err:=engine.ShellCommandHistory(ctx,*shellID)
+  if err!=nil{return err}
+  encoder:=json.NewEncoder(os.Stdout)
+  for _,entry:=range history{
+   if err:=encoder.Encode(struct{
+    ID string `json:"id"`
+    ShellID string `json:"shell_id"`
+    VMID string `json:"vm_id"`
+    Command string `json:"command"`
+    Output string `json:"output"`
+    Status string `json:"status"`
+    ExitCode *int `json:"exit_code"`
+    Error string `json:"error"`
+    StartedAt string `json:"started_at"`
+    FinishedAt string `json:"finished_at"`
+   }{entry.ID,entry.ShellID,entry.VMID,entry.Command,string(entry.Output),entry.Status,entry.ExitCode,entry.Error,entry.StartedAt,entry.FinishedAt});err!=nil{return err}
+  }
+  return nil
  case "exec":
   if *id==""||*commandText==""{return errors.New("vm exec requires -id and -command")}
   result,err:=engine.ExecVM(ctx,insulavm.ExecRequest{
