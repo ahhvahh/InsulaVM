@@ -48,6 +48,9 @@ func run(args []string) error {
 			fmt.Println("       insula vm list -config config.yaml")
 			fmt.Println("       insula vm status -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm shell -config config.yaml -id UUIDv7 [-directory InsulaVM]")
+            fmt.Println("       insula vm shell-command -id UUIDv7 -command \"ls\"")
+            fmt.Println("       insula vm shell-session -id UUIDv7 < commands.txt")
+            fmt.Println("       insula vm shell-history -shell-id SHELL_UUID  # or -id VM_UUID")
 			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7 [-grace-timeout 30s] [-force-after-timeout=true]")
 			fmt.Println("       insula vm start-iso -profile debian-go [-iso debian-go-live.iso]")
             fmt.Println("       insula vm install-iso -config config.yaml -profile alpine-virt")
@@ -111,6 +114,7 @@ func profileCommand(args []string) error {
 	installTimeout := fs.Duration("install-timeout", 90*time.Minute, "Debian ISO installer maximum duration")
 	address := fs.String("address", "", "existing guest SSH address (optional)")
 	user := fs.String("user", "", "guest SSH user (optional)")
+ destination := fs.String("destination", "", "absolute Linux guest workspace for a new profile")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
@@ -144,6 +148,7 @@ func profileCommand(args []string) error {
         }
 		fmt.Printf("name=%s os=%s memory_mib=%d vcpus=%d disk_gb=%d version=%s image=%s\n",
 			p.Name, p.OS, p.MemoryMiB, p.VCPUs, p.DiskGB, p.Version, p.Image)
+  fmt.Printf("guest_destination=%s\n",p.GuestDestination(engine.Configuration().Guest.Destination))
 	case "register":
 		if *name == "" || *image == "" {
 			return errors.New("profile register requires -name and -image")
@@ -156,6 +161,7 @@ func profileCommand(args []string) error {
 			DiskGB: *disk,
 			ISO: *iso,
 			SSH: profile.SSH{Address: *address, User: *user},
+   Guest: profile.Guest{Destination:*destination},
 		}
 		if err := engine.RegisterProfile(p, *image); err != nil {
 			return err
@@ -178,7 +184,7 @@ func profileCommand(args []string) error {
 		defer cancel()
 		result, err := engine.CreateProfileFromISO(ctx, insulavm.CreateProfileFromISORequest{
 			Name:*name, ISOPath:*iso, MemoryMiB:ram, VCPUs:cores,
-			DiskGB:size, Timeout:*installTimeout,
+			DiskGB:size, GuestDestination:*destination, Timeout:*installTimeout,
 			OnProgress:func(p insulavm.ProfileISOProgress) {
 				fmt.Fprintf(os.Stderr, "[InsulaVM][iso:%s] %s\n",p.Stage,p.Message)
 			},

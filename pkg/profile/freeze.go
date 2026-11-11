@@ -52,6 +52,7 @@ func FreezeFromOverlayWithOptions(ctx context.Context,root string,original Profi
  saved.Image="versions/v001/base.qcow2"
  saved.ISO=""
  saved.Directory=target
+ saved.Guest.Destination=saved.GuestDestination("")
  // Never persist host access paths/identity from an existing source VM.
  saved.SSH=SSH{User:original.SSH.User}
  if err:=saved.Validate();err!=nil{return "",err}

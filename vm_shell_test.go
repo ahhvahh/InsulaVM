@@ -35,7 +35,7 @@ func TestVMShellRejectsPathTraversalAndInvalidPort(t *testing.T){
   IP:"127.0.0.1",SSHUser:"insula",SSHPort:22,
   PrivateKeyPath:"/tmp/key",KnownHostsPath:"/tmp/known_hosts",
  }
- for _,dir:=range []string{"..","../etc","x/../../etc","/etc"}{
+ for _,dir:=range []string{"..","../etc","x/../../etc","/etc","bad\npath","bad\x00path"}{
   if _,err:=vmShellArgs(good,"/tmp/workspace",dir);err==nil{
    t.Fatalf("accepted guest directory traversal %q",dir)
   }
@@ -77,5 +77,12 @@ func TestVMShellKeepsLoginWhenWorkspaceUnavailable(t *testing.T){
    hasWarning:=strings.Contains(string(output),"indisponivel")
    if hasWarning!=tc.warning{t.Fatalf("unexpected workspace warning: %s",output)}
   })
+ }
+}
+
+func TestVMShellRejectsUnsafeWorkspace(t *testing.T){
+ record:=registry.Entry{IP:"127.0.0.1",SSHUser:"insula",SSHPort:22,PrivateKeyPath:"/tmp/key",KnownHostsPath:"/tmp/known_hosts"}
+ for _,workspace:=range []string{"/tmp/line\nnew","/tmp/bad\x00name"}{
+  if _,err:=vmShellArgs(record,workspace,"");err==nil{t.Fatalf("accepted unsafe workspace %q",workspace)}
  }
 }

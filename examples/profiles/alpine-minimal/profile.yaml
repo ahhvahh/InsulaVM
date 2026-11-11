@@ -6,5 +6,7 @@ vcpus: 1
 disk_gb: 2
 version: v001
 image: versions/v001/base.qcow2
+guest:
+  destination: /tmp/insulavm/workspace
 ssh:
   user: insula

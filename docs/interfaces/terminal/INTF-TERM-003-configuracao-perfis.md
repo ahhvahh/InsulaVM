@@ -18,7 +18,7 @@
 | `go run . run -config config.yaml -manifest insula.yaml` | Iniciar VM descartável do perfil selecionado e executar jobs |
 | `go run . run -config config.yaml -manifest insula.yaml -host 192.0.2.10:22` | Executar jobs em guest SSH existente, sem criar instância |
 
-O comando `profile register` aceita adicionalmente `-os`, `-iso` (metadado informativo, não instalação), `-address` e `-user`. A imagem de origem deve existir localmente e ser QCOW2 com sistema instalado. Os parâmetros `-memory-mib` e `-vcpus` são obrigatórios; `-disk-gb` recebe padrão de `config.yaml` caso ausente.
+O comando `profile register` aceita adicionalmente `-os`, `-iso` (metadado informativo, não instalação), `-address`, `-user` e `-destination` (diretório absoluto dentro da VM). `profile create-from-iso` também aceita `-destination`. A imagem de origem deve existir localmente e ser QCOW2 com sistema instalado. Os parâmetros `-memory-mib` e `-vcpus` são obrigatórios; `-disk-gb` recebe padrão de `config.yaml` caso ausente.
 
 ## Operações de VM e automação
 
@@ -33,8 +33,6 @@ storage:
   runs: runs
   logs: logs
   database: insula.db
-guest:
-  destination: /tmp/insulavm/workspace
 virtualization:
   provider: kvm
   libvirt_uri: qemu:///system
@@ -45,7 +43,7 @@ ssh:
   connect_timeout_seconds: 60
 ```
 
-Em **VMs gerenciadas**, a aplicação gera e protege a chave SSH de cada instância; nenhuma chave ou destino precisa ser passado na CLI. O usuário padrão é `insula`. Para hosts SSH externos, configure `ssh.private_key` e `ssh.known_hosts` como caminhos de arquivos no `config.yaml`, nunca o conteúdo de uma chave privada.
+O diretório de trabalho é configurado no `profile.yaml` (exemplo: `guest: {destination: /srv/workspace}`). Em **VMs gerenciadas**, a aplicação gera e protege a chave SSH de cada instância; nenhuma chave ou destino precisa ser passado na CLI ao utilizar o perfil. O usuário padrão é `insula`. Para hosts SSH externos, configure `ssh.private_key` e `ssh.known_hosts` como caminhos de arquivos no `config.yaml`, nunca o conteúdo de uma chave privada.
 
 ## Seleção de perfil no manifesto
 
@@ -71,7 +69,7 @@ A CLI resolve `profile` a partir de `storage.profiles`, verifica `profile.yaml` 
 ## Limitações
 
 - Uma ISO de instalação não é um QCOW2 de perfil. A ferramenta **não instala** um SO automaticamente neste ciclo.
-- A imagem deve conter SO já instalado, DHCP, SSH e Cloud-Init. O InsulaVM cria o diretório `guest.destination` pelo usuário SSH, importa arquivos locais e usa essa pasta para os jobs, mas não realiza checkout Git automaticamente.
+- A imagem deve conter SO já instalado, DHCP, SSH e Cloud-Init. O InsulaVM cria o diretório `guest.destination` do perfil pelo usuário SSH, importa arquivos locais e usa essa pasta para os jobs, mas não realiza checkout Git automaticamente.
 - Chaves SSH são geradas por instância via Cloud-Init NoCloud e verificadas com `known_hosts`. Isso exige que a imagem-base já venha preparada com Cloud-Init.
 - A VM precisa ser acessível pelo Libvirt e ter permissões sobre o arquivo de disco.
 - `profile show/list` não inicializam VM. `profile register` copia o disco uma vez; Actions futuras utilizam overlays sem copiar todo o disco.

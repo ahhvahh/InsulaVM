@@ -29,6 +29,34 @@ type Workspace struct {
  Destination string `yaml:"destination,omitempty"`
 }
 
+// Guest retains the per-profile guest destination used by existing profiles.
+// workspace.destination takes precedence when both fields are present.
+type Guest struct {
+ Destination string `yaml:"destination,omitempty"`
+}
+
+const DefaultGuestDestination = "/tmp/insulavm/workspace"
+
+// ValidateGuestDestination validates a guest-internal absolute path.
+// An empty value denotes an unset field in legacy profile metadata.
+func ValidateGuestDestination(dest string) error {
+ if dest=="" {return nil}
+ if !path.IsAbs(dest)||path.Clean(dest)=="/"||strings.ContainsAny(dest,"\x00\n\r") {
+  return errors.New("guest.destination must be an absolute Linux directory other than /")
+ }
+ return nil
+}
+
+// GuestDestination resolves both accepted profile fields before the legacy default.
+func (p *Profile) GuestDestination(legacy string) string {
+ if p!=nil {
+  if p.Workspace.Destination!="" {return path.Clean(p.Workspace.Destination)}
+  if p.Guest.Destination!="" {return path.Clean(p.Guest.Destination)}
+ }
+ if legacy!="" {return legacy}
+ return DefaultGuestDestination
+}
+
 type Profile struct {
  Name string `yaml:"name"`
  OS string `yaml:"os,omitempty"`
@@ -39,6 +67,7 @@ type Profile struct {
  Image string `yaml:"image"`
  ISO string `yaml:"iso,omitempty"`
  Workspace Workspace `yaml:"workspace,omitempty"`
+ Guest Guest `yaml:"guest,omitempty"`
  SSH SSH `yaml:"ssh,omitempty"`
  Directory string `yaml:"-"`
 }
@@ -51,6 +80,7 @@ func (p *Profile) Validate()error{
  if dest:=p.Workspace.Destination;dest!="" && (!path.IsAbs(dest)||path.Clean(dest)=="/"||strings.ContainsAny(dest,"\r\n\x00")){
   return errors.New("workspace.destination must be an absolute guest path other than /")
  }
+ if err:=ValidateGuestDestination(p.Guest.Destination);err!=nil{return fmt.Errorf("profile.%w",err)}
  if err:=storage.ValidateName(p.Version);err!=nil{return fmt.Errorf("profile.version: %w",err)}
  if strings.TrimSpace(p.Image)==""||filepath.IsAbs(p.Image){return errors.New("profile.image must be a relative path inside the profile directory")}
  if strings.ContainsAny(p.Image,"\r\n\x00") {return errors.New("profile.image includes unsafe characters")}
@@ -138,6 +168,7 @@ func Register(root string,p Profile,source string)error{
  if err:=storage.ValidateName(p.Name);err!=nil{return err}
  if p.Version==""{p.Version="v001"}
  if p.Image==""{p.Image="versions/"+p.Version+"/base.qcow2"}
+ if p.Guest.Destination=="" && p.Workspace.Destination=="" {p.Guest.Destination=p.GuestDestination("")}
  p.Directory=filepath.Join(root,p.Name)
  if err:=p.Validate();err!=nil{return err}
  sourceAbs,err:=filepath.Abs(source);if err!=nil{return err}

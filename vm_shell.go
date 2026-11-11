@@ -16,7 +16,7 @@ import (
 )
 
 // vmShellArgs opens an interactive SSH terminal with strict host key checking.
-// -directory is a subdirectory of guest.destination, never a host path.
+// -directory is relative to the profile workspace destination, never a host path.
 func vmShellArgs(record registry.Entry, workspace,directory string)([]string,error){
  if record.IP==""||record.SSHUser==""||record.SSHPort<1||record.SSHPort>65535 {
   return nil,errors.New("VM sem IP, usuario ou porta SSH validos")
@@ -24,11 +24,11 @@ func vmShellArgs(record registry.Entry, workspace,directory string)([]string,err
  if record.PrivateKeyPath==""||record.KnownHostsPath==""{
   return nil,errors.New("VM sem caminhos de chave SSH e known_hosts")
  }
- if !path.IsAbs(workspace)||path.Clean(workspace)=="/"{
+ if !path.IsAbs(workspace)||path.Clean(workspace)=="/"||strings.ContainsAny(workspace,"\x00\n\r"){
   return nil,errors.New("guest.destination precisa ser um diretorio absoluto")
  }
  cleaned:=path.Clean(directory)
- if path.IsAbs(directory)||cleaned==".."||strings.HasPrefix(cleaned,"../"){
+ if path.IsAbs(directory)||cleaned==".."||strings.HasPrefix(cleaned,"../")||strings.ContainsAny(directory,"\x00\n\r"){
   return nil,errors.New("-directory deve ser relativo a guest.destination, sem escapar com ..")
  }
  guestDir:=path.Join(workspace,cleaned)

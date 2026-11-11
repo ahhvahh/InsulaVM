@@ -11,7 +11,7 @@
 
 | Componente | Responsabilidade implementada |
 | --- | --- |
-| `pkg/config` | Fornecer o `guest.destination` único, configurado no host e usado dentro do convidado |
+| `pkg/profile` | Resolver e validar `guest.destination` específico de cada perfil; `pkg/config` mantém apenas o fallback legado |
 | `pkg/transfer/archive.go` | Preparar TAR.GZ temporário dos arquivos e diretórios locais permitidos |
 | `pkg/transfer/remote.go` | Enviar pacote via sessão SSH, verificar o tamanho recebido e extrair no destino |
 | `insulavm/import_vm.go` | Resolver estado, IP e credenciais individuais da VM cadastrada pelo UUIDv7 |

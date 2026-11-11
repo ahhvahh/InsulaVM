@@ -32,11 +32,15 @@ A biblioteca oferece `StartVMWithOptions(ctx, VMStartOptions{Profile,StartupScri
 ## Seleção do usuário SSH por Action
 
 ```yaml
-# config.yaml: padrão de todas as VMs
-guest:
-  destination: /tmp/insulavm/workspace
+# config.yaml: usuário SSH padrão
 ssh:
   user: insula
+```
+
+```yaml
+# data/profiles/debian-minimal/profile.yaml: destino deste perfil
+guest:
+  destination: /tmp/insulavm/workspace
 ```
 
 ```yaml
@@ -55,7 +59,7 @@ setup:
 
 A opção `ssh.user` da Action é **opcional**: se ausente, o InsulaVM usa o usuário do perfil (quando definido) ou a configuração global (`insula` por padrão). O Cloud-Init provisiona o usuário escolhido e injeta sua chave pública individual. **Nunca** informe `key`, `known_hosts`, senha ou diretório remoto no YAML da Action.
 
-O caminho `guest.destination` é sempre o destino dos arquivos e o diretório inicial dos jobs quando `workspace` for omitido. O InsulaVM tenta criá-lo **como o usuário SSH**, sem elevar privilégios automaticamente. Para pastas protegidas, prepare permissões no perfil ou escolha um caminho acessível.
+O caminho `guest.destination` do perfil é sempre o destino dos arquivos e o diretório inicial dos jobs quando `workspace` for omitido. O InsulaVM tenta criá-lo **como o usuário SSH**, sem elevar privilégios automaticamente. Para pastas protegidas, prepare permissões no perfil ou escolha um caminho acessível.
 
 Se a Action for executada numa VM SSH **externa**, não gerenciada pelo InsulaVM, a conta já precisa existir e aceitar uma chave previamente autorizada. Nesse caso, configure `ssh.private_key` e `ssh.known_hosts` no `config.yaml` global; não há como provisionar uma conta remota sem acesso prévio.
 

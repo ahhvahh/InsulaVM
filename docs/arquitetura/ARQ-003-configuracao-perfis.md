@@ -12,7 +12,7 @@
 | Arquivo | Escopo | Quando é lido |
 | --- | --- | --- |
 | [`config.yaml`](../../config.yaml) | Caminhos, `guest.destination` como fallback legado, Libvirt, SQLite, usuário SSH padrão e sudo | CLI e biblioteca Go |
-| `data/profiles/<nome>/profile.yaml` | Nome, OS, RAM (MiB), vCPUs, disco, versão, caminho QCOW2, `workspace.destination` opcional e eventuais overrides SSH | Consulta, registro e execução do perfil |
+| `data/profiles/<nome>/profile.yaml` | Nome, OS, RAM (MiB), vCPUs, disco, versão, caminho QCOW2, `workspace.destination` ou `guest.destination` opcionais e eventuais overrides SSH | Consulta, registro e execução do perfil |
 | [`insula.yaml`](../../insula.yaml.example) | Perfil, `ssh.user` opcional, imports de origens locais, setup e jobs; sem destino nem chaves SSH | Execução da Action |
 
 O destino padrão legado permanece disponível em `config.yaml`:
@@ -26,7 +26,17 @@ ssh:
 
 O manifesto de Action pode trazer `ssh.user: buildagent`, caso deseje outro usuário não-root; se omitido, a configuração global prevalece. Nas VMs novas, esse usuário e sua chave pública são provisionados automaticamente pelo Cloud-Init. Arquivos adicionais enviados por `vm import -id ... -source ...` são extraídos no mesmo destino.
 
-Em um perfil gerenciado, `workspace.destination` sobrescreve `guest.destination` para `vm shell`, `vm exec`, `vm import` e Actions. O acesso interativo inicia no diretório inicial do usuário SSH e tenta entrar no workspace. Se o caminho não existir ou não for acessível, informa um aviso e **mantém a sessão aberta** no diretório inicial. Ações não interativas continuam apresentando erros de diretório para impedir execuções em locais inesperados. O `workspace.destination` deve ser um caminho Linux absoluto, diferente de `/`, sem NUL ou quebras de linha.\n\nO perfil **não** contém a instalação do sistema por si só: `profile.yaml` aponta para um arquivo binário `base.qcow2` com o sistema operacional já instalado. Os segredos não devem constar dos YAMLs.
+Em um perfil gerenciado, o InsulaVM prioriza `workspace.destination`, depois `guest.destination` do próprio perfil, mantendo `config.yaml guest.destination` apenas como fallback legado, para `vm shell`, `vm exec`, `vm import` e Actions. O acesso interativo inicia no diretório inicial do usuário SSH e tenta entrar no workspace. Se o caminho não existir ou não for acessível, informa um aviso e **mantém a sessão aberta** no diretório inicial. Ações não interativas continuam apresentando erros de diretório para impedir execuções em locais inesperados. Ambos os campos de destino devem conter um caminho Linux absoluto, diferente de `/`, sem NUL ou quebras de linha.
+
+Exemplo de configuração individual no `profile.yaml`:
+
+```yaml
+name: debian-minimal
+workspace:
+  destination: /srv/workspaces/debian
+```
+
+O perfil **não** contém a instalação do sistema por si só: `profile.yaml` aponta para um arquivo binário `base.qcow2` com o sistema operacional já instalado. Os segredos não devem constar dos YAMLs.
 
 ## Pastas criadas pela aplicação
 

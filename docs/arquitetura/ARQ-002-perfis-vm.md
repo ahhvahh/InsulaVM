@@ -56,7 +56,7 @@ A ISO do usuário pode continuar em caminho local externo informado por ele; sal
 
 ### Metadados persistentes do perfil
 
-O formato inicial de `profile.yaml` já é lido pelo [módulo profile](../../pkg/profile/profile.go), separado do manifesto de execução `insula.yaml`. Campos atuais: `name`, `os`, `memory_mib`, `vcpus`, `disk_gb`, `version`, `image`, `iso` e os overrides opcionais `ssh`. Evoluções como checksums e publicação de novas versões ainda são propostas.
+O formato inicial de `profile.yaml` já é lido pelo [módulo profile](../../pkg/profile/profile.go), separado do manifesto de execução `insula.yaml`. Campos atuais: `name`, `os`, `memory_mib`, `vcpus`, `disk_gb`, `version`, `image`, `iso`, `guest.destination` (diretório de trabalho no convidado) e os overrides opcionais `ssh`. Evoluções como checksums e publicação de novas versões ainda são propostas.
 
 | Informação | Finalidade |
 | --- | --- |

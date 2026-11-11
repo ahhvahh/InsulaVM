@@ -79,7 +79,7 @@ flowchart LR
 
 - **Remoto:** obter URL e referência solicitadas (branch/tag/commit) e materializar uma revisão identificável. Para repositórios privados, evitar gravar credenciais no disco ou na ISO da VM.
 - **Local:** compactar o conteúdo de trabalho autorizado no hospedeiro e transferir por canal autenticado (por exemplo, archive TAR via SSH); não pressupor que todo diretório local seja um repositório Git válido.
-- **Raiz de execução:** `guest.destination` de `config.yaml` define o destino dos imports e workspace padrão dos comandos, como `/tmp/insulavm/workspace`. `setup` roda como usuário SSH não-root, sem sudo automático; `workspace` do manifesto pode sobrescrever o diretório de trabalho.
+- **Raiz de execução:** `guest.destination` do `profile.yaml` selecionado define o destino dos imports e workspace padrão dos comandos, como `/tmp/insulavm/workspace`. `setup` roda como usuário SSH não-root, sem sudo automático; `workspace` do manifesto pode sobrescrever o diretório de trabalho.
 - **Ordem:** materialização do projeto antes de `setup`; execução de `setup` antes dos jobs, conforme [FLUX-001](../fluxos/FLUX-001-execucao-manifesto.md).
 
 ## Segurança e requisitos não funcionais

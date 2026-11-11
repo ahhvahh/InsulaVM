@@ -14,7 +14,7 @@
 2. **Nomes canônicos das operações:** `CreateProfileFromISO`, `CreateVM`, `UploadArchive`, `ExecuteScript`, `ExecuteCommand`, `StopVM`, `StopAllVMs` e `FreezeVM`. Os métodos legados podem continuar como aliases para compatibilidade; uma nova integração deve preferir os canônicos assim que implementados.
 3. **Mesmos argumentos lógicos e mesmos resultados:** diferenças específicas de interface (flags CLI versus estruturas Go) devem ser apenas adaptação de transporte.
 4. **VM é identificada por UUIDv7**, nunca por PID ou ordem de inicialização. A fonte de verdade do estado real é Libvirt; o SQLite guarda cadastro e histórico.
-5. **Diretório remoto único:** `guest.destination` do `config.yaml`. Uploads e scripts de execução utilizam esse diretório; não aceitar caminhos arbitrários fornecidos como destino em cada requisição.
+5. **Diretório remoto único por perfil:** `guest.destination` do `profile.yaml`. Uploads e scripts de execução utilizam esse diretório; não aceitar caminhos arbitrários fornecidos como destino em cada requisição.
 6. **Arquivo canônico:** TAR.GZ (`.tar.gz`/`.tgz`). Um upload salva o pacote no diretório configurado; `Extract=true` pede extração adicional. A extração nunca deve ser obrigatória.
 7. **STDIO é dado do programa remoto:** não prefixar, normalizar, truncar, combinar ou traduzir `stdin`, `stdout` ou `stderr`. Diagnóstico do InsulaVM usa canal independente dos três streams. Ver CONTR-002.
 8. **Cada comando é uma execução nova** na mesma VM. Pode-se chamar múltiplos comandos sequencialmente, sem depender da persistência de um shell entre chamadas.
@@ -99,7 +99,7 @@ O `ExecuteScript` compartilha os mesmos streams e retorno de `ExecuteCommand`; a
 
 Os métodos **atuais** `ImportToVM(ctx, VMImportRequest)` e `ImportPath(ctx, ImportRequest)` não são sinônimos do futuro `UploadArchive`. O primeiro recebe `VMID` e `SourcePath` local e recupera a identidade da VM registrada; o segundo usa host e credenciais SSH configurados para uma máquina externa.
 
-- O diretório `guest.destination` pertence ao `config.yaml`, é um caminho Linux absoluto diferente de `/` e tem padrão `/tmp/insulavm/workspace`. Os requests existentes **não possuem destino sobrescrevível**. Quando `workspace` não é informado, `ExecVM` e jobs usam o mesmo valor.
+- O diretório `guest.destination` pertence ao `profile.yaml`, é um caminho Linux absoluto diferente de `/` e usa `/tmp/insulavm/workspace` como fallback quando ausente. `ImportToVM` usa o destino do perfil. `ImportPath` para hosts externos aceita destino explícito; `ExecVM` também aceita `Workspace` explícito. Quando o workspace não é informado, `ExecVM` e jobs usam o destino do perfil.
 - `SourcePath` pode ser um arquivo regular ou um diretório local; a implementação rejeita symlinks/dispositivos na origem. Uma pasta envia seu conteúdo, sem acrescentar uma pasta externa; arquivos preservam o próprio nome.
 - O InsulaVM cria um TAR.GZ temporário, transmite via SSH, compara o **tamanho** recebido, extrai no workspace e descarta o arquivo temporário. Os dados extraídos podem permanecer se houver erro posterior. Não existe SHA-256 remoto, extração atômica ou retomada.
 - `ImportResult` confirma `Imported` e fornece `DestinationPath` e contagens quando disponíveis. `OnProgress func(ImportProgress)` entrega `Stage`, `Message`, `SourcePath`, `DestinationPath` (informativo), `BytesSent`, `TotalBytes`, `Files` e `At`. Os estágios incluem `connecting`, `validating`, `compressing`, `compressed`, `uploading`, `verifying`, `extracting` e `completed`; falhas usam `failed`.
@@ -156,3 +156,20 @@ Os métodos **atuais** `ImportToVM(ctx, VMImportRequest)` e `ImportPath(ctx, Imp
 
 
 **Origem documental preservada:** [CONTR-001-operacoes-canonicas.md](../interfaces/CONTR-001-operacoes-canonicas.md).
+
+## Extensão — shell persistente auditável por VM
+
+Além de `ExecuteCommand` (execução **isolada** a cada chamada), existe
+`Engine.ExecuteShellCommand(ctx, ShellCommandRequest{VMID, Command, ShellID})`.
+Sem `ShellID`, o motor cria um shell SSH gerenciado e retorna o UUIDv7;
+com ele, reutiliza o **mesmo processo de shell**, preservando `cd` e
+variáveis de ambiente. Cada chamada recebe `CommandID` próprio e o
+SQLite registra comando, saída, retorno e falha. `Engine.CloseShellSession`
+e `Engine.Close` encerram conexões, não VMs.
+
+**Diferença essencial:** esta API retorna stdout/stderr **combinados** e
+não substitui o contrato STDIO transparente de `ExecuteCommand`.
+A sessão SSH existe apenas na instância viva de `Engine`; o SQLite
+não transporta conexões entre processos. CLI: `vm shell-command`,
+`vm shell-session` e `vm shell-history`.
+Detalhes: [FLUX-008](../fluxos/FLUX-008-sessoes-shell.md).

@@ -11,6 +11,8 @@
 package insulavm
 
 import (
+ "os"
+ "sync"
 	"context"
 	"errors"
 	"fmt"
@@ -49,6 +51,9 @@ type VMProgress = vm.Progress
 type Engine struct {
 	config config.Config
 	configDir string
+ shellMu sync.Mutex
+ shells map[string]*managedShell
+ shellsClosed bool
 }
 
 // New reads a global config.yaml file without creating any VM or directory.
@@ -80,10 +85,22 @@ func (e *Engine) GetProfile(name string) (*Profile, error) {
 // RegisterProfile copies a fully installed QCOW2 image to the profile store.
 // It does not install an OS. Existing profile names are never overwritten.
 func (e *Engine) RegisterProfile(p Profile, sourceQCOW2 string) error {
+ if p.Guest.Destination=="" && p.Workspace.Destination=="" {p.Guest.Destination=e.config.Guest.Destination}
 	if p.DiskGB == 0 {
 		p.DiskGB = e.config.Virtualization.DefaultDiskGB
 	}
 	return profile.Register(e.config.Storage.Profiles, p, sourceQCOW2)
+}
+
+// GuestDestinationForProfile resolves the guest directory for a profile.
+// Existing workspace.destination takes precedence over guest.destination.
+func (e *Engine) GuestDestinationForProfile(name string)(string,error){
+ if e==nil{return "",errors.New("engine is required")}
+ if name==""{return e.config.Guest.Destination,nil}
+ p,err:=e.GetProfile(name)
+ if errors.Is(err,os.ErrNotExist){return e.config.Guest.Destination,nil}
+ if err!=nil{return "",fmt.Errorf("load profile %s guest destination: %w",name,err)}
+ return p.GuestDestination(e.config.Guest.Destination),nil
 }
 
 // StartVM creates a disposable Libvirt domain from the named QCOW2 profile.
@@ -151,7 +168,9 @@ func (e *Engine) StartVMWithProgress(ctx context.Context,name string,callback fu
 
 // StopVM destroys a disposable instance (by UUIDv7) and marks its history.
 func(e *Engine)StopVM(ctx context.Context,id string)error{
- return vm.StopByID(ctx,&e.config,id)
+ err:=vm.StopByID(ctx,&e.config,id)
+ if err!=nil{return err}
+ return e.closeShellsForVM(id)
 }
 
 // RunRequest selects the action to run and optionally overrides SSH settings.
@@ -328,7 +347,7 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	defer client.Close()
 	// For managed VMs, the profile workspace overrides the global legacy default.
 	guestDestination:=e.config.Guest.Destination
-	if managedVM && p!=nil && p.Workspace.Destination!=""{guestDestination=p.Workspace.Destination}
+	if managedVM && p!=nil {guestDestination=p.GuestDestination(e.config.Guest.Destination)}
 	if err:=ensureGuestWorkspace(ctx,client,guestDestination);err!=nil{
 		return result,err
 	}

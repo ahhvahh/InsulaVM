@@ -72,6 +72,29 @@ func Open(filename string)(*Store,error){
    finished_at TEXT NOT NULL DEFAULT ''
   )`,
   "CREATE INDEX IF NOT EXISTS vm_instances_by_status ON vm_instances(status,created_at)",
+  `CREATE TABLE IF NOT EXISTS shell_sessions (
+   id TEXT PRIMARY KEY,
+   vm_id TEXT NOT NULL,
+   status TEXT NOT NULL CHECK(status IN ('active','closed','disconnected')),
+   created_at TEXT NOT NULL,
+   updated_at TEXT NOT NULL,
+   closed_at TEXT NOT NULL DEFAULT ''
+  )`,
+  "CREATE INDEX IF NOT EXISTS shell_sessions_by_vm ON shell_sessions(vm_id,created_at)",
+  `CREATE TABLE IF NOT EXISTS shell_commands (
+   id TEXT PRIMARY KEY,
+   shell_id TEXT NOT NULL,
+   vm_id TEXT NOT NULL,
+   command TEXT NOT NULL,
+   output BLOB NOT NULL DEFAULT X'',
+   status TEXT NOT NULL CHECK(status IN ('running','completed','failed')),
+   exit_code INTEGER,
+   error TEXT NOT NULL DEFAULT '',
+   started_at TEXT NOT NULL,
+   finished_at TEXT NOT NULL DEFAULT ''
+  )`,
+  "CREATE INDEX IF NOT EXISTS shell_commands_by_shell ON shell_commands(shell_id,started_at)",
+
  }{
   if err:=execRegistryInit(db,query);err!=nil{_ = db.Close();return nil,fmt.Errorf("initialize SQLite registry: %w",err)}
  }
