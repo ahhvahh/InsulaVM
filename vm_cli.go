@@ -13,7 +13,7 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|start-iso|list|status|diagnose|shell|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
+ if len(args)==0{return errors.New("usage: insula vm start|start-iso|install-iso|list|status|diagnose|shell|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -78,6 +78,20 @@ func vmCommand(args []string)error{
    instance.ID,instance.Profile,instance.IPAddress,instance.MACAddress,instance.SSHUser,instance.SudoMode)
   fmt.Println("SSH:",sshCommandForCLI(instance.SSHPrivateKeyPath,instance.SSHKnownHostsPath,instance.SSHUser,instance.IPAddress))
   fmt.Println("Para encerrar: insula vm stop -id",instance.ID)
+ case "install-iso":
+  if *profileName==""{return errors.New("vm install-iso requires -profile")}
+  instance,err:=engine.StartVMFromInstallerISO(ctx,*profileName,func(p insulavm.VMProgress){
+   fmt.Fprintf(os.Stderr,"[InsulaVM][install-iso:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
+  })
+  if err!=nil{
+   if instance!=nil{
+    fmt.Fprintf(os.Stderr,"[InsulaVM][aviso] Falha com VM preservada: id=%s nome=%s\n",instance.ID,instance.Name)
+   }
+   return presentCLIError(err,root)
+  }
+  fmt.Printf("VM ISO iniciada no Libvirt: id=%s profile=%s nome=%s disco=%s\n",instance.ID,instance.Profile,instance.Name,localPathForCLI(instance.Directory))
+  fmt.Println("Verificar boot no console: ./insula vm console -id",instance.ID)
+  fmt.Println("ATENCAO: 'vm stop' remove o disco temporario. Salve dados importantes antes.")
  case "start-iso":
   if *profileName==""{return errors.New("vm start-iso requires -profile")}
   instance,err:=engine.StartVMFromISO(ctx,insulavm.LiveISOStartOptions{
