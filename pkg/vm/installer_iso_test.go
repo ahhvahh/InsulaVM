@@ -17,7 +17,7 @@ func TestInstallerISODomainXMLContract(t *testing.T){
   "<domain type='kvm'>","<uuid>"+uuid+"</uuid>","<memory unit='MiB'>500</memory>",
   "<vcpu>1</vcpu>","<boot dev='cdrom'/>","<boot dev='hd'/>",
   "device='cdrom'","<readonly/>","type='qcow2'","bus='virtio'",
-  "guest&apos;s &amp; disk.qcow2","alpine&apos;s &amp; installer.iso",
+  "guest&#39;s &amp; disk.qcow2","alpine&#39;s &amp; installer.iso",
   "<serial type='pty'>","<console type='pty'>","<source network='default'/>",
  }{
   if !strings.Contains(spec,part){t.Errorf("missing %q in domain XML: %s",part,spec)}
