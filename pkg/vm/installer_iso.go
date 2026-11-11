@@ -50,28 +50,30 @@ func StartInstallerISO(ctx context.Context,c *config.Config,opts InstallerISOOpt
  if err!=nil{return nil,err}
  p:=opts.Profile
  instance=&Instance{Directory:dir,uri:c.Virtualization.LibvirtURI,registryPath:c.Storage.Database,Profile:p.Name,SudoMode:"disabled"}
+ // Keep a stable pointer: named return values become nil on return nil,err.
+ created:=instance
  emit:=func(stage,message string){
-  if onProgress!=nil{onProgress(Progress{Stage:stage,Message:message,ID:instance.ID,Name:instance.Name,At:time.Now()})}
+  if onProgress!=nil{onProgress(Progress{Stage:stage,Message:message,ID:created.ID,Name:created.Name,At:time.Now()})}
  }
  registered:=false
  success:=false
  defer func(){
   if success{return}
   emit("failed",fmt.Sprintf("ISO VM failed: %v",runErr))
-  if opts.PreserveOnFailure&&registered&&instance.active{
+  if opts.PreserveOnFailure&&registered&&created.active{
    emit("preserved","Domain/disk preserved for diagnostics; stop it explicitly by UUID")
    store,err:=registry.Open(c.Storage.Database)
-   if err==nil{_ = store.SetFailed(context.Background(),instance.ID);_ = store.Close()}
+   if err==nil{_ = store.SetFailed(context.Background(),created.ID);_ = store.Close()}
    return
   }
   cleanupCtx,cancel:=context.WithTimeout(context.Background(),25*time.Second)
   defer cancel()
-  if err:=instance.Cleanup(cleanupCtx);err!=nil{
+  if err:=created.Cleanup(cleanupCtx);err!=nil{
    runErr=errors.Join(runErr,fmt.Errorf("cleanup failed installer instance: %w",err))
   }
   if registered{
    store,err:=registry.Open(c.Storage.Database)
-   if err==nil{_ = store.SetFailed(cleanupCtx,instance.ID);_ = store.Close()}
+   if err==nil{_ = store.SetFailed(cleanupCtx,created.ID);_ = store.Close()}
   }
  }()
  id,err:=unusedVMID(ctx,c.Storage.Database,identity.UUIDv7)
