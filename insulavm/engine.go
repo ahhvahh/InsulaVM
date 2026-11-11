@@ -326,13 +326,15 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 		return result, err
 	}
 	defer client.Close()
-	// Every run prepares one shared destination even if no import was declared.
-	if err:=ensureGuestWorkspace(ctx,client,e.config.Guest.Destination);err!=nil{
+	// For managed VMs, the profile workspace overrides the global legacy default.
+	guestDestination:=e.config.Guest.Destination
+	if managedVM && p!=nil && p.Workspace.Destination!=""{guestDestination=p.Workspace.Destination}
+	if err:=ensureGuestWorkspace(ctx,client,guestDestination);err!=nil{
 		return result,err
 	}
 
 	for _, item := range m.Imports {
-		destination := e.config.Guest.Destination
+		destination := guestDestination
 		reporter := importReporter{out: request.Output,callback: request.OnImportProgress,
 			source: item.Source,destination: destination}
 		imported,importErr := importWithClient(ctx,client,item.Source,destination,reporter)
@@ -348,7 +350,7 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	}
 	workspace := m.Workspace
 	if workspace == "" {
-		workspace = e.config.Guest.Destination
+		workspace = guestDestination
 	}
 	runner := &executor.Executor{
 		Client: client,

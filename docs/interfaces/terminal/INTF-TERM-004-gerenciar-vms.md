@@ -18,14 +18,14 @@ Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatu
 | `insula vm start` | `-profile` obrigatório; `-memory-mib`, `-vcpus` opcionais | Cria uma VM de perfil já instalado; [ARQ-003](../../arquitetura/ARQ-003-configuracao-perfis.md) |
 | `insula vm list` | Nenhum além de `-config` | Lista os registros com estados SQLite/Libvirt; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 | `insula vm status` | `-id` obrigatório | Exibe identidade/SSH e estados; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
-| `insula vm shell` | `-id` obrigatório; `-directory` opcional | Abre shell SSH na VM gerenciada; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
+| `insula vm shell` | `-id` obrigatório; `-directory` opcional | Abre SSH na VM. Tenta `profile.yaml workspace.destination` (ou `config.yaml guest.destination`) e, se inacessível, mantém a shell no diretório inicial do usuário, com aviso; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `insula vm exec` | `-id`, `-command` obrigatórios; `-workspace`, `-sudo` opcionais | Executa comando e retorna logs; [FLUX-003](../../fluxos/FLUX-003-execucao-sequencial-logs.md) |
 | `insula vm import` | `-id`, `-source` obrigatórios | Copia arquivo/diretório para `guest.destination`; [ARQ-005](../../arquitetura/ARQ-005-importacao-arquivos.md) |
 | `insula vm freeze` | `-id` e `-name` obrigatórios; `-export-iso=false` e `-compress=true` por padrão; `-shutdown-timeout` opcional | Publica QCOW2 independente, opcionalmente comprimido com QEMU; [FLUX-004](../../fluxos/FLUX-004-congelar-vm.md) |
 | `insula vm stop` | `-id` obrigatório | Encerra e remove disco temporário de uma VM gerenciada; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `insula vm stop-all` | `-dry-run` opcional; não aceita `-id` | Processa somente domínios registrados neste InsulaVM; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 
-Todos esses subcomandos aceitam `-config` opcional, cujo padrão é `config.yaml` relativo ao diretório atual. O YAML é necessário mesmo quando `-config` não foi informado. O comando `deploy` está documentado em [INTF-TERM-005](INTF-TERM-005-deploy-vm.md).
+A resolução do diretório de trabalho das VMs gerenciadas segue `profile.yaml workspace.destination` quando preenchido, ou `config.yaml guest.destination` nos perfis legados. `vm exec`, `vm import` e Actions gerenciadas adotam esse destino como padrão. **Somente `vm shell` ignora um erro de `cd` no guest**, preservando a sessão no `$HOME` (ou `/` se o home não puder ser acessado). Comandos batch e importações continuam sinalizando falhas do destino, para não executar ações ou escrever arquivos em um local inesperado. A validação SSH continua exigindo chave conhecida e identidade correta.\n\nTodos esses subcomandos aceitam `-config` opcional, cujo padrão é `config.yaml` relativo ao diretório atual. O YAML é necessário mesmo quando `-config` não foi informado. O comando `deploy` está documentado em [INTF-TERM-005](INTF-TERM-005-deploy-vm.md).
 
 ## Exemplo: reutilização do mesmo perfil
 

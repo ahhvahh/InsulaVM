@@ -6,6 +6,8 @@ import (
  "fmt"
  "io"
  "os"
+ "path"
+ "strings"
  "time"
 
  "github.com/ahhvahh/InsulaVM/pkg/executor"
@@ -17,6 +19,8 @@ import (
 // The guest directory is configured ONCE in config.yaml guest.destination.
 type ImportRequest struct {
  SourcePath string
+ // Destination optionally selects the guest target; omitted for unmanaged hosts.
+ Destination string
  Host string
  User string
  PrivateKey string
@@ -54,7 +58,11 @@ type ImportResult struct {
 // path; the caller may cancel using ctx. When using Engine.StartVM, pass the
 // Instance.Address from that VM as request.Host, then Cleanup the instance.
 func(e *Engine)ImportPath(ctx context.Context,request ImportRequest)(result *ImportResult,runErr error){
- destination:=e.config.Guest.Destination
+ destination:=request.Destination
+ if destination==""{destination=e.config.Guest.Destination}
+ if !path.IsAbs(destination)||path.Clean(destination)=="/"||strings.ContainsAny(destination,"\x00\r\n"){
+  return nil,errors.New("destination must be an absolute guest path other than /")
+ }
  reporter:=importReporter{out:request.Output,callback:request.OnProgress,source:request.SourcePath,destination:destination}
  defer func(){
   if runErr!=nil{reporter.send("failed","Falha na importacao: "+runErr.Error(),0,0,0)}

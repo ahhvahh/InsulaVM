@@ -11,11 +11,11 @@
 
 | Arquivo | Escopo | Quando é lido |
 | --- | --- | --- |
-| [`config.yaml`](../../config.yaml) | Caminhos, `guest.destination` comum às VMs, Libvirt, SQLite, usuário SSH padrão e sudo | CLI e biblioteca Go |
-| `data/profiles/<nome>/profile.yaml` | Nome, OS, RAM (MiB), vCPUs, disco, versão, caminho QCOW2 e eventuais overrides SSH | Consulta, registro e execução do perfil |
+| [`config.yaml`](../../config.yaml) | Caminhos, `guest.destination` como fallback legado, Libvirt, SQLite, usuário SSH padrão e sudo | CLI e biblioteca Go |
+| `data/profiles/<nome>/profile.yaml` | Nome, OS, RAM (MiB), vCPUs, disco, versão, caminho QCOW2, `workspace.destination` opcional e eventuais overrides SSH | Consulta, registro e execução do perfil |
 | [`insula.yaml`](../../insula.yaml.example) | Perfil, `ssh.user` opcional, imports de origens locais, setup e jobs; sem destino nem chaves SSH | Execução da Action |
 
-O destino dos arquivos é configurado apenas uma vez em `config.yaml`:
+O destino padrão legado permanece disponível em `config.yaml`:
 
 ```yaml
 guest:
@@ -26,7 +26,7 @@ ssh:
 
 O manifesto de Action pode trazer `ssh.user: buildagent`, caso deseje outro usuário não-root; se omitido, a configuração global prevalece. Nas VMs novas, esse usuário e sua chave pública são provisionados automaticamente pelo Cloud-Init. Arquivos adicionais enviados por `vm import -id ... -source ...` são extraídos no mesmo destino.
 
-O perfil **não** contém a instalação do sistema por si só: `profile.yaml` aponta para um arquivo binário `base.qcow2` com o sistema operacional já instalado. Os segredos não devem constar dos YAMLs.
+Em um perfil gerenciado, `workspace.destination` sobrescreve `guest.destination` para `vm shell`, `vm exec`, `vm import` e Actions. O acesso interativo inicia no diretório inicial do usuário SSH e tenta entrar no workspace. Se o caminho não existir ou não for acessível, informa um aviso e **mantém a sessão aberta** no diretório inicial. Ações não interativas continuam apresentando erros de diretório para impedir execuções em locais inesperados. O `workspace.destination` deve ser um caminho Linux absoluto, diferente de `/`, sem NUL ou quebras de linha.\n\nO perfil **não** contém a instalação do sistema por si só: `profile.yaml` aponta para um arquivo binário `base.qcow2` com o sistema operacional já instalado. Os segredos não devem constar dos YAMLs.
 
 ## Pastas criadas pela aplicação
 
@@ -99,7 +99,7 @@ O registro das VMs, seus estados históricos e a verificação conjunta SQLite/L
 - O usuário/daemon Libvirt precisa de permissões apropriadas para atravessar as pastas e abrir o QCOW2. A aplicação cria pastas privadas; configure ACLs/grupos explicitamente, **não** libere leitura ou escrita irrestrita em imagens.
 - O InsulaVM cria a identidade SSH de cada convidado, injeta no Cloud-Init e gera o `known_hosts` correspondente antes da autenticação. A imagem-base precisa ter o cache Cloud-Init limpo antes do registro e ser adequada à clonagem.
 - Apenas discos QCOW2 são suportados; imagens de instalação ISO não são diretamente executáveis como perfil pronto.
-- O InsulaVM prepara `guest.destination` por SSH antes de executar a Action e pode importar arquivos locais. **Não clona** automaticamente um repositório Git remoto. O usuário SSH precisa de permissão para criar o destino escolhido.
+- O InsulaVM prepara o destino do perfil (ou o `guest.destination` global legado) por SSH antes de executar a Action e pode importar arquivos locais. **Não clona** automaticamente um repositório Git remoto. O usuário SSH precisa de permissão para criar o destino escolhido.
 - Para segurança, erros de destruição que não permitam confirmar a parada da VM bloqueiam remoção do overlay.
 
 ## Pendências
