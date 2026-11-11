@@ -50,6 +50,7 @@ func run(args []string) error {
 			fmt.Println("       insula vm shell -config config.yaml -id UUIDv7 [-directory InsulaVM]")
 			fmt.Println("       insula vm stop -config config.yaml -id UUIDv7 [-grace-timeout 30s] [-force-after-timeout=true]")
 			fmt.Println("       insula vm start-iso -profile debian-go [-iso debian-go-live.iso]")
+            fmt.Println("       insula vm install-iso -config config.yaml -profile alpine-virt")
 			fmt.Println("       insula vm console -id UUIDv7")
 			fmt.Println("       insula vm stop-all -config config.yaml [-dry-run]")
 			fmt.Println("       insula vm freeze -id UUIDv7 -name debian13-tests [-shutdown-timeout 3m]")
@@ -134,9 +135,13 @@ func profileCommand(args []string) error {
 		}
 	case "show":
 		p, err := engine.GetProfile(*name)
-		if err != nil {
-			return err
-		}
+        if err != nil {
+            installer,installErr:=profile.ReadInstaller(engine.Configuration().Storage.Profiles,*name)
+            if installErr!=nil{return err}
+            fmt.Printf("name=%s type=installer-iso os=%s memory_mib=%d vcpus=%d disk_gb=%d iso=%s\n",
+                installer.Name,installer.OS,installer.Hardware.RAM.MiB,installer.Hardware.CPU.Quantity,installer.Disk.SizeGB,installer.Disk.StartISO)
+            return nil
+        }
 		fmt.Printf("name=%s os=%s memory_mib=%d vcpus=%d disk_gb=%d version=%s image=%s\n",
 			p.Name, p.OS, p.MemoryMiB, p.VCPUs, p.DiskGB, p.Version, p.Image)
 	case "register":

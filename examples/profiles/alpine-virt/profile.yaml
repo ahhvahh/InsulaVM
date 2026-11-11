@@ -1,0 +1,26 @@
+# Installer profile (not yet an installed QCOW2 template).
+# Relative ISO paths are resolved against the InsulaVM config.yaml directory.
+name: alpine-virt
+os: alpine
+
+hardware:
+  cpu:
+    quantity: 1
+  ram:
+    mib: 500
+
+disk:
+  start_iso: ./iso/alpine-virt-3.24.4-x86_64.iso
+  size_gb: 8
+
+workspace:
+  destination: /tmp/workspace
+
+network:
+  enabled: true
+  type: libvirt
+  name: default
+  ipv4:
+    mode: dhcp
+    address: null
+    gateway: null
