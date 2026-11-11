@@ -60,6 +60,19 @@ func StartInstallerISO(ctx context.Context,c *config.Config,opts InstallerISOOpt
  defer func(){
   if success{return}
   emit("failed",fmt.Sprintf("ISO VM failed: %v",runErr))
+  // A failed virsh create may have launched QEMU before reporting an error.
+  // Never delete the QCOW2 unless Libvirt confirms the domain is absent,
+  // or Cleanup has destroyed a known active domain successfully.
+  if registered&&!created.active{
+   probeCtx,cancel:=context.WithTimeout(context.Background(),10*time.Second)
+   states,checkErr:=InspectRegistered(probeCtx,created.uri,[]registry.Entry{{LibvirtUUID:created.LibvirtUUID,Status:"creating"}})
+   cancel()
+   if checkErr!=nil||len(states)!=1||states[0].LibvirtState=="unknown"{
+    runErr=errors.Join(runErr,fmt.Errorf("cannot prove installer VM stopped; disk preserved: %v",checkErr))
+    return
+   }
+   created.active=states[0].LibvirtState!="absent"
+  }
   if opts.PreserveOnFailure&&registered&&created.active{
    emit("preserved","Domain/disk preserved for diagnostics; stop it explicitly by UUID")
    store,err:=registry.Open(c.Storage.Database)
