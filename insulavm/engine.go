@@ -345,9 +345,11 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 		return result, err
 	}
 	defer client.Close()
-	// For managed VMs, the profile workspace overrides the global legacy default.
-	guestDestination:=e.config.Guest.Destination
-	if managedVM && p!=nil {guestDestination=p.GuestDestination(e.config.Guest.Destination)}
+	// The selected profile workspace applies to managed VMs and external SSH hosts.
+	guestDestination := e.config.Guest.Destination
+	if p != nil {
+		guestDestination = p.GuestDestination(e.config.Guest.Destination)
+	}
 	if err:=ensureGuestWorkspace(ctx,client,guestDestination);err!=nil{
 		return result,err
 	}
