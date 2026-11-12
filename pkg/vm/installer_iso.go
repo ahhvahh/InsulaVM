@@ -128,7 +128,7 @@ func StartInstallerISO(ctx context.Context,c *config.Config,opts InstallerISOOpt
  updateErr:=store.SetRunning(ctx,id,"")
  _=store.Close()
  if updateErr!=nil{return instance,fmt.Errorf("persist installer VM state: %w",updateErr)}
- emit("running","Domain in Libvirt state "+state+"; guest boot must be checked through vm console")
+ emit("running","Domain in Libvirt state "+state+"; verify guest boot through vm console or local VNC (virsh domdisplay)")
  success=true
  return instance,nil
 }
@@ -156,6 +156,11 @@ func installerISODomainXML(id,name string,memoryMiB,vcpus int,disk,iso,mac strin
   "<source file='%s'><seclabel model='dac' relabel='no'/></source><target dev='sda' bus='sata'/><readonly/></disk>"+
   "%s<serial type='pty'><target port='0'/></serial>"+
   "<console type='pty'><target type='serial' port='0'/></console>"+
+  // Keep the installer accessible even when the ISO does not use ttyS0.
+  // VNC is host-local, auto-allocated and independent of guest DHCP/SSH.
+  "<graphics type='vnc' port='-1' autoport='yes'>"+
+  "<listen type='address' address='127.0.0.1'/></graphics>"+
+  "<video><model type='vga'/></video>"+
   "</devices></domain>",
   escape(name),escape(id),memoryMiB,vcpus,escape(disk),escape(iso),nic)
 }
