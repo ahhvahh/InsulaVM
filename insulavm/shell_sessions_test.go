@@ -1,6 +1,7 @@
 package insulavm
 
 import (
+ shelltransport "github.com/ahhvahh/InsulaVM/internal/shell"
  "context"
  "strings"
  "testing"
@@ -16,7 +17,7 @@ func TestShellAPIValidatesRequestsBeforeHypervisor(t *testing.T){
   {"missing VM ID",func()error{_,err:=engine.ExecuteShellCommand(context.Background(),ShellCommandRequest{Command:"ls"});return err}},
   {"missing command",func()error{_,err:=engine.ExecuteShellCommand(context.Background(),ShellCommandRequest{VMID:"vm"});return err}},
   {"command NUL",func()error{_,err:=engine.ExecuteShellCommand(context.Background(),ShellCommandRequest{VMID:"vm",Command:"ls\x00id"});return err}},
-  {"command too long",func()error{_,err:=engine.ExecuteShellCommand(context.Background(),ShellCommandRequest{VMID:"vm",Command:strings.Repeat("x",maxShellCommandBytes+1)});return err}},
+  {"command too long",func()error{_,err:=engine.ExecuteShellCommand(context.Background(),ShellCommandRequest{VMID:"vm",Command:strings.Repeat("x",shelltransport.MaxCommandBytes+1)});return err}},
   {"invalid timeout",func()error{_,err:=engine.ExecuteShellCommand(context.Background(),ShellCommandRequest{VMID:"vm",Command:"ls",CommandTimeout:-time.Second});return err}},
   {"history missing ID",func()error{_,err:=engine.ShellCommandHistory(context.Background(),"");return err}},
   {"VM history missing ID",func()error{_,err:=engine.ShellSessionsForVM(context.Background(),"");return err}},

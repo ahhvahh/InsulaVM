@@ -1,6 +1,7 @@
 package insulavm
 
 import (
+ shelltransport "github.com/ahhvahh/InsulaVM/internal/shell"
  "context"
  "errors"
  "fmt"
@@ -42,7 +43,7 @@ func(e *Engine)ExecuteShellCommand(ctx context.Context,req ShellCommandRequest)(
  if e==nil{return nil,errors.New("engine is required")}
  if ctx==nil{return nil,errors.New("context is required")}
  if req.VMID==""{return nil,errors.New("VMID is required")}
- if err:=validateShellCommand(req.Command);err!=nil{return nil,err}
+ if err:=shelltransport.ValidateCommand(req.Command);err!=nil{return nil,err}
  if req.CommandTimeout<0{return nil,errors.New("command timeout cannot be negative")}
  timeout:=req.CommandTimeout
  if timeout==0{timeout=30*time.Minute}
@@ -62,14 +63,14 @@ func(e *Engine)ExecuteShellCommand(ctx context.Context,req ShellCommandRequest)(
  store,err:=registry.Open(e.config.Storage.Database)
  if err!=nil{return nil,err}
  defer store.Close()
- var shell *managedShell
+ var shell *shelltransport.Session
  if req.ShellID!=""{
   e.shellMu.Lock()
   shell=e.shells[req.ShellID]
   e.shellMu.Unlock()
   if shell==nil{return nil,errors.New("shell ID is not active in this Engine process; persisted history does not recreate SSH connections")}
-  if shell.vmID!=req.VMID{return nil,errors.New("shell ID belongs to another VM")}
-  if shell.isClosed(){return nil,errors.New("shell has disconnected")}
+  if shell.VMID()!=req.VMID{return nil,errors.New("shell ID belongs to another VM")}
+  if shell.IsClosed(){return nil,errors.New("shell has disconnected")}
  }else{
   id,idErr:=identity.UUIDv7()
   if idErr!=nil{return nil,idErr}
@@ -87,21 +88,21 @@ func(e *Engine)ExecuteShellCommand(ctx context.Context,req ShellCommandRequest)(
   })
   if dialErr!=nil{return nil,dialErr}
   if err:=ensureGuestWorkspace(setupCtx,client,workspace);err!=nil{_ = client.Close();return nil,err}
-  shell,err=openManagedShell(setupCtx,client,id,req.VMID,workspace)
+  shell,err=shelltransport.Open(setupCtx,client,id,req.VMID,workspace)
   if err!=nil{_ = client.Close();return nil,err}
-  if err:=store.InsertShellSession(ctx,id,req.VMID);err!=nil{shell.close();return nil,err}
+  if err:=store.InsertShellSession(ctx,id,req.VMID);err!=nil{shell.Close();return nil,err}
   e.shellMu.Lock()
   if e.shellsClosed {
    e.shellMu.Unlock()
-   shell.close()
+   shell.Close()
    _=setShellDisconnected(store,id)
    return nil,errors.New("engine shell manager is closed")
   }
-  if e.shells==nil{e.shells=make(map[string]*managedShell)}
+  if e.shells==nil{e.shells=make(map[string]*shelltransport.Session)}
   e.shells[id]=shell
   e.shellMu.Unlock()
  }
- result=&ShellCommandResult{VMID:req.VMID,ShellID:shell.id,ExitCode:-1}
+ result=&ShellCommandResult{VMID:req.VMID,ShellID:shell.ID(),ExitCode:-1}
  commandID,err:=identity.UUIDv7()
  if err!=nil{return result,err}
  result.CommandID=commandID
@@ -110,15 +111,15 @@ func(e *Engine)ExecuteShellCommand(ctx context.Context,req ShellCommandRequest)(
  defer cancel()
  select{
  case <-runCtx.Done():return result,runCtx.Err()
- case <-shell.busy:
+ case <-shell.Busy():
  }
- defer func(){shell.busy<-struct{}{}}()
- if shell.isClosed(){return result,errors.New("shell disconnected")}
+ defer shell.Release()
+ if shell.IsClosed(){return result,errors.New("shell disconnected")}
  if err:=store.BeginShellCommand(runCtx,registry.ShellCommandEntry{
-  ID:commandID,ShellID:shell.id,VMID:req.VMID,Command:req.Command,
+  ID:commandID,ShellID:shell.ID(),VMID:req.VMID,Command:req.Command,
  });err!=nil{return result,err}
- stopCancel:=context.AfterFunc(runCtx,func(){shell.close()})
- output,code,commandErr:=shellExchange(runCtx,shell,req.Command)
+ stopCancel:=context.AfterFunc(runCtx,func(){shell.Close()})
+ output,code,commandErr:=shelltransport.Exchange(runCtx,shell,req.Command)
  stopCancel()
  if runCtx.Err()!=nil{commandErr=runCtx.Err()}
  result.Output=append([]byte(nil),output...)
@@ -132,19 +133,19 @@ func(e *Engine)ExecuteShellCommand(ctx context.Context,req ShellCommandRequest)(
  if commandErr==nil{codePtr=&code}
  saveErr:=store.FinishShellCommand(persistCtx,commandID,output,codePtr,commandErr)
  if commandErr!=nil{
-  shell.close()
+  shell.Close()
   e.shellMu.Lock()
-  if e.shells[shell.id]==shell{delete(e.shells,shell.id)}
+  if e.shells[shell.ID()]==shell{delete(e.shells,shell.ID())}
   e.shellMu.Unlock()
-  closeErr:=setShellDisconnected(store,shell.id)
+  closeErr:=setShellDisconnected(store,shell.ID())
   return result,errors.Join(commandErr,saveErr,closeErr)
  }
  if saveErr!=nil{
-  shell.close()
+  shell.Close()
   e.shellMu.Lock()
-  if e.shells[shell.id]==shell{delete(e.shells,shell.id)}
+  if e.shells[shell.ID()]==shell{delete(e.shells,shell.ID())}
   e.shellMu.Unlock()
-  closeErr:=setShellDisconnected(store,shell.id)
+  closeErr:=setShellDisconnected(store,shell.ID())
   return result,errors.Join(saveErr,closeErr)
  }
  return result,nil
@@ -207,7 +208,7 @@ func(e *Engine)CloseShellSession(ctx context.Context,shellID string)error{
  if shell!=nil{delete(e.shells,shellID)}
  e.shellMu.Unlock()
  if shell==nil{return errors.New("shell is not active in this Engine process")}
- shell.close()
+ shell.Close()
  store,err:=registry.Open(e.config.Storage.Database)
  if err!=nil{return err}
  defer store.Close()
@@ -218,7 +219,7 @@ func(e *Engine)closeShellsForVM(vmID string)error{
  if e==nil{return nil}
  e.shellMu.Lock()
  ids:=[]string{}
- for id,s:=range e.shells{if s.vmID==vmID{ids=append(ids,id)}}
+ for id,s:=range e.shells{if s.VMID()==vmID{ids=append(ids,id)}}
  e.shellMu.Unlock()
  var errs []error
  for _,id:=range ids{

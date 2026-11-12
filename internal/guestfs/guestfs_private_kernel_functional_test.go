@@ -1,6 +1,6 @@
 //go:build integration
 
-package insulavm
+package guestfs
 
 import (
 	"context"

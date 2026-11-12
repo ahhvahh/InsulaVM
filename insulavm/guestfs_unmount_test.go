@@ -1,6 +1,7 @@
 package insulavm
 
 import (
+ "github.com/ahhvahh/InsulaVM/internal/guestfs"
 	"context"
 	"errors"
 	"os"
@@ -23,7 +24,7 @@ func TestExportLiveISOUnmountFailureRetainsStaging(t *testing.T) {
 	})
 
 	exported, err := e.ExportProfileLiveISOTo(context.Background(), "isotest", destination)
-	if exported != "" || !errors.Is(err, errInstallerUnmount) {
+	if exported != "" || !errors.Is(err, guestfs.ErrUnmount) {
 		t.Fatalf("failed unmount accepted: iso=%q err=%v", exported, err)
 	}
 	if !strings.Contains(err.Error(), "guest-fuse-busy") || !strings.Contains(err.Error(), "staging retained at") {
@@ -61,11 +62,11 @@ func TestExportLiveISOUnmountPrecedesGrubPublication(t *testing.T) {
 
 func TestGuestfsUnmountFailureNeverCleansPrivateKernel(t *testing.T) {
 	bin := t.TempDir()
-	guestfsStub(t, bin, "guestunmount", "echo fuse-detach-error >&2; exit 99")
+	isoToolScripts(t, bin, map[string]string{"guestunmount": "echo fuse-detach-error >&2; exit 99"})
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	called := false
-	err := unmountGuestDiskReadOnly(t.TempDir(), func() { called = true })
-	if !errors.Is(err, errInstallerUnmount) || called || !strings.Contains(err.Error(), "fuse-detach-error") {
+	err := guestfs.UnmountReadOnly(t.TempDir(), func() { called = true })
+	if !errors.Is(err, guestfs.ErrUnmount) || called || !strings.Contains(err.Error(), "fuse-detach-error") {
 		t.Fatalf("unmount failure must preserve resources: cleanup=%t err=%v", called, err)
 	}
 }

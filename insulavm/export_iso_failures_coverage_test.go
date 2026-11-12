@@ -1,6 +1,7 @@
 package insulavm
 
 import (
+ "github.com/ahhvahh/InsulaVM/internal/liveiso"
  "context"
  "errors"
  "os"
@@ -72,7 +73,7 @@ func TestISODestinationRejectsSymlinksAndInvalidNames(t *testing.T){
  isoToolScripts(t,bin,nil)
  if _,err:=e.liveISODestination("../escape",destination);err==nil{t.Fatal("unsafe profile name accepted")}
  if _,err:=e.liveISODestination("isotest","file.tar.gz");err==nil{t.Fatal("invalid ISO extension accepted")}
- if err:=checkISODestinationVacant("");err==nil{t.Fatal("empty ISO destination accepted")}
+ if err:=liveiso.CheckDestinationVacant("");err==nil{t.Fatal("empty ISO destination accepted")}
  existing:=filepath.Join(t.TempDir(),"existing.iso")
  if err:=os.WriteFile(existing,[]byte("original"),0600);err!=nil{t.Fatal(err)}
  if _,err:=e.ExportProfileLiveISOTo(context.Background(),"isotest",existing);err==nil{
@@ -102,20 +103,20 @@ func TestLiveISOSelectionPrefersNewestMatchingKernel(t *testing.T){
  root:=t.TempDir()
  boot:=filepath.Join(root,"boot")
  if err:=os.MkdirAll(boot,0700);err!=nil{t.Fatal(err)}
- kernel,initrd,err:=selectLiveKernel(root)
+ kernel,initrd,err:=liveiso.SelectKernel(root)
  if err==nil||kernel!=""||initrd!=""{t.Fatal("missing boot files accepted")}
  for _,version:=range []string{"6.1.0-test","6.12.0-test"}{
   for _,file:=range []string{"vmlinuz-"+version,"initrd.img-"+version}{
    if err:=os.WriteFile(filepath.Join(boot,file),[]byte("kernel-test"),0600);err!=nil{t.Fatal(err)}
   }
  }
- kernel,initrd,err=selectLiveKernel(root)
+ kernel,initrd,err=liveiso.SelectKernel(root)
  if err!=nil||!strings.HasSuffix(kernel,"vmlinuz-6.12.0-test")||
   !strings.HasSuffix(initrd,"initrd.img-6.12.0-test"){
   t.Fatalf("wrong kernel/initramfs pair: %s %s %v",kernel,initrd,err)
  }
  output:=filepath.Join(t.TempDir(),"copy.img")
- if err:=copyISOFile(kernel,output);err!=nil{t.Fatal(err)}
- if err:=copyISOFile(kernel,output);err==nil{t.Fatal("ISO staging overwrote existing file")}
+ if err:=liveiso.CopyFile(kernel,output);err!=nil{t.Fatal(err)}
+ if err:=liveiso.CopyFile(kernel,output);err==nil{t.Fatal("ISO staging overwrote existing file")}
  if _,err:=os.Stat(output);err!=nil{t.Fatal(err)}
 }

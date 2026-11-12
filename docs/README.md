@@ -13,6 +13,8 @@ O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perf
 
 **Teste Integral 3:** [FLUX-008 — ISO Live e preservação de /tmp/workspace](fluxos/FLUX-008-teste-integral-iso-persistencia.md) e [GUIA-007 — Executar e diagnosticar](guias/GUIA-007-teste-integral-3-iso-persistencia.md). O check `integral-3-iso-workspace-persistence` é preparado para PRs destinadas apenas a `develop`, `homolog` ou `main`.
 
+A divisão entre API pública e infraestrutura privada está descrita em [ARQ-007 — Pacotes internos](arquitetura/ARQ-007-pacotes-internos.md).
+
 ## Mapa de leitura
 
 | Documento | Categoria | Conteúdo |

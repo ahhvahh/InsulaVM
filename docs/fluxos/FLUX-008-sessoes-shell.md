@@ -4,7 +4,7 @@
 # FLUX-008 — Shell persistente por VM e histórico SQLite
 
 **Estado:** implementado no motor Go; testes em KVM/SSH real ainda pendentes.
-**Código:** [shell_sessions.go](../../insulavm/shell_sessions.go), [shell_transport.go](../../insulavm/shell_transport.go), [shell_history.go](../../pkg/registry/shell_history.go).
+**Código:** [shell_sessions.go](../../insulavm/shell_sessions.go), [transport.go](../../internal/shell/transport.go), [shell_history.go](../../pkg/registry/shell_history.go).
 **Interfaces:** Go `Engine.ExecuteShellCommand`; CLI `vm shell-command`, `vm shell-session` e `vm shell-history`.
 
 ## Objetivo
