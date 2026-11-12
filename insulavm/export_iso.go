@@ -2,6 +2,7 @@ package insulavm
 
 import (
  "github.com/ahhvahh/InsulaVM/internal/liveiso"
+ "github.com/ahhvahh/InsulaVM/internal/guestfs"
  "context"
  "errors"
  "fmt"
@@ -49,12 +50,12 @@ func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string
  if err:=os.MkdirAll(mount,0700);err!=nil{return "",err}
  if err:=os.MkdirAll(filepath.Join(stage,"live"),0700);err!=nil{return "",err}
  if err:=os.MkdirAll(filepath.Join(stage,"boot","grub"),0700);err!=nil{return "",err}
- guestfsCleanup,err:=mountGuestDiskReadOnly(ctx,image,mount)
+ guestfsCleanup,err:=guestfs.MountReadOnly(ctx,image,mount)
  if err!=nil{return "",err}
  mounted:=true
  defer func(){
   if !mounted{return}
-  if unmountErr:=unmountGuestDiskReadOnly(mount,guestfsCleanup);unmountErr!=nil{
+  if unmountErr:=guestfs.UnmountReadOnly(mount,guestfsCleanup);unmountErr!=nil{
    preserveWork=true
    runErr=errors.Join(runErr,fmt.Errorf("ISO staging retained at %s: %w",work,unmountErr))
    isoPath=""
@@ -74,7 +75,7 @@ func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string
  if err:=liveiso.RunTool(ctx,"mksquashfs",mount,filepath.Join(stage,"live","filesystem.squashfs"),"-noappend","-comp","xz");err!=nil{return "",err}
  // Both the kernel/initramfs and SquashFS have now been copied to staging.
  // A successful ISO must never be published while guestmount is still active.
- unmountErr:=unmountGuestDiskReadOnly(mount,guestfsCleanup)
+ unmountErr:=guestfs.UnmountReadOnly(mount,guestfsCleanup)
  mounted=false
  if unmountErr!=nil{
   preserveWork=true

@@ -316,7 +316,7 @@ func verifyDebianInstalledDisk(ctx context.Context,disk,stage string)error{
   }
   return nil
  }()
- if unmountErr:=unguestfs.MountReadOnly(mount,guestfsCleanup);unmountErr!=nil{
+ if unmountErr:=guestfs.UnmountReadOnly(mount,guestfsCleanup);unmountErr!=nil{
   return errors.Join(checkErr,unmountErr)
  }
  return checkErr
