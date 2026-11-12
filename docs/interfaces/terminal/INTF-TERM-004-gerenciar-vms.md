@@ -15,17 +15,44 @@ Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatu
 
 | Comando | Parâmetros específicos | Efeito / vínculo ao fluxo |
 | --- | --- | --- |
-| `insula vm start` | `-profile` obrigatório; `-memory-mib`, `-vcpus` opcionais | Cria uma VM de perfil já instalado; [ARQ-003](../../arquitetura/ARQ-003-configuracao-perfis.md) |
-| `insula vm list` | Nenhum além de `-config` | Lista os registros com estados SQLite/Libvirt; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
+| `insula vm start` | Exatamente um de `-profile` (nova VM) ou `-id` (reabrir VM preservada); `-memory-mib`, `-vcpus` opcionais para perfil | Cria nova VM ou reinicia domínio transitório com mesmo UUID/QCOW2; [ARQ-003](../../arquitetura/ARQ-003-configuracao-perfis.md) |
+| `insula vm list` | Nenhum além de `-config` | Lista Nome, Perfil, UUID, SQLite, Libvirt e IP, nessa ordem; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 | `insula vm status` | `-id` obrigatório | Exibe identidade/SSH e estados; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 | `insula vm shell` | `-id` obrigatório; `-directory` opcional | Abre SSH na VM. Tenta `profile.yaml workspace.destination` (ou `config.yaml guest.destination`) e, se inacessível, mantém a shell no diretório inicial do usuário, com aviso; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `insula vm exec` | `-id`, `-command` obrigatórios; `-workspace`, `-sudo` opcionais | Executa comando e retorna logs; [FLUX-003](../../fluxos/FLUX-003-execucao-sequencial-logs.md) |
 | `insula vm import` | `-id`, `-source` obrigatórios | Copia arquivo/diretório para o destino do perfil (`workspace.destination` ou `guest.destination`); [ARQ-005](../../arquitetura/ARQ-005-importacao-arquivos.md) |
 | `insula vm freeze` | `-id` e `-name` obrigatórios; `-export-iso=false` e `-compress=true` por padrão; `-shutdown-timeout` opcional | Publica QCOW2 independente, opcionalmente comprimido com QEMU; [FLUX-004](../../fluxos/FLUX-004-congelar-vm.md) |
-| `insula vm stop` | `-id` obrigatório | Encerra e remove disco temporário de uma VM gerenciada; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
+| `insula vm stop` | `-id` obrigatório | Encerra e remove disco temporário, mantendo o histórico SQLite; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
+| `insula vm delete` | `-id` obrigatório | Confirma ausência no Libvirt, exclui disco/credenciais temporários e elimina registro e histórico de shell do SQLite; preserva logs operacionais |
+| `insula profile delete` | `-name` obrigatório | Exclui perfil e sua imagem-base somente se nenhuma VM registrada ainda referenciá-lo |
 | `insula vm stop-all` | `-dry-run` opcional; não aceita `-id` | Processa somente domínios registrados neste InsulaVM; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 
 A resolução do diretório de trabalho das VMs gerenciadas usa `profile.yaml workspace.destination` quando preenchido, depois `profile.yaml guest.destination` e, por fim, `config.yaml guest.destination` nos perfis legados. `vm exec`, `vm import` e Actions gerenciadas adotam esse destino como padrão. **Somente `vm shell` ignora um erro de `cd` no guest**, preservando a sessão no `$HOME` (ou `/` se o home não puder ser acessado). Comandos batch e importações continuam sinalizando falhas do destino, para não executar ações ou escrever arquivos em um local inesperado. A validação SSH continua exigindo chave conhecida e identidade correta.\n\nTodos esses subcomandos aceitam `-config` opcional, cujo padrão é `config.yaml` relativo ao diretório atual. O YAML é necessário mesmo quando `-config` não foi informado. O comando `deploy` está documentado em [INTF-TERM-005](INTF-TERM-005-deploy-vm.md).
+
+
+## Reiniciar a mesma VM pelo UUID
+
+Se uma VM transitória foi desligada pelo sistema convidado e seu disco ainda existe, o InsulaVM recria o domínio usando a configuração persistida sem gerar novo UUID nem disco:
+
+```bash
+./insula vm start -id UUID_DA_VM
+./insula vm console -id UUID_DA_VM
+```
+
+Para uma VM criada por `install-iso`, a retomada tenta `vda` (HD instalado) antes do CD-ROM, mantendo a ISO disponível para fallback. Esta ordem só é alterada no XML temporário de retomada; o XML de instalação original permanece intacto. A retomada exige Libvirt `absent`, diretório gerenciado intacto e arquivos `domain.xml` e `installer.qcow2` ou `overlay.qcow2` regulares e associados ao UUID cadastrado. VMs encerradas com `vm stop` ou `vm delete` não podem ser retomadas. A presença do domínio não comprova boot do sistema convidado: valide pelo console e, quando aplicável, por SSH.
+
+## Exclusão permanente e limpeza da lista
+
+```bash
+./insula vm list
+./insula vm delete -id UUID_DA_VM
+./insula vm list
+./insula profile delete -name NOME_DO_PERFIL
+```
+
+`vm delete` utiliza o mesmo motor de parada segura de `vm stop`, recusa apagamento se não conseguir verificar ausência do domínio Libvirt ou remoção dos arquivos temporários e então remove o registro e histórico de shell SQLite numa transação. Preserva os logs operacionais. O ID fica reservado em tombstone no banco para nunca ser atribuído a outra VM, mas **não aparece mais** em `vm list`.
+
+O perfil é independente da instância: `profile delete` é uma ação **separada e explícita**. O comando recusa remover perfis com qualquer VM registrada como dependente (inclusive desligada). Exclua primeiro todas as instâncias daquele perfil, depois exclua o perfil. Não use esse comando para limpar apenas registros antigos se outras VMs ainda precisam da imagem-base.
 
 ## Exemplo: reutilização do mesmo perfil
 

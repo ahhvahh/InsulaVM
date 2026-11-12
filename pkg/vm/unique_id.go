@@ -2,7 +2,6 @@ package vm
 
 import (
  "context"
- "database/sql"
  "errors"
  "fmt"
  "strings"
@@ -12,7 +11,7 @@ import (
 
 const maxVMIDAttempts = 8
 
-// unusedVMID checks all recorded VM IDs (including failed/destroyed history)
+// unusedVMID checks recorded and permanently deleted VM IDs (including tombstones)
 // before provisioning a new instance. The caller MUST still reserve the ID
 // with registry.Store.Insert, whose PRIMARY KEY is the atomic concurrency gate.
 func unusedVMID(ctx context.Context, registryPath string, next func() (string,error)) (string,error) {
@@ -27,16 +26,10 @@ func unusedVMID(ctx context.Context, registryPath string, next func() (string,er
   id,err:=next()
   if err!=nil{return "",fmt.Errorf("generate UUIDv7: %w",err)}
   if strings.TrimSpace(id)==""{return "",errors.New("generated VM ID is empty")}
-  _,err=store.Get(ctx,id)
-  switch {
-  case err==nil:
-   // Never recycle a failed or destroyed VM's historical ID.
-   continue
-  case errors.Is(err,sql.ErrNoRows):
-   return id,nil
-  default:
-   return "",fmt.Errorf("check VM ID %s in registry: %w",id,err)
-  }
+  used,err:=store.IDPreviouslyUsed(ctx,id)
+  if err!=nil{return "",fmt.Errorf("check VM ID %s in registry: %w",id,err)}
+  if used{continue}
+  return id,nil
  }
  return "",fmt.Errorf("could not allocate an unused VM ID after %d attempts",maxVMIDAttempts)
 }
