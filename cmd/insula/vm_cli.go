@@ -17,7 +17,7 @@ import (
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|start-iso|install-iso|list|status|diagnose|shell|shell-command|shell-session|shell-history|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
+ if len(args)==0{return errors.New("usage: insula vm start|start-iso|install-iso|list|delete|status|diagnose|shell|shell-command|shell-session|shell-history|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -64,7 +64,14 @@ func vmCommand(args []string)error{
  root:=engine.Configuration().Storage.Root
  switch command{
  case "start":
-  if *profileName==""{return errors.New("vm start requires -profile")}
+  if *id!="" {
+   if *profileName!=""{return errors.New("vm start accepts -id OR -profile, never both")}
+   entry,err:=engine.ResumeVM(ctx,*id)
+   if err!=nil{return err}
+   fmt.Printf("VM retomada: id=%s profile=%s nome=%s; console: ./insula vm console -id %s\n",entry.ID,entry.Profile,entry.Name,entry.ID)
+   return nil
+  }
+  if *profileName==""{return errors.New("vm start requires -profile or -id")}
   current,err:=engine.ListVMStatus(ctx)
   if err!=nil{return fmt.Errorf("verificar instancias ja existentes no Libvirt: %w",err)}
   for _,entry:=range current{
@@ -138,10 +145,10 @@ func vmCommand(args []string)error{
   entries,err:=engine.ListVMStatus(ctx)
   if err!=nil{return err}
   if len(entries)==0{fmt.Println("Nenhuma VM cadastrada pelo InsulaVM");return nil}
-  fmt.Printf("%-36s %-12s %-12s %-18s %-15s %s\n","UUID","SQLite","Libvirt","IP","Perfil","Nome")
+  fmt.Printf("%-64s %-18s %-36s %-12s %-12s %s\n","Nome","Perfil","UUID","SQLite","Libvirt","IP")
   for _,entry:=range entries{
    e:=entry.Record
-   fmt.Printf("%-36s %-12s %-12s %-18s %-15s %s\n",e.ID,e.Status,entry.LibvirtState,e.IP,e.Profile,e.Name)
+   fmt.Printf("%-64s %-18s %-36s %-12s %-12s %s\n",e.Name,e.Profile,e.ID,e.Status,entry.LibvirtState,e.IP)
    if entry.Warning!=""{fmt.Fprintln(os.Stderr,"  [aviso]",entry.Warning)}
   }
  case "status":
@@ -304,6 +311,10 @@ func vmCommand(args []string)error{
   if err!=nil{return presentCLIError(err,root)}
   fmt.Printf("VM ISO OK: profile=%s iso=%s source=%s forced=%t\n",
    exported.Freeze.ProfileName,localPathForCLI(exported.ISOPath),*id,exported.Freeze.ForcedShutdown)
+ case "delete":
+  if *id==""{return errors.New("vm delete requires -id")}
+  if err:=engine.DeleteVM(ctx,*id);err!=nil{return err}
+  fmt.Printf("VM excluida: %s (dominio, disco temporario, SQLite e historico de shell)\n",*id)
  case "stop-all":
   if *id!=""{return errors.New("vm stop-all does not accept -id; use vm stop -id UUID instead")}
   result,err:=engine.StopAllVMs(ctx,insulavm.VMStopAllOptions{
@@ -325,7 +336,7 @@ func vmCommand(args []string)error{
   result,err:=engine.StopVMWithOptions(ctx,insulavm.VMStopOptions{VMID:*id,GracePeriod:*graceTimeout,ForceAfterTimeout:*forceAfterTimeout})
   if err!=nil{return err}
   fmt.Printf("VM encerrada: %s graceful=%t forced=%t timed_out=%t\n",*id,result.Graceful,result.Forced,result.TimedOut)
- default:return errors.New("usage: insula vm start|list|status|shell|stop|stop-all|freeze|exec|import|deploy")
+ default:return errors.New("usage: insula vm start|list|status|shell|stop|delete|stop-all|freeze|exec|import|deploy")
  }
  return nil
 }
