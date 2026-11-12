@@ -248,9 +248,9 @@ func prepareGuestfsKernel(ctx context.Context) ([]string, func(), error) {
 // preserve staging rather than removing a potentially mounted filesystem.
 var ErrUnmount = errors.New("guest filesystem remains mounted")
 
-// unMountReadOnly releases a read-only FUSE mount before removing the
+// UnmountReadOnly releases a read-only FUSE mount before removing the
 // private supermin kernel. On unmount failure cleanup MUST NOT be called.
-func unMountReadOnly(mountpoint string, cleanup func()) error {
+func UnmountReadOnly(mountpoint string, cleanup func()) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	output, err := exec.CommandContext(ctx, "guestunmount", mountpoint).CombinedOutput()
