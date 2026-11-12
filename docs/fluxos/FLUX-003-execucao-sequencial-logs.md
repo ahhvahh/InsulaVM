@@ -5,7 +5,7 @@
 
 **Estado:** implementado para comandos SSH, logs e execução por manifesto em VM gerenciada ou host externo. **Checkout Git automático:** não implementado.
 **Versão aprovada:** nenhuma.
-**Fontes de código:** [pkg/executor/ssh.go](../../pkg/executor/ssh.go), [pkg/storage/logger.go](../../pkg/storage/logger.go), [pkg/manifest/manifest.go](../../pkg/manifest/manifest.go) e [main.go](../../main.go).
+**Fontes de código:** [pkg/executor/ssh.go](../../pkg/executor/ssh.go), [pkg/storage/logger.go](../../pkg/storage/logger.go), [pkg/manifest/manifest.go](../../pkg/manifest/manifest.go) e [main.go](../../cmd/insula/main.go).
 **Fluxo da Action com manifesto (implementado):** [FLUX-001](FLUX-001-execucao-manifesto.md).
 
 ## Objetivo e entrada

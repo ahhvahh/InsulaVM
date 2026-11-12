@@ -4,7 +4,7 @@
 # INTF-TERM-005 — Enviar arquivo e executar script em uma VM
 
 **Estado:** implementado.
-**Código:** [vm_cli.go](../../../vm_cli.go) e [DeployToVM](../../../insulavm/deploy.go).
+**Código:** [vm_cli.go](../../../cmd/insula/vm_cli.go) e [DeployToVM](../../../insulavm/deploy.go).
 **Fluxo:** [FLUX-005 — Deploy](../../fluxos/FLUX-005-deploy-arquivos.md).
 
 ## Sintaxe

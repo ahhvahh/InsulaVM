@@ -28,7 +28,7 @@ virtualization:
   default_disk_gb: 8
 ```
 
-Execute `go build -o insula .` e tente novamente. O InsulaVM usa `setfacl` para permitir **somente travessia** dos diretórios ancestrais (`--x`), leitura da imagem QCOW2-base e seed ISO (`r--`) e leitura/gravação do overlay (`rw-`). **Não** concede acesso à chave SSH privada do cliente ou ao conteúdo de `cloud-init/user-data`. Se um diretório ancestral não pertencer ao usuário atual e estiver fechado, a mensagem informa como criar a ACL com `sudo setfacl` uma única vez.
+Execute `go build -o insula ./cmd/insula` e tente novamente. O InsulaVM usa `setfacl` para permitir **somente travessia** dos diretórios ancestrais (`--x`), leitura da imagem QCOW2-base e seed ISO (`r--`) e leitura/gravação do overlay (`rw-`). **Não** concede acesso à chave SSH privada do cliente ou ao conteúdo de `cloud-init/user-data`. Se um diretório ancestral não pertencer ao usuário atual e estiver fechado, a mensagem informa como criar a ACL com `sudo setfacl` uma única vez.
 
 O valor é opcional e **não deve ser definido como UID 0/root**. Sem `qemu_uid`, o InsulaVM não modifica ACLs. Se o hipervisor usar outro UID, ajuste a configuração. Restrições AppArmor/SELinux são independentes das ACLs; veja [documentação oficial do Libvirt](https://www.libvirt.org/drvqemu.html).
 

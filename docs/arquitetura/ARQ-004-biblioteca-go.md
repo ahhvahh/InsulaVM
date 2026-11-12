@@ -6,7 +6,7 @@
 **Estado:** pacote público implementado e testado; interface experimental, ainda sem versão pública estável.
 **Código canônico:** [insulavm/engine.go](../../insulavm/engine.go).
 **Exemplo compilável:** [examples/go-library/main.go](../../examples/go-library/main.go).
-**CLI:** [main.go](../../main.go), que agora utiliza o mesmo motor da biblioteca.
+**CLI:** [main.go](../../cmd/insula/main.go), que agora utiliza o mesmo motor da biblioteca.
 
 ## Contrato-alvo canônico
 
@@ -157,7 +157,7 @@ A biblioteca permite executar `Engine.Run` com `SSH.User` por Action ou, se omit
 ```mermaid
 flowchart TD
     CON[Outro projeto Go] --> API[insulavm.Engine]
-    CLI[CLI main.go] --> API
+    CLI[CLI cmd/insula/main.go] --> API
     API --> CONF[pkg/config]
     API --> PROF[pkg/profile]
     API --> VM[pkg/vm]

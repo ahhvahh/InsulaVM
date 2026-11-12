@@ -5,7 +5,7 @@
 
 **Estado:** Implementado para arquivos e seleção de perfis, criação de overlay QCOW2 e inicialização Libvirt. **Pendente:** instalação inicial a partir de ISO instaladora e clonagem automática de repositórios Git. Cloud-Init NoCloud automático está implementado em [ARQ-006](ARQ-006-identidade-registro-sudo.md).
 
-**Código fonte:** [config](../../pkg/config/config.go), [profile](../../pkg/profile/profile.go), [runtime](../../pkg/vm/runtime.go), [manifesto](../../pkg/manifest/manifest.go), [CLI](../../main.go).
+**Código fonte:** [config](../../pkg/config/config.go), [profile](../../pkg/profile/profile.go), [runtime](../../pkg/vm/runtime.go), [manifesto](../../pkg/manifest/manifest.go), [CLI](../../cmd/insula/main.go).
 
 ## Responsabilidades dos três arquivos
 
@@ -87,11 +87,11 @@ O comando `profile register` recebe uma **imagem QCOW2 com SO já instalado**, v
 Exemplo:
 
 ```bash
-go run . profile register -config config.yaml \
+go run ./cmd/insula profile register -config config.yaml \
   -name debian-minimal -image /tmp/debian-installed.qcow2 \
   -memory-mib 1024 -vcpus 1 -disk-gb 8 -os debian
-go run . profile list -config config.yaml
-go run . profile show -config config.yaml -name debian-minimal
+go run ./cmd/insula profile list -config config.yaml
+go run ./cmd/insula profile show -config config.yaml -name debian-minimal
 ```
 
 ## Instâncias independentes e perfis congelados

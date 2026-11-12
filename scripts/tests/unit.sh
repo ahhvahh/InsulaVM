@@ -37,6 +37,6 @@ go test -tags integration -count=1 -run '^(TestAlpineISO(XMLContract|TranscriptC
 go test -tags integration -run '^$' ./tests/integration
 go test -tags integration -run '^$' ./insulavm
 
-go build -o "$TMP/insula" .
+go build -o "$TMP/insula" ./cmd/insula
 "$TMP/insula" help >/dev/null
 echo "INSULA_UNIT_OK"

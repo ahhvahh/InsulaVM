@@ -11,12 +11,12 @@
 
 | Comando | Finalidade |
 | --- | --- |
-| `go run . config check -config config.yaml` | Validar conteúdo de `config.yaml` e mostrar diretórios |
-| `go run . profile list -config config.yaml` | Listar perfis cujo YAML seja válido |
-| `go run . profile show -config config.yaml -name debian-minimal` | Mostrar identidade, recursos e localização relativa da imagem |
-| `go run . profile register -config config.yaml -name debian-minimal -image /tmp/debian.qcow2 -memory-mib 1024 -vcpus 1 -disk-gb 8` | Registrar imagem QCOW2 **já instalada** como novo perfil |
-| `go run . run -config config.yaml -manifest insula.yaml` | Iniciar VM descartável do perfil selecionado e executar jobs |
-| `go run . run -config config.yaml -manifest insula.yaml -host 192.0.2.10:22` | Executar jobs em guest SSH existente, sem criar instância |
+| `go run ./cmd/insula config check -config config.yaml` | Validar conteúdo de `config.yaml` e mostrar diretórios |
+| `go run ./cmd/insula profile list -config config.yaml` | Listar perfis cujo YAML seja válido |
+| `go run ./cmd/insula profile show -config config.yaml -name debian-minimal` | Mostrar identidade, recursos e localização relativa da imagem |
+| `go run ./cmd/insula profile register -config config.yaml -name debian-minimal -image /tmp/debian.qcow2 -memory-mib 1024 -vcpus 1 -disk-gb 8` | Registrar imagem QCOW2 **já instalada** como novo perfil |
+| `go run ./cmd/insula run -config config.yaml -manifest insula.yaml` | Iniciar VM descartável do perfil selecionado e executar jobs |
+| `go run ./cmd/insula run -config config.yaml -manifest insula.yaml -host 192.0.2.10:22` | Executar jobs em guest SSH existente, sem criar instância |
 
 O comando `profile register` aceita adicionalmente `-os`, `-iso` (metadado informativo, não instalação), `-address`, `-user` e `-destination` (diretório absoluto dentro da VM). `profile create-from-iso` também aceita `-destination`. A imagem de origem deve existir localmente e ser QCOW2 com sistema instalado. Os parâmetros `-memory-mib` e `-vcpus` são obrigatórios; `-disk-gb` recebe padrão de `config.yaml` caso ausente.
 

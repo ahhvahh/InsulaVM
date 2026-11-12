@@ -10,7 +10,7 @@
 
 ## Status verificável dos componentes
 
-- **Implementado:** [executor SSH](../../pkg/executor/ssh.go), [armazenamento local de logs](../../pkg/storage/logger.go), [manifesto YAML](../../pkg/manifest/manifest.go) e [CLI](../../main.go), seguindo o [FLUX-003](../fluxos/FLUX-003-execucao-sequencial-logs.md).
+- **Implementado:** [executor SSH](../../pkg/executor/ssh.go), [armazenamento local de logs](../../pkg/storage/logger.go), [manifesto YAML](../../pkg/manifest/manifest.go) e [CLI](../../cmd/insula/main.go), seguindo o [FLUX-003](../fluxos/FLUX-003-execucao-sequencial-logs.md).
 - **Implementado:** perfis QCOW2, gerenciamento temporário de VM por Libvirt, Cloud-Init NoCloud com identidade SSH por instância, importação TAR.GZ, pasta `guest.destination` configurável, jobs sequenciais e limpeza de overlays. **Proposto:** instalação do Linux pela ISO instaladora e checkout Git automático.
 
 ## Objetivo e limites
