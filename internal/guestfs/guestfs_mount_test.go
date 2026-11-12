@@ -1,4 +1,4 @@
-package insulavm
+package guestfs
 
 import (
 	"context"
@@ -20,7 +20,7 @@ func TestGuestfsMountKeepsNormalHostPath(t *testing.T) {
 	bin := t.TempDir()
 	guestfsStub(t, bin, "guestmount", `test "$1" = --ro; test "$2" = -a; test "$4" = -i`)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	cleanup, err := mountGuestDiskReadOnly(context.Background(), "/tmp/guest.qcow2", t.TempDir())
+	cleanup, err := MountReadOnly(context.Background(), "/tmp/guest.qcow2", t.TempDir())
 	if err != nil || cleanup == nil {
 		t.Fatalf("normal read-only mount: cleanup=%v err=%v", cleanup != nil, err)
 	}
@@ -45,7 +45,7 @@ exit 1`)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("SUPERMIN_KERNEL", "")
 	t.Setenv("SUPERMIN_MODULES", "")
-	cleanup, err := mountGuestDiskReadOnly(context.Background(), "/tmp/guest.qcow2", t.TempDir())
+	cleanup, err := MountReadOnly(context.Background(), "/tmp/guest.qcow2", t.TempDir())
 	if err != nil || cleanup == nil {
 		t.Fatalf("isolated kernel recovery: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestGuestfsMountFailsClosedForOtherSuperminErrors(t *testing.T) {
 	bin := t.TempDir()
 	guestfsStub(t, bin, "guestmount", `echo 'libguestfs: supermin exited with error status 1: missing libraries' >&2; exit 27`)
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	cleanup, err := mountGuestDiskReadOnly(context.Background(), "/tmp/guest.qcow2", t.TempDir())
+	cleanup, err := MountReadOnly(context.Background(), "/tmp/guest.qcow2", t.TempDir())
 	if err == nil || cleanup != nil || !strings.Contains(err.Error(), "missing libraries") {
 		t.Fatalf("unrelated supermin failure accepted: cleanup=%v err=%v", cleanup != nil, err)
 	}
@@ -76,7 +76,7 @@ func TestGuestfsMountFailsClosedForOtherSuperminErrors(t *testing.T) {
 func TestGuestfsMountCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if cleanup, err := mountGuestDiskReadOnly(ctx, "/tmp/guest.qcow2", t.TempDir()); cleanup != nil || !errors.Is(err, context.Canceled) {
+	if cleanup, err := MountReadOnly(ctx, "/tmp/guest.qcow2", t.TempDir()); cleanup != nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled mount: cleanup=%v err=%v", cleanup != nil, err)
 	}
 }

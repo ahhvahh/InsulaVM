@@ -1,6 +1,7 @@
 package insulavm
 
 import (
+ "github.com/ahhvahh/InsulaVM/internal/guestfs"
  "context"
  "crypto/rand"
  "crypto/sha256"
@@ -138,7 +139,7 @@ func (e *Engine) CreateProfileFromISO(ctx context.Context,req CreateProfileFromI
  createdDomain=false
  notify("verification","Installer exited; validating Debian 13, SSH, sudo, cloud-init and live-boot on disk")
  if err:=verifyDebianInstalledDisk(ctx,disk,stage);err!=nil{
-  if errors.Is(err,errInstallerUnmount){safeRemove=false}
+  if errors.Is(err,guestfs.ErrUnmount){safeRemove=false}
   return nil,err
  }
  if err:=verifyStandaloneQCOW2(ctx,disk);err!=nil{return nil,err}
@@ -298,7 +299,7 @@ func cleanupISOInstallerDomain(ctx context.Context,uri,name string)error{
 func verifyDebianInstalledDisk(ctx context.Context,disk,stage string)error{
  mount:=filepath.Join(stage,"root")
  if err:=os.MkdirAll(mount,0700);err!=nil{return err}
- guestfsCleanup,err:=mountGuestDiskReadOnly(ctx,disk,mount)
+ guestfsCleanup,err:=guestfs.MountReadOnly(ctx,disk,mount)
  if err!=nil{return fmt.Errorf("mount installed disk: %w",err)}
  checkErr:=func()error{
   release,err:=os.ReadFile(filepath.Join(mount,"etc","os-release"))
@@ -315,7 +316,7 @@ func verifyDebianInstalledDisk(ctx context.Context,disk,stage string)error{
   }
   return nil
  }()
- if unmountErr:=unmountGuestDiskReadOnly(mount,guestfsCleanup);unmountErr!=nil{
+ if unmountErr:=unguestfs.MountReadOnly(mount,guestfsCleanup);unmountErr!=nil{
   return errors.Join(checkErr,unmountErr)
  }
  return checkErr

@@ -69,7 +69,38 @@ jobs:
           set -euo pipefail
           command -v depmod
           INSULA_GUESTFS_FUNCTIONAL=1 go test -tags integration -count=1 -timeout 15m \
-            -run '^TestFunctionalGuestfsPrivateKernelMount$' -v ./insulavm
+            -run '^TestFunctionalGuestfsPrivateKernelMount
+
+      - name: Teste Integral 3 - Mini ISO, QCOW2 comprimido e persistencia
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/tests/integral-3-iso-persistence.sh
+
+      - name: Diagnostico do host em falha
+        if: failure()
+        shell: bash
+        run: |
+          mkdir -p data/integral-3-ci/diagnostic
+          virsh -c qemu:///system list --all \
+            > data/integral-3-ci/diagnostic/domains.txt 2>&1 || true
+          virsh -c qemu:///system net-dhcp-leases default \
+            > data/integral-3-ci/diagnostic/leases.txt 2>&1 || true
+          sudo journalctl -u libvirtd -u virtqemud -u virtlogd \
+            --since '3 hours ago' --no-pager \
+            > data/integral-3-ci/diagnostic/libvirt-journal.log 2>&1 || true
+
+      - name: Publicar logs de host e do guest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integral-3-iso-workspace-evidencias
+          path: |
+            data/integral-3-ci/diagnostic/
+            data/integral-3-ci/state/logs/
+          if-no-files-found: warn
+          retention-days: 7
+ -v ./internal/guestfs
 
       - name: Teste Integral 3 - Mini ISO, QCOW2 comprimido e persistencia
         shell: bash

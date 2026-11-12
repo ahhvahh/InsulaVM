@@ -1,6 +1,7 @@
 package insulavm
 
 import (
+ "github.com/ahhvahh/InsulaVM/internal/guestfs"
  "context"
  "errors"
  "os"
@@ -158,7 +159,7 @@ func TestCreateProfileFromISOUnmountFailureRetainsStaging(t *testing.T){
  result,err:=e.CreateProfileFromISO(context.Background(),CreateProfileFromISORequest{
   Name:"unsafe-unmount",ISOPath:iso,MemoryMiB:2048,VCPUs:2,DiskGB:12,
  })
- if !errors.Is(err,errInstallerUnmount)||result!=nil{t.Fatalf("unmount problem not reported: %+v %v",result,err)}
+ if !errors.Is(err,guestfs.ErrUnmount)||result!=nil{t.Fatalf("unmount problem not reported: %+v %v",result,err)}
  if _,err:=e.GetProfile("unsafe-unmount");err==nil{t.Fatal("mounted guest disk published as profile")}
  temps,err:=filepath.Glob(filepath.Join(e.config.Storage.Runs,"insula-install-*"))
  if err!=nil||len(temps)!=1{t.Fatalf("mounted staging not retained: %v %v",temps,err)}

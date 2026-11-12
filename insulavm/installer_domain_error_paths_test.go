@@ -1,6 +1,7 @@
 package insulavm
 
 import (
+ "github.com/ahhvahh/InsulaVM/internal/guestfs"
  "context"
  "errors"
  "os"
@@ -107,7 +108,7 @@ func TestDebianInstallerVerificationRefusesInvalidGuest(t *testing.T){
    }else if err==nil||!strings.Contains(err.Error(),tc.want){
     t.Fatalf("guest validation should report %q: %v",tc.want,err)
    }
-   if tc.name=="unmount error"&&!errors.Is(err,errInstallerUnmount){
+   if tc.name=="unmount error"&&!errors.Is(err,guestfs.ErrUnmount){
     t.Fatalf("source overlay might be deleted while still mounted: %v",err)
    }
   })

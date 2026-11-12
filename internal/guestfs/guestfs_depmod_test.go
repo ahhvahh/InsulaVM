@@ -1,4 +1,4 @@
-package insulavm
+package guestfs
 
 import (
  "context"

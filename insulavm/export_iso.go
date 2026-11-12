@@ -1,14 +1,13 @@
 package insulavm
 
 import (
+ "github.com/ahhvahh/InsulaVM/internal/liveiso"
  "context"
  "errors"
  "fmt"
  "os"
- "io"
  "os/exec"
  "path/filepath"
- "sort"
  "strings"
 
  "github.com/ahhvahh/InsulaVM/pkg/storage"
@@ -61,7 +60,7 @@ func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string
    isoPath=""
   }
  }()
- kernel,initrd,err:=selectLiveKernel(mount)
+ kernel,initrd,err:=liveiso.SelectKernel(mount)
  if err!=nil{return "",err}
  // Debian Live requires live-boot scripts INSIDE the initramfs. Otherwise
  // grub-mkrescue could create an ISO that has no bootable root filesystem.
@@ -70,9 +69,9 @@ func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string
  if !strings.Contains(string(contents),"scripts/live"){
   return "",errors.New("guest initramfs lacks live-boot scripts; install live-boot and run update-initramfs -u in the VM before freeze")
  }
- if err:=copyISOFile(kernel,filepath.Join(stage,"live","vmlinuz"));err!=nil{return "",err}
- if err:=copyISOFile(initrd,filepath.Join(stage,"live","initrd.img"));err!=nil{return "",err}
- if err:=runISOTool(ctx,"mksquashfs",mount,filepath.Join(stage,"live","filesystem.squashfs"),"-noappend","-comp","xz");err!=nil{return "",err}
+ if err:=liveiso.CopyFile(kernel,filepath.Join(stage,"live","vmlinuz"));err!=nil{return "",err}
+ if err:=liveiso.CopyFile(initrd,filepath.Join(stage,"live","initrd.img"));err!=nil{return "",err}
+ if err:=liveiso.RunTool(ctx,"mksquashfs",mount,filepath.Join(stage,"live","filesystem.squashfs"),"-noappend","-comp","xz");err!=nil{return "",err}
  // Both the kernel/initramfs and SquashFS have now been copied to staging.
  // A successful ISO must never be published while guestmount is still active.
  unmountErr:=unmountGuestDiskReadOnly(mount,guestfsCleanup)
@@ -81,18 +80,18 @@ func(e *Engine)ExportProfileLiveISOTo(ctx context.Context,name,outputPath string
   preserveWork=true
   return "",fmt.Errorf("ISO staging retained at %s: %w",work,unmountErr)
  }
- grub:=liveISOGrubConfig()
+ grub:=liveiso.GrubConfig()
  if err:=os.WriteFile(filepath.Join(stage,"boot","grub","grub.cfg"),[]byte(grub),0600);err!=nil{return "",err}
  if err:=os.MkdirAll(filepath.Dir(dest),0700);err!=nil{return "",err}
  // Always recheck after building the SquashFS: a second process may have
  // published the same output while this image was being assembled.
- if err:=checkISODestinationVacant(dest);err!=nil{return "",err}
+ if err:=liveiso.CheckDestinationVacant(dest);err!=nil{return "",err}
  staging,err:=os.CreateTemp(filepath.Dir(dest),".insula-live-*.part.iso")
  if err!=nil{return "",err}
  temp:=staging.Name()
  if err:=staging.Close();err!=nil{_ = os.Remove(temp);return "",err}
  defer os.Remove(temp)
- if err:=runISOTool(ctx,"grub-mkrescue","-o",temp,stage);err!=nil{return "",err}
+ if err:=liveiso.RunTool(ctx,"grub-mkrescue","-o",temp,stage);err!=nil{return "",err}
  stat,err:=os.Stat(temp)
  if err!=nil{return "",err}
  if !stat.Mode().IsRegular()||stat.Size()==0{return "",errors.New("empty or invalid ISO generated")}
@@ -118,61 +117,6 @@ func(e *Engine)liveISODestination(name,outputPath string)(string,error){
  }
  abs,err:=filepath.Abs(outputPath)
  if err!=nil{return "",fmt.Errorf("resolve ISO output path: %w",err)}
- if err:=checkISODestinationVacant(abs);err!=nil{return "",err}
+ if err:=liveiso.CheckDestinationVacant(abs);err!=nil{return "",err}
  return abs,nil
-}
-func checkISODestinationVacant(path string)error{
- if path==""{return errors.New("ISO destination path required")}
- _,err:=os.Lstat(path)
- if err==nil{return fmt.Errorf("ISO destination already exists (will not overwrite): %s",path)}
- if !errors.Is(err,os.ErrNotExist){return fmt.Errorf("inspect ISO output: %w",err)}
- return nil
-}
-
-
-// liveISOGrubConfig emits early-boot diagnostics to both VGA and ttyS0.
-// The kernel's console=ttyS0 alone is insufficient: GRUB has its own
-// terminal configuration and may stop before loading the kernel.
-func liveISOGrubConfig()string{
- return "set timeout_style=menu\n"+
-  "set timeout=2\n"+
-  "set default=0\n"+
-  "serial --unit=0 --speed=115200 --word=8 --parity=no --stop=1\n"+
-  "terminal_input serial console\n"+
-  "terminal_output serial console\n"+
-  "menuentry 'InsulaVM Debian Live' {\n"+
-  " linux /live/vmlinuz boot=live components console=tty0 console=ttyS0,115200n8\n"+
-  " initrd /live/initrd.img\n"+
-  "}\n"
-}
-
-func runISOTool(ctx context.Context,name string,args ...string)error{
- output,err:=exec.CommandContext(ctx,name,args...).CombinedOutput()
- if err!=nil{return fmt.Errorf("%s failed: %w: %s",name,err,strings.TrimSpace(string(output)))}
- return nil
-}
-
-func selectLiveKernel(root string)(string,string,error){
- candidates,err:=filepath.Glob(filepath.Join(root,"boot","vmlinuz-*"))
- if err!=nil{return "","",err}
- sort.Sort(sort.Reverse(sort.StringSlice(candidates)))
- for _,kernel:=range candidates{
-  suffix:=strings.TrimPrefix(filepath.Base(kernel),"vmlinuz-")
-  initrd:=filepath.Join(root,"boot","initrd.img-"+suffix)
-  k,ke:=os.Stat(kernel)
-  i,ie:=os.Stat(initrd)
-  if ke==nil&&ie==nil&&k.Mode().IsRegular()&&i.Mode().IsRegular(){return kernel,initrd,nil}
- }
- return "","",errors.New("guest has no matching /boot/vmlinuz-* and /boot/initrd.img-* files")
-}
-
-func copyISOFile(src,dst string)error{
- input,err:=os.Open(src)
- if err!=nil{return err}
- defer input.Close()
- output,err:=os.OpenFile(dst,os.O_CREATE|os.O_EXCL|os.O_WRONLY,0600)
- if err!=nil{return err}
- _,copyErr:=io.Copy(output,input)
- closeErr:=output.Close()
- return errors.Join(copyErr,closeErr)
 }

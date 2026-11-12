@@ -11,6 +11,7 @@
 package insulavm
 
 import (
+ shelltransport "github.com/ahhvahh/InsulaVM/internal/shell"
  "os"
  "sync"
 	"context"
@@ -52,7 +53,7 @@ type Engine struct {
 	config config.Config
 	configDir string
  shellMu sync.Mutex
- shells map[string]*managedShell
+ shells map[string]*shelltransport.Session
  shellsClosed bool
 }
 

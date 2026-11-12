@@ -10,6 +10,9 @@ Ferramenta em **Go** para criar e gerenciar VMs Linux descartáveis com **QEMU/K
 
 - `cmd/insula/`: código da CLI (`package main`) e testes da interface.
 - `insulavm/`: API Go pública consumida pela CLI e por outras aplicações.
+- `internal/guestfs/`: montagem read-only, diagnóstico do supermin e kernel privado temporário.
+- `internal/shell/`: sessões SSH persistentes, framing e sincronização de comandos.
+- `internal/liveiso/`: seleção de kernel/initramfs, GRUB e ferramentas de geração de ISO.
 - `pkg/`: componentes reutilizados pelo motor, preservados para compatibilidade.
 - `tests/integration/` e `scripts/tests/`: testes e automação.
 - `docs/`: contratos, arquitetura, fluxos e guias.
@@ -23,7 +26,7 @@ go test -race ./...
 go vet ./...
 ```
 
-O módulo continua sendo `github.com/ahhvahh/InsulaVM`; os imports de `insulavm/` e `pkg/` não mudam.
+O módulo continua sendo `github.com/ahhvahh/InsulaVM`; os imports de `insulavm/` e `pkg/` não mudam. `internal/` é exclusivo do módulo, conforme as regras de importação do Go. Veja [ARQ-007 — Pacotes internos](docs/arquitetura/ARQ-007-pacotes-internos.md).
 
 ## Contrato canônico CLI / biblioteca Go
 
