@@ -35,18 +35,8 @@ go tool cover -func="$TMP/coverage.out" | grep -E "[[:space:]]0[.]0%" | head -n 
 # sem criar VMs, instalar ISO ou transferir arquivos no runner unitario.
 go test -tags integration -count=1 -run '^(TestAlpineISO(XMLContract|TranscriptContract)|TestIntegral2ZipFixtureContract|TestIntegral3MarkerContract)$' ./tests/integration
 go test -tags integration -run '^$' ./tests/integration
-go test -tags integration -run '^
-
-go build -o "$TMP/insula" ./cmd/insula
-"$TMP/insula" help >/dev/null
-echo "INSULA_UNIT_OK"
- ./insulavm
-go test -tags integration -run '^
-
-go build -o "$TMP/insula" ./cmd/insula
-"$TMP/insula" help >/dev/null
-echo "INSULA_UNIT_OK"
- ./internal/guestfs
+go test -tags integration -run '^$' ./insulavm
+go test -tags integration -run '^$' ./internal/guestfs
 
 go build -o "$TMP/insula" ./cmd/insula
 "$TMP/insula" help >/dev/null
