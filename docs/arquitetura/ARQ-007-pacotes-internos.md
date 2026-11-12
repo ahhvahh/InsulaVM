@@ -3,7 +3,7 @@
 
 # ARQ-007 — Divisão entre API pública e pacotes internos
 
-**Estado:** implementado na branch de refatoração; sem alteração do contrato público.
+**Estado:** arquitetura implementada e incremental; contrato público preservado.
 **Escopo:** organização do código Go, sem alteração de fluxo de VM ou regras de negócio.
 **Referências:** [ARQ-004 — Biblioteca Go](ARQ-004-biblioteca-go.md), [CONTR-001 — Operações canônicas](../contratos/CONTR-001-operacoes-canonicas.md).
 
@@ -18,9 +18,10 @@ Preservar a API `github.com/ahhvahh/InsulaVM/insulavm` e o binário `insula`, li
 | `cmd/insula/` | Comandos e testes CLI | Argumentos, configuração, API `insulavm` | Stdout/stderr, códigos de saída |
 | `insulavm/` | Motor público e orquestração | `Engine`, `context.Context`, requests e callbacks | Resultados públicos e erros, sem duplicar lógica |
 | `internal/guestfs/` | Montagem read-only e desmontagem segura; recuperação privada de supermin | Caminhos da imagem/montagem, contexto; ferramentas GuestFS/APT | Função cleanup, `error`, `ErrUnmount` |
-| `internal/installer/` | Validação de ISO Debian, Preseed, domínio instalador e verificação de QCOW2 | Contexto, caminhos ISO/QCOW2, Libvirt e ferramentas host | SHA256, texto Preseed, erro de estado, `guestfs.ErrUnmount` |
-| `internal/shell/` | Transporte de sessão SSH de longa duração, delimitação binária e comandos serializados | `ssh.Client`, comando, contexto, workspace | Saída, exit code e erros de transporte; `Session` |
+| `internal/installer/` | Download e SHA256 do Debian, validação de ISO, Preseed, domínio instalador e verificação de QCOW2 | Contexto, caminhos ISO/QCOW2, Libvirt e ferramentas host | SHA256, texto Preseed, erro de estado, `guestfs.ErrUnmount` |
+| `internal/shell/` | Preparação de workspace SSH, transporte de sessão de longa duração, delimitação binária e comandos serializados | `ssh.Client`, comando, contexto, workspace | Saída, exit code e erros de transporte; `Session` |
 | `internal/liveiso/` | Primitivos do host para ISO Live, kernel/initramfs, GRUB e cópias seguras | Diretórios e comandos do host, contexto | Caminhos, bytes/erro sem sobrescrever destino |
+| `internal/vmstop/` | Políticas de shutdown individual e em lote | Status registrado, operações do motor e contextos | Resultado parcial, erro agregado; recusa VMs sem identidade comprovada |
 | `pkg/` | Pacotes de infraestrutura já existentes | Libvirt, SQLite, SSH, configuração, transferência | Tipos e erros existentes, contratos preservados |
 
 ## Regras e segurança
@@ -36,8 +37,9 @@ Preservar a API `github.com/ahhvahh/InsulaVM/insulavm` e o binário `insula`, li
 
 1. Exportação de ISO: `Engine.ExportProfileLiveISOTo` → `internal/guestfs` (montagem) → `internal/liveiso` (preparo) → desmontagem → publicação.
 2. Instalação de Debian: `Engine.CreateProfileFromISO` → `internal/installer` (Preseed, Libvirt e verificação) → `internal/guestfs` (montagem somente leitura) → registro de perfil QCOW2.
-3. Sessão Shell: `Engine.ExecuteShellCommand` → conexão e registro SQLite → `internal/shell` (sessão, comando e resposta) → persistência.
-4. Erro de desmontagem: retornar `guestfs.ErrUnmount`, preservar a área de staging e permitir diagnóstico posterior.
+3. Desligamento seguro: `Engine.StopVMWithOptions`/`Engine.StopAllVMs` → `internal/vmstop` → adaptador do motor Libvirt/SQLite, preservando validação de ownership.
+4. Sessão Shell: `Engine.ExecuteShellCommand` → conexão e registro SQLite → `internal/shell` (sessão, comando e resposta) → persistência.
+5. Erro de desmontagem: retornar `guestfs.ErrUnmount`, preservar a área de staging e permitir diagnóstico posterior.
 
 ## Testes e validação
 

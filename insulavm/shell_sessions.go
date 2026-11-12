@@ -87,7 +87,7 @@ func(e *Engine)ExecuteShellCommand(ctx context.Context,req ShellCommandRequest)(
    HostKeyAlgorithms:[]string{"ssh-ed25519"},
   })
   if dialErr!=nil{return nil,dialErr}
-  if err:=ensureGuestWorkspace(setupCtx,client,workspace);err!=nil{_ = client.Close();return nil,err}
+  if err:=shelltransport.EnsureWorkspace(setupCtx,client,workspace);err!=nil{_ = client.Close();return nil,err}
   shell,err=shelltransport.Open(setupCtx,client,id,req.VMID,workspace)
   if err!=nil{_ = client.Close();return nil,err}
   if err:=store.InsertShellSession(ctx,id,req.VMID);err!=nil{shell.Close();return nil,err}

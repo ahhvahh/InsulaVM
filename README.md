@@ -11,8 +11,9 @@ Ferramenta em **Go** para criar e gerenciar VMs Linux descartáveis com **QEMU/K
 - `cmd/insula/`: código da CLI (`package main`) e testes da interface.
 - `insulavm/`: API Go pública consumida pela CLI e por outras aplicações.
 - `internal/guestfs/`: montagem read-only, diagnóstico do supermin e kernel privado temporário.
-- `internal/installer/`: Preseed Debian, controle do domínio instalador e verificação do QCOW2.
+- `internal/installer/`: download/checksum do Debian, Preseed, controle do domínio instalador e verificação do QCOW2.
 - `internal/shell/`: sessões SSH persistentes, framing e sincronização de comandos.
+- `internal/vmstop/`: políticas seguras de encerramento individual/em lote, validação de identidade e escalonamento.
 - `internal/liveiso/`: seleção de kernel/initramfs, GRUB e ferramentas de geração de ISO.
 - `pkg/`: componentes reutilizados pelo motor, preservados para compatibilidade.
 - `tests/integration/` e `scripts/tests/`: testes e automação.

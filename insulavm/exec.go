@@ -75,7 +75,7 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if err!=nil{return nil,err}
  defer client.Close()
  if req.Workspace=="" {
-  if err:=ensureGuestWorkspace(ctx,client,workspace);err!=nil{return nil,err}
+  if err:=shelltransport.EnsureWorkspace(ctx,client,workspace);err!=nil{return nil,err}
  }
  logRun,err:=storage.NewRun(e.config.Storage.Logs,"vm-"+vm.ID,"exec",time.Now())
  if err!=nil{return nil,err}

@@ -46,6 +46,12 @@ type CreateProfileFromISOResult struct {
  Installed bool
 }
 
+// DownloadDebianMiniISO retrieves and verifies a Debian 13 netboot mini.iso.
+// Existing callers keep using the insulavm package; downloads are handled by the installer package.
+func DownloadDebianMiniISO(ctx context.Context, outputDir string) (string, error) {
+ return installer.DownloadDebianMiniISO(ctx, outputDir)
+}
+
 var linuxInstallerUser=regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,30}$`)
 
 func (e *Engine) CreateProfileFromISO(ctx context.Context,req CreateProfileFromISORequest)(result *CreateProfileFromISOResult,runErr error){
