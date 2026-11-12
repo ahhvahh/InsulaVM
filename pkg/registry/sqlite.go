@@ -72,6 +72,14 @@ func Open(filename string)(*Store,error){
    finished_at TEXT NOT NULL DEFAULT ''
   )`,
   "CREATE INDEX IF NOT EXISTS vm_instances_by_status ON vm_instances(status,created_at)",
+  `CREATE TABLE IF NOT EXISTS deleted_vm_ids (
+   id TEXT PRIMARY KEY,
+   deleted_at TEXT NOT NULL
+  )`,
+  `CREATE TRIGGER IF NOT EXISTS vm_instances_no_reused_ids
+   BEFORE INSERT ON vm_instances
+   WHEN EXISTS(SELECT 1 FROM deleted_vm_ids WHERE id=NEW.id)
+   BEGIN SELECT RAISE(ABORT,'VM UUID was previously used'); END`,
   `CREATE TABLE IF NOT EXISTS shell_sessions (
    id TEXT PRIMARY KEY,
    vm_id TEXT NOT NULL,
@@ -212,4 +220,56 @@ func(s *Store)List(ctx context.Context)([]Entry,error){
   result=append(result,e)
  }
  return result,rows.Err()
+}
+
+ 
+
+// IDPreviouslyUsed checks both active registry rows and compact deletion
+// tombstones. A deleted UUID is never reassigned to a different VM.
+func(s *Store)IDPreviouslyUsed(ctx context.Context,id string)(bool,error){
+ if ctx==nil{return false,errors.New("context is required")}
+ var used int
+ err:=s.db.QueryRowContext(ctx,
+  "SELECT EXISTS(SELECT 1 FROM vm_instances WHERE id=? UNION ALL SELECT 1 FROM deleted_vm_ids WHERE id=?)",
+  id,id).Scan(&used)
+ return used!=0,err
+}
+
+// SetRestarted marks a verified resumed domain as running. A previous DHCP
+// lease and completion timestamp must not be reused after power-on.
+func(s *Store)SetRestarted(ctx context.Context,id string)error{
+ if ctx==nil{return errors.New("context is required")}
+ result,err:=s.db.ExecContext(ctx,
+  "UPDATE vm_instances SET status='running',ip='',finished_at='',updated_at=? WHERE id=? AND status <> 'destroyed'",
+  time.Now().UTC().Format(time.RFC3339Nano),id)
+ if err!=nil{return err}
+ count,err:=result.RowsAffected()
+ if err!=nil{return err}
+ if count!=1{return fmt.Errorf("VM %s not found or already destroyed",id)}
+ return nil
+}
+
+// Delete permanently purges one VM's registry and shell history in a single
+// transaction. The caller must first prove that Libvirt no longer has the VM
+// and that its owned temporary files have been removed.
+func(s *Store)Delete(ctx context.Context,id string)error{
+ if ctx==nil{return errors.New("context is required")}
+ if id==""{return errors.New("VM ID is required")}
+ tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return err}
+ defer tx.Rollback()
+ _,err=tx.ExecContext(ctx,"INSERT OR IGNORE INTO deleted_vm_ids(id,deleted_at) SELECT id,? FROM vm_instances WHERE id=?",
+  time.Now().UTC().Format(time.RFC3339Nano),id)
+ if err!=nil{return err}
+ for _,query:=range []string{
+  "DELETE FROM shell_commands WHERE vm_id=?",
+  "DELETE FROM shell_sessions WHERE vm_id=?",
+ }{
+  if _,err:=tx.ExecContext(ctx,query,id);err!=nil{return err}
+ }
+ result,err:=tx.ExecContext(ctx,"DELETE FROM vm_instances WHERE id=?",id)
+ if err!=nil{return err}
+ count,err:=result.RowsAffected()
+ if err!=nil{return err}
+ if count!=1{return fmt.Errorf("VM %s not found",id)}
+ return tx.Commit()
 }

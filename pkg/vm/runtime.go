@@ -417,14 +417,8 @@ func StopByID(ctx context.Context,c *config.Config,id string)error{
  if entry.Status!="running"&&entry.Status!="creating"&&entry.Status!="failed"{
   return fmt.Errorf("unsupported VM status %q",entry.Status)
  }
- root,err:=filepath.Abs(c.Storage.Runs)
+ path,err:=managedInstanceDirectory(c,entry)
  if err!=nil{return err}
- path,err:=filepath.Abs(entry.InstanceDir)
- if err!=nil{return err}
- relative,err:=filepath.Rel(root,path)
- if err!=nil||relative=="."||relative==".."||strings.HasPrefix(relative,".."+string(filepath.Separator))||!strings.HasPrefix(filepath.Base(path),"insula-vm-"){
-  return errors.New("unsafe registered VM directory")
- }
  instance:=&Instance{
   ID:id,LibvirtUUID:entry.LibvirtUUID,Name:entry.Name,Directory:path,uri:c.Virtualization.LibvirtURI,
   registryPath:c.Storage.Database,active:live[0].LibvirtState!="absent",
