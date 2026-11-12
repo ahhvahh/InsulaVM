@@ -7,6 +7,7 @@ import (
  "os"
  "path/filepath"
 
+ "github.com/ahhvahh/InsulaVM/pkg/profile"
  "github.com/ahhvahh/InsulaVM/pkg/registry"
  "github.com/ahhvahh/InsulaVM/pkg/storage"
  "github.com/ahhvahh/InsulaVM/pkg/vm"
@@ -64,7 +65,7 @@ func(e *Engine)DeleteProfile(ctx context.Context,name string)error{
  // Only remove profiles recognized by the managed catalog.
  if _,err:=e.GetProfile(name);err!=nil{
   // Installer profiles deliberately use a different metadata format.
-  if _,installErr:=e.installerProfileForDeletion(name);installErr!=nil{
+  if _,installErr:=profile.ReadInstaller(e.config.Storage.Profiles,name);installErr!=nil{
    return fmt.Errorf("refusing to remove unrecognized profile %q: %w",name,err)
   }
  }
