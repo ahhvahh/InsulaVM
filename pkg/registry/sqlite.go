@@ -213,3 +213,40 @@ func(s *Store)List(ctx context.Context)([]Entry,error){
  }
  return result,rows.Err()
 }
+
+ 
+// SetRestarted marks a verified resumed domain as running. A previous DHCP
+// lease and completion timestamp must not be reused after power-on.
+func(s *Store)SetRestarted(ctx context.Context,id string)error{
+ if ctx==nil{return errors.New("context is required")}
+ result,err:=s.db.ExecContext(ctx,
+  "UPDATE vm_instances SET status='running',ip='',finished_at='',updated_at=? WHERE id=? AND status <> 'destroyed'",
+  time.Now().UTC().Format(time.RFC3339Nano),id)
+ if err!=nil{return err}
+ count,err:=result.RowsAffected()
+ if err!=nil{return err}
+ if count!=1{return fmt.Errorf("VM %s not found or already destroyed",id)}
+ return nil
+}
+
+// Delete permanently purges one VM's registry and shell history in a single
+// transaction. The caller must first prove that Libvirt no longer has the VM
+// and that its owned temporary files have been removed.
+func(s *Store)Delete(ctx context.Context,id string)error{
+ if ctx==nil{return errors.New("context is required")}
+ if id==""{return errors.New("VM ID is required")}
+ tx,err:=s.db.BeginTx(ctx,nil);if err!=nil{return err}
+ defer tx.Rollback()
+ for _,query:=range []string{
+  "DELETE FROM shell_commands WHERE vm_id=?",
+  "DELETE FROM shell_sessions WHERE vm_id=?",
+ }{
+  if _,err:=tx.ExecContext(ctx,query,id);err!=nil{return err}
+ }
+ result,err:=tx.ExecContext(ctx,"DELETE FROM vm_instances WHERE id=?",id)
+ if err!=nil{return err}
+ count,err:=result.RowsAffected()
+ if err!=nil{return err}
+ if count!=1{return fmt.Errorf("VM %s not found",id)}
+ return tx.Commit()
+}
