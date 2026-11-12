@@ -29,6 +29,8 @@ func TestRegistryRestartClearsStaleNetworkStateAndPurge(t *testing.T){
   if count!=0{t.Fatalf("%s not purged: %d",table,count)}
  }
  if err:=store.Delete(ctx,id);err==nil{t.Fatal("double purge should fail")}
+ if used,err:=store.IDPreviouslyUsed(ctx,id);err!=nil||!used{t.Fatalf("deleted UUID must remain reserved: %t %v",used,err)}
+ if err:=store.Insert(ctx,entry);err==nil{t.Fatal("reused UUID after purge")}
  if err:=store.SetRestarted(ctx,id);err==nil{t.Fatal("resumed deleted row")}
 }
 
