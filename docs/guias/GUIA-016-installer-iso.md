@@ -3,7 +3,7 @@
 
 # GUIA-016 — Inicializar VM pela ISO instaladora Alpine
 
-**Estado:** implementação proposta em branch de funcionalidade; testes KVM reais pendentes.
+**Estado:** implementação disponível no código; validação de boot gráfico em KVM real pendente.
 **Fluxo:** CLI `insula vm install-iso` e Go `Engine.StartVMFromInstallerISO`.
 **Escopo:** ISO Alpine Virtual 3.24.4, 1 vCPU, 500 MiB de RAM, disco QCOW2 isolado de 8 GiB.
 
@@ -17,7 +17,7 @@
 
 ## Preparação
 
-Na raiz do projeto, após obter a branch da funcionalidade:
+Na raiz do projeto, usando a implementação atual:
 
 ```bash
 go test ./...
@@ -44,17 +44,21 @@ cp examples/profiles/alpine-virt/profile.yaml data/profiles/alpine-virt/profile.
 ./insula vm list -config config.yaml
 ./insula vm status -config config.yaml -id UUID
 ./insula vm console -config config.yaml -id UUID
+
+# Se o Alpine não apresentar login no console serial, utilize VNC no host:
+sudo virsh -c qemu:///system domdisplay UUID --type vnc
+remote-viewer "$(sudo virsh -c qemu:///system domdisplay UUID --type vnc)"
 ```
 
 No console Alpine Virtual, `root` inicia sem senha na mídia Live de testes. Para sair de `virsh console`, pressione `Ctrl+]`. Para instalar manualmente em `/dev/vda`, use `setup-alpine` e selecione o modo `sys`.
 
-**Importante:** `vm install-iso` confirma apenas que o domínio Libvirt está em estado running, não que o Alpine completou o boot. Consulte o console serial para comprovar o sistema convidado. Não exige DHCP, Cloud-Init ou SSH.
+**Importante:** `vm install-iso` confirma apenas que o domínio Libvirt está em estado running, não que o Alpine completou o boot. Consulte o console serial ou a tela VNC para verificar o sistema convidado. Não exige DHCP, Cloud-Init ou SSH. O VNC usa porta automática, escuta somente em `127.0.0.1` no host e mantém a porta serial; não fornece autenticação adicional, portanto é destinado a ambientes locais confiáveis. `remote-viewer` é fornecido pelo pacote `virt-viewer` (quando instalado).
 
 ## Limites da versão inicial
 
 O domínio é **transitório**. Cada execução cria seu próprio UUIDv7 e QCOW2 em `storage.runs/insula-vm-*`, registrado em SQLite. O comando `./insula vm stop -id UUID` **apaga o disco temporário**; não equivale a salvar a instalação. O domínio desaparece ao desligar o sistema convidado e ainda não há comando de religamento a partir desse QCOW2. Preserve/exporte o disco por procedimento explícito antes de remover a instância. Não use este fluxo como armazenamento definitivo sem operação posterior de publicação do disco.
 
-A ISO original é somente leitura. `vm shell` e `vm exec` exigem SSH configurado no convidado e não são meios de acesso inicial à ISO Alpine. Para inspeção, use `vm console`.
+A ISO original é somente leitura. `vm shell` e `vm exec` exigem SSH configurado no convidado e não são meios de acesso inicial à ISO Alpine. Para inspeção, use `vm console` (serial) ou `virsh domdisplay UUID --type vnc` com um visualizador VNC no host. A inclusão de VNC não modifica domínios já em execução: é preciso criar uma nova VM para receber a nova configuração. Preserve o QCOW2 existente antes de descartar a VM antiga.
 
 ## Referências
 
