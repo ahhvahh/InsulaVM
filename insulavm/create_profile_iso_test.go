@@ -1,6 +1,7 @@
 package insulavm
 
 import (
+ installer "github.com/ahhvahh/InsulaVM/internal/installer"
  "github.com/ahhvahh/InsulaVM/internal/guestfs"
  "context"
  "errors"
@@ -114,7 +115,7 @@ func TestCreateProfileFromISORejectsUnsafeInput(t *testing.T){
 }
 
 func TestRenderDebianPreseedUsesEphemeralHashAndLockedRoot(t *testing.T){
- p:=renderDebianPreseed("insula","$6$test$mock",true)
+ p:=installer.RenderPreseed("insula","$6$test$mock",true)
  for _,want:=range []string{
   "d-i passwd/root-login boolean false",
   "d-i passwd/user-password-crypted password $6$test$mock",
@@ -125,7 +126,7 @@ func TestRenderDebianPreseedUsesEphemeralHashAndLockedRoot(t *testing.T){
  }{
   if !strings.Contains(p,want){t.Fatalf("missing Debian preseed directive: %s",want)}
  }
- if strings.Contains(renderDebianPreseed("insula","$6$test$mock",false),"NOPASSWD:ALL"){
+ if strings.Contains(installer.RenderPreseed("insula","$6$test$mock",false),"NOPASSWD:ALL"){
   t.Fatal("sudo privilege unexpectedly enabled")
  }
 }

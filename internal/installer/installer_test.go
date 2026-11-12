@@ -1,4 +1,4 @@
-package insulavm
+package installer
 
 import (
  "github.com/ahhvahh/InsulaVM/internal/guestfs"
@@ -30,13 +30,13 @@ func TestInstallerDomainVerificationAndSafeCleanup(t *testing.T){
  for _,tc:=range cases{
   t.Run(tc.name,func(t *testing.T){
    fakeInstallerVirsh(t,tc.script)
-   check:=checkInstallerStopped(context.Background(),"qemu:///system",name)
+   check:=CheckStopped(context.Background(),"qemu:///system",name)
    if tc.checkErr==""{
     if check!=nil{t.Fatalf("expected stopped installer: %v",check)}
    }else if check==nil||!strings.Contains(check.Error(),tc.checkErr){
     t.Fatalf("installer active/error state not reported (%q): %v",tc.checkErr,check)
    }
-   cleanup:=cleanupISOInstallerDomain(context.Background(),"qemu:///system",name)
+   cleanup:=CleanupDomain(context.Background(),"qemu:///system",name)
    if tc.cleanupErr==""{
     if cleanup!=nil{t.Fatalf("safe cleanup failed: %v",cleanup)}
    }else if cleanup==nil||!strings.Contains(cleanup.Error(),tc.cleanupErr){
@@ -58,7 +58,7 @@ func TestInstallerCleanupMustStopVMBeforeRemovingDomain(t *testing.T){
  if err:=os.WriteFile(filepath.Join(bin,"virsh"),[]byte(script),0700);err!=nil{t.Fatal(err)}
  t.Setenv("RUNNING_INSTALLER",state)
  t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
- if err:=cleanupISOInstallerDomain(context.Background(),"qemu:///system","insula-install-test");err!=nil{
+ if err:=CleanupDomain(context.Background(),"qemu:///system","insula-install-test");err!=nil{
   t.Fatalf("installer cleanup should verify destruction before undefine: %v",err)
  }
  if _,err:=os.Stat(state);!os.IsNotExist(err){t.Fatal("installer was not stopped")}
@@ -77,7 +77,7 @@ func TestDebianInstallerDiskChecksRejectCorruptMetadata(t *testing.T){
    script:="#!/bin/sh\nprintf '%s\\n' '"+tc.info+"'\n"
    if err:=os.WriteFile(filepath.Join(bin,"qemu-img"),[]byte(script),0700);err!=nil{t.Fatal(err)}
    t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-   err:=verifyStandaloneQCOW2(context.Background(),"/tmp/safe-test-image.qcow2")
+   err:=VerifyStandaloneQCOW2(context.Background(),"/tmp/safe-test-image.qcow2")
    if tc.want==""{
     if err!=nil{t.Fatalf("standalone QCOW2 check failed: %v",err)}
    }else if err==nil||!strings.Contains(err.Error(),tc.want){
@@ -102,7 +102,7 @@ func TestDebianInstallerVerificationRefusesInvalidGuest(t *testing.T){
    if err:=os.WriteFile(filepath.Join(bin,"guestmount"),[]byte(guest),0700);err!=nil{t.Fatal(err)}
    if err:=os.WriteFile(filepath.Join(bin,"guestunmount"),[]byte("#!/bin/sh\n"+tc.unmount+"\n"),0700);err!=nil{t.Fatal(err)}
    t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
-   err:=verifyDebianInstalledDisk(context.Background(),"/tmp/installed.qcow2",t.TempDir())
+   err:=VerifyDebianDisk(context.Background(),"/tmp/installed.qcow2",t.TempDir())
    if tc.want==""{
     if err!=nil{t.Fatalf("valid Debian guest rejected: %v",err)}
    }else if err==nil||!strings.Contains(err.Error(),tc.want){
