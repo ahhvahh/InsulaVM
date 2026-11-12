@@ -98,7 +98,7 @@ Para gerar o arquivo, enviá-lo à VM **já iniciada**, enviar o próprio script
 
 ```bash
 git pull --ff-only origin main
-go build -o insula .
+go build -o insula ./cmd/insula
 bash scripts/repositorio-vm.sh enviar 01a1b24e-88cb-7464-9acc-06a08cf727fd .
 ```
 
@@ -118,13 +118,13 @@ Para outro repositório local, substitua `.` pelo caminho do projeto. A VM é ma
 Uma **imagem QCOW2 com Linux já instalado e preparado com Cloud-Init** é inicializada com uma ISO **NoCloud/CIDATA gerada pelo InsulaVM**, contendo um usuário `insula` e chaves Ed25519 individuais. A ISO de configuração não instala Linux; o instalador Debian/Arch por ISO é uma funcionalidade diferente e ainda pendente.
 
 ```bash
-go run . vm start -config config.yaml -profile debian-minimal
-go run . vm list -config config.yaml
-go run . vm status -config config.yaml -id UUIDv7
-go run . vm exec -config config.yaml -id UUIDv7 -command "id -un"
-go run . vm exec -config config.yaml -id UUIDv7 -command "id -u" -sudo
-go run . vm import -config config.yaml -id UUIDv7 -source /srv/projeto
-go run . vm stop -config config.yaml -id UUIDv7
+go run ./cmd/insula vm start -config config.yaml -profile debian-minimal
+go run ./cmd/insula vm list -config config.yaml
+go run ./cmd/insula vm status -config config.yaml -id UUIDv7
+go run ./cmd/insula vm exec -config config.yaml -id UUIDv7 -command "id -un"
+go run ./cmd/insula vm exec -config config.yaml -id UUIDv7 -command "id -u" -sudo
+go run ./cmd/insula vm import -config config.yaml -id UUIDv7 -source /srv/projeto
+go run ./cmd/insula vm stop -config config.yaml -id UUIDv7
 ```
 
 **Caminhos exibidos no terminal:** os logs, o comando SSH, `vm status`, `config check` e a localização dos relatórios mostram caminhos **relativos ao diretório atual** (`data/profiles/...`, `data/runs/...`), sem repetir `/home/usuario/...`. O armazenamento, as chaves e os contratos da biblioteca Go continuam usando caminhos absolutos internamente. Copie e execute o comando SSH **a partir do mesmo diretório** em que executou `insula`; se mudar de diretório, obtenha um novo comando pelo `vm status` ou use os caminhos completos manualmente.
@@ -176,8 +176,8 @@ Não existe `destination`, `key` ou senha nesse manifesto. Em VMs gerenciadas, o
 Para uma VM já criada e registrada:
 
 ```bash
-go run . vm import -config config.yaml -id UUIDv7 -source /srv/meu-projeto
-go run . vm import -config config.yaml -id UUIDv7 -source /srv/extra.ini
+go run ./cmd/insula vm import -config config.yaml -id UUIDv7 -source /srv/meu-projeto
+go run ./cmd/insula vm import -config config.yaml -id UUIDv7 -source /srv/extra.ini
 ```
 
 **Ambos os uploads usam a mesma pasta.** A biblioteca expõe `Engine.ImportToVM(ctx, VMImportRequest{VMID: ..., SourcePath: ...})`, sem destino nem chave na chamada. Os estágios podem ser acompanhados por `OnProgress`; uma Action usa `RunRequest.OnImportProgress`.
@@ -192,23 +192,23 @@ Requisitos de desenvolvimento: Go 1.23+. Para criar VMs: Linux com KVM/QEMU, `vi
 
 ```bash
 # Validar config.yaml
-go run . config check -config config.yaml
+go run ./cmd/insula config check -config config.yaml
 
 # Uma vez, após instalar o Debian em um QCOW2 por outro procedimento:
-go run . profile register -config config.yaml \
+go run ./cmd/insula profile register -config config.yaml \
   -name debian-minimal \
   -image /tmp/debian-instalado.qcow2 \
   -memory-mib 1024 -vcpus 1 -disk-gb 8 -os debian
 
-go run . profile list -config config.yaml
-go run . profile show -config config.yaml -name debian-minimal
+go run ./cmd/insula profile list -config config.yaml
+go run ./cmd/insula profile show -config config.yaml -name debian-minimal
 
 # Configurar os comandos do manifesto, sem esquecer "profile: debian-minimal"
 cp insula.yaml.example insula.yaml
 
 # A imagem já precisa possuir Linux + Cloud-Init + SSH.
 # Não precisa informar usuário, chave SSH ou pasta de destino.
-go run . run -config config.yaml -manifest insula.yaml
+go run ./cmd/insula run -config config.yaml -manifest insula.yaml
 ```
 
 No modo de VM automática, o InsulaVM gerencia as chaves SSH e verifica a identidade do servidor por `known_hosts` específico da instância. O processo Libvirt deve conseguir acessar os diretórios QCOW2; ACLs/grupos são responsabilidade da instalação.

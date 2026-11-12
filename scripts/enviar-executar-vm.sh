@@ -108,7 +108,7 @@ if [[ -n "$execution_script" ]]; then
     die "Arquivo principal e script nao podem ter o mesmo nome no guest.destination"
 fi
 [[ -f "$config" ]] || die "Arquivo de configuracao ausente: $config"
-[[ -x "$insula" ]] || die "Executavel InsulaVM ausente: $insula (compile com go build -o insula .)"
+[[ -x "$insula" ]] || die "Executavel InsulaVM ausente: $insula (compile com go build -o insula ./cmd/insula)"
 
 if "$extract"; then
   [[ -f "$source_file" ]] || die "--extract exige um arquivo TAR.GZ, nao uma pasta"

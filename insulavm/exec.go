@@ -1,6 +1,7 @@
 package insulavm
 
 import (
+ shelltransport "github.com/ahhvahh/InsulaVM/internal/shell"
  "context"
  "errors"
  "fmt"
@@ -89,4 +90,4 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  err=runner.Run(ctx,"command",[]string{command},false,log)
  return result,errors.Join(err,log.Close())
 }
-func quoteGuest(s string)string{return "'"+strings.ReplaceAll(s,"'","'\"'\"'")+"'"}
+func quoteGuest(s string) string { return shelltransport.QuoteGuest(s) }

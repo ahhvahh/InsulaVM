@@ -6,7 +6,7 @@
 **Estado:** pacote público implementado e testado; interface experimental, ainda sem versão pública estável.
 **Código canônico:** [insulavm/engine.go](../../insulavm/engine.go).
 **Exemplo compilável:** [examples/go-library/main.go](../../examples/go-library/main.go).
-**CLI:** [main.go](../../main.go), que agora utiliza o mesmo motor da biblioteca.
+**CLI:** [main.go](../../cmd/insula/main.go), que agora utiliza o mesmo motor da biblioteca.
 
 ## Contrato-alvo canônico
 
@@ -24,7 +24,7 @@ O `go.mod` existente declara o módulo:
 github.com/ahhvahh/InsulaVM
 ```
 
-A raiz do repositório ainda contém a CLI como `package main`; uma aplicação **não pode importar `package main` como biblioteca**. A nova API pública encontra-se em pacote próprio:
+A CLI está em `cmd/insula/` (`package main`), enquanto a API pública está em `insulavm/`. Uma aplicação **não pode importar `package main` como biblioteca**. A API pública encontra-se em pacote próprio:
 
 ```go
 import "github.com/ahhvahh/InsulaVM/insulavm"
@@ -38,6 +38,8 @@ go mod tidy
 ```
 
 Usar `@main` traz a revisão da branch na resolução inicial; a versão efetiva é fixada no `go.mod` do consumidor. Para integração reprodutível e evolução sem surpresas, **publicar tags semânticas `v0.x.y`** após estabilizar o contrato. Nenhuma tag de versão é declarada criada nesta etapa. Não usar `replace` permanente como mecanismo de publicação; `replace` serve somente para desenvolvimento local.
+
+A implementação de montagem GuestFS, sessões SSH e ferramentas ISO foi extraída para `internal/guestfs/`, `internal/installer/`, `internal/shell/` e `internal/liveiso/`, sem alterar a API. Consulte [ARQ-007 — Pacotes internos](ARQ-007-pacotes-internos.md).
 
 ## API pública atual
 
@@ -157,7 +159,7 @@ A biblioteca permite executar `Engine.Run` com `SSH.User` por Action ou, se omit
 ```mermaid
 flowchart TD
     CON[Outro projeto Go] --> API[insulavm.Engine]
-    CLI[CLI main.go] --> API
+    CLI[CLI cmd/insula/main.go] --> API
     API --> CONF[pkg/config]
     API --> PROF[pkg/profile]
     API --> VM[pkg/vm]

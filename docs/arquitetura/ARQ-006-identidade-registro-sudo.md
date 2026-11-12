@@ -105,23 +105,23 @@ Estas verificações evitam confundir registros `creating` persistidos após um 
 
 ```bash
 # Inicia uma VM de um perfil QCOW2 com Cloud-Init já preparado.
-go run . vm start -config config.yaml -profile debian-minimal
+go run ./cmd/insula vm start -config config.yaml -profile debian-minimal
 
 # Exibe UUIDv7, IP, MAC e estado registrados.
-go run . vm list -config config.yaml
-go run . vm status -config config.yaml -id <UUIDv7>
+go run ./cmd/insula vm list -config config.yaml
+go run ./cmd/insula vm status -config config.yaml -id <UUIDv7>
 
 # Executa comando como usuário insula.
-go run . vm exec -config config.yaml -id <UUIDv7> -command "id -un"
+go run ./cmd/insula vm exec -config config.yaml -id <UUIDv7> -command "id -un"
 
 # Eleva um comando individual por sudo -n (quando autorizado).
-go run . vm exec -config config.yaml -id <UUIDv7> -command "id -u" -sudo
+go run ./cmd/insula vm exec -config config.yaml -id <UUIDv7> -command "id -u" -sudo
 
 # Copia arquivos pelo UUID, usando as credenciais guardadas no cadastro.
-go run . vm import -config config.yaml -id <UUIDv7> -source /srv/projeto
+go run ./cmd/insula vm import -config config.yaml -id <UUIDv7> -source /srv/projeto
 
 # Encerra por ID, remove overlay/seed/chaves e mantém histórico SQLite.
-go run . vm stop -config config.yaml -id <UUIDv7>
+go run ./cmd/insula vm stop -config config.yaml -id <UUIDv7>
 ```
 
 Os exemplos com `<UUIDv7>` contêm marcadores ilustrativos. Em comandos reais, substitua pelo ID retornado pela inicialização.

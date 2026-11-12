@@ -1,4 +1,4 @@
-package insulavm
+package guestfs
 
 import (
 	"context"
@@ -12,13 +12,13 @@ import (
 	"time"
 )
 
-// mountGuestDiskReadOnly uses libguestfs without exposing or modifying the
+// MountReadOnly uses libguestfs without exposing or modifying the
 // backing image. Some minimal Linux hosts (including CI runners) have KVM but
 // no readable kernel for supermin's *separate* libguestfs appliance. In that
 // specific case, provision a distro kernel in a private temporary directory
 // without installing packages, changing the host, or modifying the tests.
 // The returned cleanup must run AFTER guestunmount, never before.
-func mountGuestDiskReadOnly(ctx context.Context, image, mountpoint string) (func(), error) {
+func MountReadOnly(ctx context.Context, image, mountpoint string) (func(), error) {
 	mount := func(extraEnv ...string) ([]byte, error) {
 		cmd := exec.CommandContext(ctx, "guestmount", "--ro", "-a", image, "-i", mountpoint)
 		if len(extraEnv) != 0 {
@@ -244,19 +244,19 @@ func prepareGuestfsKernel(ctx context.Context) ([]string, func(), error) {
 }
 
 
-// errInstallerUnmount marks an unresolved guestmount/FUSE mount. Callers must
+// ErrUnmount marks an unresolved guestmount/FUSE mount. Callers must
 // preserve staging rather than removing a potentially mounted filesystem.
-var errInstallerUnmount = errors.New("guest filesystem remains mounted")
+var ErrUnmount = errors.New("guest filesystem remains mounted")
 
-// unmountGuestDiskReadOnly releases a read-only FUSE mount before removing the
+// UnmountReadOnly releases a read-only FUSE mount before removing the
 // private supermin kernel. On unmount failure cleanup MUST NOT be called.
-func unmountGuestDiskReadOnly(mountpoint string, cleanup func()) error {
+func UnmountReadOnly(mountpoint string, cleanup func()) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	output, err := exec.CommandContext(ctx, "guestunmount", mountpoint).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("%w: guestunmount %s failed: %v: %s",
-			errInstallerUnmount, mountpoint, err, tailGuestfsOutput(string(output)))
+			ErrUnmount, mountpoint, err, tailGuestfsOutput(string(output)))
 	}
 	cleanup()
 	return nil

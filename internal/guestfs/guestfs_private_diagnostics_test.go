@@ -1,4 +1,4 @@
-package insulavm
+package guestfs
 
 import (
  "context"
@@ -31,7 +31,7 @@ exit 1`)
  t.Setenv("SUPERMIN_MODULES","")
  mountpoint:=filepath.Join(t.TempDir(),"mount")
  if err:=os.Mkdir(mountpoint,0700);err!=nil{t.Fatal(err)}
- cleanup,err:=mountGuestDiskReadOnly(context.Background(),"/tmp/guest.qcow2",mountpoint)
+ cleanup,err:=MountReadOnly(context.Background(),"/tmp/guest.qcow2",mountpoint)
  if err==nil||cleanup!=nil||!strings.Contains(err.Error(),"detailed private kernel failure reason") {
   t.Fatalf("second supermin failure was not diagnosed: cleanup=%v err=%v",cleanup!=nil,err)
  }

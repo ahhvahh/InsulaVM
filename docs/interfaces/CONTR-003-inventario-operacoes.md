@@ -7,7 +7,7 @@
 
 **Estado:** revisão de interface em 2026-11-08; consolidação progressiva, sem alteração de comportamento das APIs Go existentes.
 **Fonte normativa:** [CONTR-001 — Operações canônicas](CONTR-001-operacoes-canonicas.md) e [CONTR-002 — STDIO](CONTR-002-transporte-stdio.md).
-**Implementação atual:** [main.go](../../main.go), [vm_cli.go](../../vm_cli.go), [insulavm/engine.go](../../insulavm/engine.go).
+**Implementação atual:** [main.go](../../cmd/insula/main.go), [vm_cli.go](../../cmd/insula/vm_cli.go), [insulavm/engine.go](../../insulavm/engine.go).
 
 ## Comandos atualmente executáveis
 

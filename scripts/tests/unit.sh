@@ -36,7 +36,8 @@ go tool cover -func="$TMP/coverage.out" | grep -E "[[:space:]]0[.]0%" | head -n 
 go test -tags integration -count=1 -run '^(TestAlpineISO(XMLContract|TranscriptContract)|TestIntegral2ZipFixtureContract|TestIntegral3MarkerContract)$' ./tests/integration
 go test -tags integration -run '^$' ./tests/integration
 go test -tags integration -run '^$' ./insulavm
+go test -tags integration -run '^$' ./internal/guestfs
 
-go build -o "$TMP/insula" .
+go build -o "$TMP/insula" ./cmd/insula
 "$TMP/insula" help >/dev/null
 echo "INSULA_UNIT_OK"

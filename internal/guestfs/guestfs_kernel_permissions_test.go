@@ -1,4 +1,4 @@
-package insulavm
+package guestfs
 
 import (
  "context"
@@ -31,7 +31,7 @@ exit 1`)
  t.Setenv("SUPERMIN_KERNEL","")
  t.Setenv("SUPERMIN_MODULES","")
  t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
- cleanup,err:=mountGuestDiskReadOnly(context.Background(),"/tmp/guest.qcow2",t.TempDir())
+ cleanup,err:=MountReadOnly(context.Background(),"/tmp/guest.qcow2",t.TempDir())
  if err!=nil||cleanup==nil{t.Fatalf("failed private kernel recovery: %v",err)}
  pathBytes,err:=os.ReadFile(log)
  if err!=nil{t.Fatal(err)}
@@ -54,7 +54,7 @@ exit 1`)
  t.Setenv("SUPERMIN_KERNEL","")
  t.Setenv("SUPERMIN_MODULES","")
  t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
- cleanup,err:=mountGuestDiskReadOnly(context.Background(),"/tmp/guest.qcow2",t.TempDir())
+ cleanup,err:=MountReadOnly(context.Background(),"/tmp/guest.qcow2",t.TempDir())
  if err==nil||cleanup!=nil||!strings.Contains(err.Error(),"Permission denied"){
   t.Fatalf("unrelated access failure should not trigger recovery: cleanup=%v err=%v",cleanup!=nil,err)
  }
@@ -74,7 +74,7 @@ exit 1`)
  t.Setenv("SUPERMIN_KERNEL","/configured/kernel")
  t.Setenv("SUPERMIN_MODULES","/configured/modules")
  t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
- cleanup,err:=mountGuestDiskReadOnly(context.Background(),"/tmp/guest.qcow2",t.TempDir())
+ cleanup,err:=MountReadOnly(context.Background(),"/tmp/guest.qcow2",t.TempDir())
  if err==nil||cleanup!=nil||!strings.Contains(err.Error(),"explicitly configured"){
   t.Fatalf("explicit supermin settings must not be overridden: cleanup=%v err=%v",cleanup!=nil,err)
  }

@@ -5,7 +5,7 @@
 
 **Estado:** importação implementada na CLI, biblioteca Go e manifesto; verificada com servidor SSH simulado. Execução real em KVM/Libvirt ainda não validada.
 **Contratos:** [CONTR-001 — Operações e importação atual](../contratos/CONTR-001-operacoes-canonicas.md) e [CONTR-002 — STDIO futuro](../contratos/CONTR-002-transporte-stdio.md).
-**Código:** [archive.go](../../pkg/transfer/archive.go), [remote.go](../../pkg/transfer/remote.go), [import.go](../../insulavm/import.go), [import_vm.go](../../insulavm/import_vm.go) e [import_cli.go](../../import_cli.go).
+**Código:** [archive.go](../../pkg/transfer/archive.go), [remote.go](../../pkg/transfer/remote.go), [import.go](../../insulavm/import.go), [import_vm.go](../../insulavm/import_vm.go) e [import_cli.go](../../cmd/insula/import_cli.go).
 
 ## Componentes e responsabilidades
 

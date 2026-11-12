@@ -74,7 +74,7 @@ kvm() {
 build() {
   [[ -f "$CONFIG" ]] || { echo "Missing config file: $CONFIG" >&2; exit 2; }
   need go
-  (cd "$ROOT" && go build -o "$BIN" .)
+  (cd "$ROOT" && go build -o "$BIN" ./cmd/insula)
   "$BIN" config check -config "$CONFIG" >&2
 }
 insula() {

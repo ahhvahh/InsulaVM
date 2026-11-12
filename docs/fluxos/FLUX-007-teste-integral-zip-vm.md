@@ -5,7 +5,7 @@
 
 **Estado:** implementação em branch de teste. Validação KVM real depende de execução da PR.
 **Biblioteca Go:** [Engine.ImportToVM e ExecVM](../../insulavm/import_vm.go).
-**Interface CLI:** [vm import e vm exec](../../vm_cli.go).
+**Interface CLI:** [vm import e vm exec](../../cmd/insula/vm_cli.go).
 **Guia:** [GUIA-006](../guias/GUIA-006-teste-integral-2-zip.md).
 **Runner:** [integral-2-zip.sh](../../scripts/tests/integral-2-zip.sh).
 

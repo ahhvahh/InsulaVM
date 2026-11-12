@@ -1,4 +1,4 @@
-package insulavm
+package shell
 
 import (
  "bufio"
@@ -40,7 +40,7 @@ func TestShellExchangeMultipleCommandsOnOneConnection(t *testing.T){
  defer inputReader.Close()
  defer inputWriter.Close()
  defer outputWriter.Close()
- sess:=&managedShell{stdin:inputWriter,stdout:bufio.NewReader(outputReader)}
+ sess:=&Session{stdin:inputWriter,stdout:bufio.NewReader(outputReader)}
  done:=make(chan error,1)
  go func(){
   defer outputWriter.Close()
@@ -60,7 +60,7 @@ func TestShellExchangeMultipleCommandsOnOneConnection(t *testing.T){
   done<-nil
  }()
  for _,command:=range []string{"pwd","ls"}{
-  output,code,err:=shellExchange(context.Background(),sess,command)
+  output,code,err:=Exchange(context.Background(),sess,command)
   if err!=nil||code!=0||string(output)!=command+"\n"{t.Fatalf("exchange %q: %q %d %v",command,output,code,err)}
  }
  if err:=<-done;err!=nil{t.Fatal(err)}
@@ -68,7 +68,7 @@ func TestShellExchangeMultipleCommandsOnOneConnection(t *testing.T){
 
 func TestShellCommandValidation(t *testing.T){
  for _,bad:=range []string{"","   ","echo\x00foo",strings.Repeat("x",maxShellCommandBytes+1)}{
-  if err:=validateShellCommand(bad);err==nil{t.Errorf("accepted invalid command of length %d",len(bad))}
+  if err:=ValidateCommand(bad);err==nil{t.Errorf("accepted invalid command of length %d",len(bad))}
  }
- if err:=validateShellCommand("cd /tmp && ls");err!=nil{t.Fatal(err)}
+ if err:=ValidateCommand("cd /tmp && ls");err!=nil{t.Fatal(err)}
 }

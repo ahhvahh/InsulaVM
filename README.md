@@ -6,6 +6,29 @@ Ferramenta em **Go** para criar e gerenciar VMs Linux descartáveis com **QEMU/K
 
 **Ainda não implementado:** checkout automático de repositórios Git, instalador interativo por console e contrato canônico `CreateVM` com origem por UUID e mudança de disco. **Implementado e não validado em KVM real:** instalação automática de Debian 13 amd64 a partir de ISO local usando `virt-install`/Preseed, com registro de perfil QCOW2. **Novo, sem validação KVM real:** clonagem independente de perfis, exportação de ISO Live Debian com live-boot, boot da ISO Live e desligamento gracioso com escalada. A imagem-base QCOW2 deve ter um sistema Linux previamente instalado e preparado com Cloud-Init, SSH, rede DHCP e, para congelamento, sudo sem senha.
 
+## Organização do código
+
+- `cmd/insula/`: código da CLI (`package main`) e testes da interface.
+- `insulavm/`: API Go pública consumida pela CLI e por outras aplicações.
+- `internal/guestfs/`: montagem read-only, diagnóstico do supermin e kernel privado temporário.
+- `internal/installer/`: Preseed Debian, controle do domínio instalador e verificação do QCOW2.
+- `internal/shell/`: sessões SSH persistentes, framing e sincronização de comandos.
+- `internal/liveiso/`: seleção de kernel/initramfs, GRUB e ferramentas de geração de ISO.
+- `pkg/`: componentes reutilizados pelo motor, preservados para compatibilidade.
+- `tests/integration/` e `scripts/tests/`: testes e automação.
+- `docs/`: contratos, arquitetura, fluxos e guias.
+
+A partir da raiz do repositório:
+
+```bash
+go build -o insula ./cmd/insula
+go test ./...
+go test -race ./...
+go vet ./...
+```
+
+O módulo continua sendo `github.com/ahhvahh/InsulaVM`; os imports de `insulavm/` e `pkg/` não mudam. `internal/` é exclusivo do módulo, conforme as regras de importação do Go. Veja [ARQ-007 — Pacotes internos](docs/arquitetura/ARQ-007-pacotes-internos.md).
+
 ## Contrato canônico CLI / biblioteca Go
 
 O padrão de integração para **ambas** as interfaces está em [CONTR-001 — Operações canônicas](docs/contratos/CONTR-001-operacoes-canonicas.md) e [CONTR-002 — Transporte STDIO](docs/contratos/CONTR-002-transporte-stdio.md). Os oito métodos de referência são `CreateProfileFromISO`, `CreateVM`, `UploadArchive`, `ExecuteScript`, `ExecuteCommand`, `StopVM`, `StopAllVMs` e `FreezeVM`.
@@ -18,7 +41,7 @@ A CLI `test` permite instalar, preparar, diagnosticar e exportar uma VM,
 sem depender de GitHub Actions.
 
 ```bash
-go build -o insula .
+go build -o insula ./cmd/insula
 ./insula test doctor
 ./insula test download
 ./insula test install -profile debian13-mini
@@ -71,7 +94,7 @@ instalados. O script nao habilita GitHub Actions.
 Requisitos: **Go 1.23+**, Linux com KVM/QEMU/Libvirt, `virsh`, `qemu-img`, rede Libvirt com DHCP, permissões para operar o hipervisor e geração de ISO NoCloud (`genisoimage` ou `xorriso`). O `config.yaml` é opcional na linha de comando, mas o arquivo precisa existir no local esperado.
 
 ```bash
-go build -o insula .
+go build -o insula ./cmd/insula
 ./insula config check
 ./insula profile list
 
