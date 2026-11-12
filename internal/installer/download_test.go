@@ -1,4 +1,4 @@
-package insulavm
+package installer
 
 import (
  "context"

@@ -1,4 +1,4 @@
-package insulavm
+package installer
 
 import (
  "bufio"
@@ -62,7 +62,7 @@ func downloadDebianMiniISO(ctx context.Context,client *http.Client,base,dir stri
  if len(expected)!=64{return "",errors.New("Debian SHA256SUMS lacks mini.iso")}
  if _,err:=hex.DecodeString(expected);err!=nil{return "",fmt.Errorf("invalid mini.iso checksum: %w",err)}
  if _,err:=os.Stat(dest);err==nil{
-  checksum,err:=sha256File(ctx,dest)
+  checksum,err:=SHA256File(ctx,dest)
   if err!=nil{return "",err}
   if checksum!=expected{return "",errors.New("mini.iso in cache has unexpected checksum; remove it before retrying")}
   return dest,nil
@@ -83,18 +83,3 @@ func downloadDebianMiniISO(ctx context.Context,client *http.Client,base,dir stri
  return dest,nil
 }
 
-func sha256File(ctx context.Context,path string)(string,error){
- file,err:=os.Open(path)
- if err!=nil{return "",err}
- defer file.Close()
- hash:=sha256.New()
- buf:=make([]byte,1024*1024)
- for {
-  if err:=ctx.Err();err!=nil{return "",err}
-  n,e:=file.Read(buf)
-  if n>0{_,_=hash.Write(buf[:n])}
-  if errors.Is(e,io.EOF){break}
-  if e!=nil{return "",e}
- }
- return hex.EncodeToString(hash.Sum(nil)),nil
-}

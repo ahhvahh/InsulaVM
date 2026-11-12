@@ -351,7 +351,7 @@ func (e *Engine) Run(ctx context.Context, request RunRequest) (result *RunResult
 	if p != nil {
 		guestDestination = p.GuestDestination(e.config.Guest.Destination)
 	}
-	if err:=ensureGuestWorkspace(ctx,client,guestDestination);err!=nil{
+	if err:=shelltransport.EnsureWorkspace(ctx,client,guestDestination);err!=nil{
 		return result,err
 	}
 

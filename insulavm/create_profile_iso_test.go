@@ -231,3 +231,8 @@ func TestDebianMiniISOInstallerKernelPaths(t *testing.T){
   })
  }
 }
+
+func TestDownloadDebianMiniISOPublicValidation(t *testing.T) {
+ if _,err:=DownloadDebianMiniISO(nil,t.TempDir());err==nil{t.Fatal("nil context accepted")}
+ if _,err:=DownloadDebianMiniISO(context.Background(),"");err==nil{t.Fatal("empty output directory accepted")}
+}
