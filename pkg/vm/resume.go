@@ -50,7 +50,8 @@ func ResumeByID(ctx context.Context,c *config.Config,id string)(registry.Entry,e
  }
  infos,err:=InspectRegistered(ctx,c.Virtualization.LibvirtURI,[]registry.Entry{entry})
  if err!=nil{return registry.Entry{},err}
- if len(infos)!=1||infos[0].LibvirtState!="absent"{
+ if len(infos)!=1{return registry.Entry{},errors.New("unexpected Libvirt status count")}
+ if infos[0].LibvirtState!="absent"{
   return registry.Entry{},fmt.Errorf("VM must be absent in Libvirt before resume (state=%s)",infos[0].LibvirtState)
  }
  dir,err:=managedInstanceDirectory(c,entry)
