@@ -5,7 +5,7 @@
 
 **Estado:** implementado na CLI Go.
 **Plataforma:** hospedeiro Linux com Libvirt/QEMU/KVM.
-**Código:** [vm_cli.go](../../../cmd/insula/vm_cli.go), [start_options.go](../../../insulavm/start_options.go), [stop_all.go](../../../insulavm/stop_all.go) e [freeze.go](../../../insulavm/freeze.go).
+**Código:** [vm_cli.go](../../../cmd/insula/vm_cli.go), [start_options.go](../../../insulavm/start_options.go), [stop.go](../../../insulavm/stop.go) e [freeze.go](../../../insulavm/freeze.go).
 
 ## Correspondência com contratos canônicos
 

@@ -1,27 +1,28 @@
-package insulavm
+package vmstop
 
 import (
  "context"
  "errors"
  "fmt"
+ "github.com/ahhvahh/InsulaVM/pkg/vm"
 )
 
-// VMStopAllOptions controls stopping instances managed by THIS InsulaVM
+// StopAllOptions controls stopping instances managed by THIS InsulaVM
 // registry. It never enumerates arbitrary Libvirt domains for destruction.
-type VMStopAllOptions struct {
+type StopAllOptions struct {
  DryRun bool
- OnProgress func(VMStopAllProgress)
+ OnProgress func(StopAllProgress)
 }
 
-type VMStopAllProgress struct {
+type StopAllProgress struct {
  VMID string
  Stage string
  Message string
 }
 
-// VMStopAllResult provides a partial report even if one VM cannot be stopped.
+// StopAllResult provides a partial report even if one VM cannot be stopped.
 // Targets includes domains found in Libvirt (including paused/shutoff).
-type VMStopAllResult struct {
+type StopAllResult struct {
  Checked int
  Targets []string
  Stopped []string
@@ -29,28 +30,21 @@ type VMStopAllResult struct {
  Failed []string
 }
 
-type vmStopAllBackend interface {
- ListVMStatus(context.Context)([]VMLiveInfo,error)
+// AllBackend is the managed-VM status and stop interface.
+type AllBackend interface {
+ ListVMStatus(context.Context)([]vm.LiveInfo,error)
  StopVM(context.Context,string)error
 }
 
-// StopAllVMs safely stops all existing Libvirt domains registered in this
-// engine's private SQLite database. Missing domains and foreign domains are
-// never touched. Every target is checked again by StopVM before cleanup.
-func(e *Engine)StopAllVMs(ctx context.Context,opts VMStopAllOptions)(*VMStopAllResult,error){
- if e==nil{return nil,errors.New("engine is required")}
- return stopAllManagedVMs(ctx,e,opts)
-}
-
-func stopAllManagedVMs(ctx context.Context,backend vmStopAllBackend,opts VMStopAllOptions)(*VMStopAllResult,error){
+func StopAllManagedVMs(ctx context.Context,backend AllBackend,opts StopAllOptions)(*StopAllResult,error){
  if ctx==nil{return nil,errors.New("context is required")}
  if backend==nil{return nil,errors.New("stop backend is required")}
  if err:=ctx.Err();err!=nil{return nil,err}
  live,err:=backend.ListVMStatus(ctx)
  if err!=nil{return nil,fmt.Errorf("cannot inspect managed VM status in Libvirt: %w",err)}
- result:=&VMStopAllResult{Checked:len(live)}
+ result:=&StopAllResult{Checked:len(live)}
  report:=func(id,stage,msg string){
-  if opts.OnProgress!=nil{opts.OnProgress(VMStopAllProgress{VMID:id,Stage:stage,Message:msg})}
+  if opts.OnProgress!=nil{opts.OnProgress(StopAllProgress{VMID:id,Stage:stage,Message:msg})}
  }
  var problems []error
  for _,entry:=range live{
