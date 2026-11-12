@@ -56,7 +56,7 @@ A ISO do usuário pode continuar em caminho local externo informado por ele; sal
 
 ### Metadados persistentes do perfil
 
-O formato inicial de `profile.yaml` já é lido pelo [módulo profile](../../pkg/profile/profile.go), separado do manifesto de execução `insula.yaml`. Campos atuais: `name`, `os`, `memory_mib`, `vcpus`, `disk_gb`, `version`, `image`, `iso` e os overrides opcionais `ssh`. Evoluções como checksums e publicação de novas versões ainda são propostas.
+O formato inicial de `profile.yaml` já é lido pelo [módulo profile](../../pkg/profile/profile.go), separado do manifesto de execução `insula.yaml`. Campos atuais: `name`, `os`, `memory_mib`, `vcpus`, `disk_gb`, `version`, `image`, `iso`, `guest.destination` (diretório de trabalho no convidado) e os overrides opcionais `ssh`. Evoluções como checksums e publicação de novas versões ainda são propostas.
 
 | Informação | Finalidade |
 | --- | --- |
@@ -145,9 +145,11 @@ As próximas instâncias usam `vm start -profile <nome>` ou [`StartVMWithOptions
 
 ### Libguestfs e ambientes sem kernel local
 
-A inspeção do QCOW2 instalado e a captura de conteúdo para a ISO Live utilizam o mesmo adaptador `mountGuestDiskReadOnly` (`insulavm/guestfs_mount.go`), sempre com `guestmount --ro`. Uma falha do `supermin` aciona uma segunda tentativa com `LIBGUESTFS_DEBUG=1` e `LIBGUESTFS_TRACE=1` para obter a causa exata; não é tratada como falha de DHCP nem como instalação concluída.
+A inspeção do QCOW2 instalado e a captura de conteúdo para a ISO Live utilizam o adaptador `guestfs.MountReadOnly` (`internal/guestfs/mount.go`), sempre com `guestmount --ro`. Uma falha do `supermin` aciona uma segunda tentativa com `LIBGUESTFS_DEBUG=1` e `LIBGUESTFS_TRACE=1` para obter a causa exata; não é tratada como falha de DHCP nem como instalação concluída.
 
 **Somente** quando o `supermin` relata ausência de kernel apropriado, o motor pode obter o kernel e módulos da distribuição via índices APT configurados no host. Os pacotes são baixados (sem `sudo` ou instalação), extraídos num diretório temporário com permissões restritas e fornecidos à appliance pelo `SUPERMIN_KERNEL`, `SUPERMIN_MODULES` e `LIBGUESTFS_CACHEDIR`. Os arquivos temporários são removidos após o `guestunmount` bem-sucedido. Configurações explícitas dessas variáveis são respeitadas, sem substituição automática de kernel. Outras falhas de `libguestfs`, falhas APT ou de montagem são propagadas, sem registrar perfil ou publicar ISO como sucesso. Tanto a verificação do instalador quanto a exportação Live usam desmontagem compartilhada e obrigatória: falha no `guestunmount` preserva o staging e impede publicar QCOW2/ISO. Na exportação, a desmontagem acontece após gerar o SquashFS, **antes** de invocar `grub-mkrescue` e publicar o arquivo final. O procedimento não altera o QCOW2 de origem nem a configuração do sistema operacional do host.
+
+A extração privada dos pacotes de kernel exige `depmod` (pacote `kmod`) caso os índices de módulos estejam ausentes. O motor gera e valida `modules.dep` e `modules.dep.bin` somente no staging privado, inclusive quando o pacote usa `/usr/lib/modules`. Se o executável estiver ausente, a falha é explícita; o motor não instala pacotes no host nem modifica `/boot`. O teste funcional `TestFunctionalGuestfsPrivateKernelMount` realiza montagem read-only real com kernel privado sobre imagem ext4 descartável, executado no Integral 3 (PR `develop` para `homolog` ou `main`). Testes unitários validam a mesma recuperação com ferramentas isoladas, sem exigir KVM.
 
 Referências oficiais: [supermin](https://libguestfs.org/supermin.1.html), [guestfs-faq](https://libguestfs.org/guestfs-faq.1.html) e [variáveis libguestfs](https://libguestfs.org/guestfs.3.html).
 

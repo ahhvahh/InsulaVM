@@ -40,8 +40,8 @@ type SSH struct {
  SudoMode string `yaml:"sudo_mode"`
 }
 
-// Guest configures the shared target directory INSIDE every guest VM.
-// The same destination is used for imports and the default job workspace.
+// Guest is a legacy fallback for profiles created before per-profile destinations
+// and for unmanaged SSH hosts; new profiles store guest.destination themselves.
 type Guest struct {
  Destination string `yaml:"destination"`
 }

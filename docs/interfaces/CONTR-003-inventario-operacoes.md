@@ -7,7 +7,7 @@
 
 **Estado:** revisão de interface em 2026-11-08; consolidação progressiva, sem alteração de comportamento das APIs Go existentes.
 **Fonte normativa:** [CONTR-001 — Operações canônicas](CONTR-001-operacoes-canonicas.md) e [CONTR-002 — STDIO](CONTR-002-transporte-stdio.md).
-**Implementação atual:** [main.go](../../main.go), [vm_cli.go](../../vm_cli.go), [insulavm/engine.go](../../insulavm/engine.go).
+**Implementação atual:** [main.go](../../cmd/insula/main.go), [vm_cli.go](../../cmd/insula/vm_cli.go), [insulavm/engine.go](../../insulavm/engine.go).
 
 ## Comandos atualmente executáveis
 
@@ -91,7 +91,7 @@ Além destes, `insula help`, `insula -h` e `insula --help` exibem a ajuda. O ata
 | Exportar Debian Live | `profile export-iso` | `ExportProfileLiveISO` | `insulavm/export_iso.go` |
 | Iniciar guest por ISO Live | `vm start-iso` | `StartVMFromISO` | `insulavm/live_iso.go`, `pkg/vm/live_iso.go` |
 | Console serial | `vm console` | `OpenConsole` | `insulavm/console.go` |
-| Shutdown 30 s e força após timeout | `vm stop` | `StopVMWithOptions` | `insulavm/stop_policy.go` |
+| Shutdown 30 s e força após timeout | `vm stop` | `StopVMWithOptions` | `insulavm/stop.go` + `internal/vmstop/policy.go` |
 
 Implementação no código da branch de trabalho; **compilação e teste real KVM ainda não comprovados**. Instalador ISO netinst permanece pendente. [Fluxo de testes integrais](../fluxos/FLUX-006-teste-integral-iso-vm.md).
 

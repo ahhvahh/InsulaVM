@@ -90,7 +90,7 @@ virsh -c qemu:///system net-info default | grep -Eq 'Active:[[:space:]]+yes' || 
 }
 cd "$ROOT"
 BIN="$STATE/insula-integral-3"
-go build -o "$BIN" .
+go build -o "$BIN" ./cmd/insula
 mkdir -p "$STATE/diagnostic"
 echo "[integral-3] executing real ISO install/compressed QCOW2 freeze/second KVM boot"
 set +e

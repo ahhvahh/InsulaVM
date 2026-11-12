@@ -6,6 +6,7 @@ import (
  "errors"
  "os"
  "path/filepath"
+ "reflect"
  "strings"
  "testing"
  "time"
@@ -105,5 +106,20 @@ func TestOpenConsoleRealAdapterForwardsStreams(t *testing.T){
  if stderr.Len()!=0{t.Fatalf("unexpected console stderr: %q",stderr.String())}
  if err:=e.OpenConsole(context.Background(),"unknown",nil,nil,nil);err==nil{
   t.Fatal("allowed console access for unregistered VM")
+ }
+}
+
+func TestVMStopPublicTypesRetainNamedIdentity(t *testing.T) {
+ types:=[]reflect.Type{
+  reflect.TypeOf(VMStopOptions{}),
+  reflect.TypeOf(VMStopResult{}),
+  reflect.TypeOf(VMStopAllOptions{}),
+  reflect.TypeOf(VMStopAllProgress{}),
+  reflect.TypeOf(VMStopAllResult{}),
+ }
+ for _,typ:=range types{
+  if typ.PkgPath()!="github.com/ahhvahh/InsulaVM/insulavm"{
+   t.Errorf("%s moved outside the public Go API package: %s",typ.Name(),typ.PkgPath())
+  }
  }
 }

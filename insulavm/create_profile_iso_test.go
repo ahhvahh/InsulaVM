@@ -1,6 +1,8 @@
 package insulavm
 
 import (
+ installer "github.com/ahhvahh/InsulaVM/internal/installer"
+ "github.com/ahhvahh/InsulaVM/internal/guestfs"
  "context"
  "errors"
  "os"
@@ -113,7 +115,7 @@ func TestCreateProfileFromISORejectsUnsafeInput(t *testing.T){
 }
 
 func TestRenderDebianPreseedUsesEphemeralHashAndLockedRoot(t *testing.T){
- p:=renderDebianPreseed("insula","$6$test$mock",true)
+ p:=installer.RenderPreseed("insula","$6$test$mock",true)
  for _,want:=range []string{
   "d-i passwd/root-login boolean false",
   "d-i passwd/user-password-crypted password $6$test$mock",
@@ -124,7 +126,7 @@ func TestRenderDebianPreseedUsesEphemeralHashAndLockedRoot(t *testing.T){
  }{
   if !strings.Contains(p,want){t.Fatalf("missing Debian preseed directive: %s",want)}
  }
- if strings.Contains(renderDebianPreseed("insula","$6$test$mock",false),"NOPASSWD:ALL"){
+ if strings.Contains(installer.RenderPreseed("insula","$6$test$mock",false),"NOPASSWD:ALL"){
   t.Fatal("sudo privilege unexpectedly enabled")
  }
 }
@@ -158,7 +160,7 @@ func TestCreateProfileFromISOUnmountFailureRetainsStaging(t *testing.T){
  result,err:=e.CreateProfileFromISO(context.Background(),CreateProfileFromISORequest{
   Name:"unsafe-unmount",ISOPath:iso,MemoryMiB:2048,VCPUs:2,DiskGB:12,
  })
- if !errors.Is(err,errInstallerUnmount)||result!=nil{t.Fatalf("unmount problem not reported: %+v %v",result,err)}
+ if !errors.Is(err,guestfs.ErrUnmount)||result!=nil{t.Fatalf("unmount problem not reported: %+v %v",result,err)}
  if _,err:=e.GetProfile("unsafe-unmount");err==nil{t.Fatal("mounted guest disk published as profile")}
  temps,err:=filepath.Glob(filepath.Join(e.config.Storage.Runs,"insula-install-*"))
  if err!=nil||len(temps)!=1{t.Fatalf("mounted staging not retained: %v %v",temps,err)}
@@ -228,4 +230,9 @@ func TestDebianMiniISOInstallerKernelPaths(t *testing.T){
    }
   })
  }
+}
+
+func TestDownloadDebianMiniISOPublicValidation(t *testing.T) {
+ if _,err:=DownloadDebianMiniISO(nil,t.TempDir());err==nil{t.Fatal("nil context accepted")}
+ if _,err:=DownloadDebianMiniISO(context.Background(),"");err==nil{t.Fatal("empty output directory accepted")}
 }

@@ -10,7 +10,7 @@
 ## Execução direta
 
 ```bash
-go run . run -config config.yaml -manifest insula.yaml
+go run ./cmd/insula run -config config.yaml -manifest insula.yaml
 ```
 
 Quando `insula.yaml` indica um `profile`, a CLI inicia a VM descartável, provisiona SSH e elimina a necessidade de informar chave, usuário ou endereço remoto. A conexão valida a chave de host da instância.
@@ -70,7 +70,7 @@ ssh:
   known_hosts: /etc/insulavm/known_hosts
 ```
 
-Não armazene conteúdo de chave privada em YAML. Para importações posteriores em uma VM registrada, use `go run . vm import -id UUIDv7 -source /srv/arquivo`; o banco SQLite fornece a identidade SSH e o destino sempre vem de `guest.destination`.
+Não armazene conteúdo de chave privada em YAML. Para importações posteriores em uma VM registrada, use `go run ./cmd/insula vm import -id UUIDv7 -source /srv/arquivo`; o banco SQLite fornece a identidade SSH e o destino sempre vem de `guest.destination`.
 
 ## Resultado e limitações
 

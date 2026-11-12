@@ -4,7 +4,7 @@
 # INTF-TERM-005 — Enviar arquivo e executar script em uma VM
 
 **Estado:** implementado.
-**Código:** [vm_cli.go](../../../vm_cli.go) e [DeployToVM](../../../insulavm/deploy.go).
+**Código:** [vm_cli.go](../../../cmd/insula/vm_cli.go) e [DeployToVM](../../../insulavm/deploy.go).
 **Fluxo:** [FLUX-005 — Deploy](../../fluxos/FLUX-005-deploy-arquivos.md).
 
 ## Sintaxe
@@ -37,7 +37,7 @@
 - **Código `0`:** os dois arquivos foram importados, a extração solicitada terminou e o script saiu com êxito.
 - **Cancelamento:** `Ctrl+C` cancela o contexto, mas não desfaz arquivos já recebidos.
 
-O script executa no diretório `guest.destination` e recebe em `$1` o nome-base do arquivo original. Exemplo de script local:
+O script executa no diretório `guest.destination` do perfil e recebe em `$1` o nome-base do arquivo original. Exemplo de script local:
 
 ```bash
 #!/usr/bin/env bash

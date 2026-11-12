@@ -55,7 +55,7 @@ cleanup() {
   exit "$rc"
 }
 trap cleanup EXIT
-go build -o "$TMP/insula" .
+go build -o "$TMP/insula" ./cmd/insula
 insula() {
   local group="$1" sub="$2"
   shift 2

@@ -70,7 +70,7 @@ send_to_vm() {
   local insula_root insula_bin config_file tmp archive
   insula_root="$(cd -- "$(dirname -- "$script_path")/.." && pwd -P)"
   insula_bin="$insula_root/insula"
-  [[ -x "$insula_bin" ]] || die "Executavel ausente: $insula_bin (compile com go build -o insula .)"
+  [[ -x "$insula_bin" ]] || die "Executavel ausente: $insula_bin (compile com go build -o insula ./cmd/insula)"
   config_file="${config_arg:-$insula_root/config.yaml}"
   [[ -f "$config_file" ]] || die "Configuracao nao encontrada: $config_file"
   config_file="$(cd -- "$(dirname -- "$config_file")" && pwd -P)/$(basename -- "$config_file")"

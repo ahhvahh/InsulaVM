@@ -32,11 +32,15 @@ A biblioteca oferece `StartVMWithOptions(ctx, VMStartOptions{Profile,StartupScri
 ## Seleção do usuário SSH por Action
 
 ```yaml
-# config.yaml: padrão de todas as VMs
-guest:
-  destination: /tmp/insulavm/workspace
+# config.yaml: usuário SSH padrão
 ssh:
   user: insula
+```
+
+```yaml
+# data/profiles/debian-minimal/profile.yaml: destino deste perfil
+guest:
+  destination: /tmp/insulavm/workspace
 ```
 
 ```yaml
@@ -55,7 +59,7 @@ setup:
 
 A opção `ssh.user` da Action é **opcional**: se ausente, o InsulaVM usa o usuário do perfil (quando definido) ou a configuração global (`insula` por padrão). O Cloud-Init provisiona o usuário escolhido e injeta sua chave pública individual. **Nunca** informe `key`, `known_hosts`, senha ou diretório remoto no YAML da Action.
 
-O caminho `guest.destination` é sempre o destino dos arquivos e o diretório inicial dos jobs quando `workspace` for omitido. O InsulaVM tenta criá-lo **como o usuário SSH**, sem elevar privilégios automaticamente. Para pastas protegidas, prepare permissões no perfil ou escolha um caminho acessível.
+O caminho `guest.destination` do perfil é sempre o destino dos arquivos e o diretório inicial dos jobs quando `workspace` for omitido. O InsulaVM tenta criá-lo **como o usuário SSH**, sem elevar privilégios automaticamente. Para pastas protegidas, prepare permissões no perfil ou escolha um caminho acessível.
 
 Se a Action for executada numa VM SSH **externa**, não gerenciada pelo InsulaVM, a conta já precisa existir e aceitar uma chave previamente autorizada. Nesse caso, configure `ssh.private_key` e `ssh.known_hosts` no `config.yaml` global; não há como provisionar uma conta remota sem acesso prévio.
 
@@ -101,23 +105,23 @@ Estas verificações evitam confundir registros `creating` persistidos após um 
 
 ```bash
 # Inicia uma VM de um perfil QCOW2 com Cloud-Init já preparado.
-go run . vm start -config config.yaml -profile debian-minimal
+go run ./cmd/insula vm start -config config.yaml -profile debian-minimal
 
 # Exibe UUIDv7, IP, MAC e estado registrados.
-go run . vm list -config config.yaml
-go run . vm status -config config.yaml -id <UUIDv7>
+go run ./cmd/insula vm list -config config.yaml
+go run ./cmd/insula vm status -config config.yaml -id <UUIDv7>
 
 # Executa comando como usuário insula.
-go run . vm exec -config config.yaml -id <UUIDv7> -command "id -un"
+go run ./cmd/insula vm exec -config config.yaml -id <UUIDv7> -command "id -un"
 
 # Eleva um comando individual por sudo -n (quando autorizado).
-go run . vm exec -config config.yaml -id <UUIDv7> -command "id -u" -sudo
+go run ./cmd/insula vm exec -config config.yaml -id <UUIDv7> -command "id -u" -sudo
 
 # Copia arquivos pelo UUID, usando as credenciais guardadas no cadastro.
-go run . vm import -config config.yaml -id <UUIDv7> -source /srv/projeto
+go run ./cmd/insula vm import -config config.yaml -id <UUIDv7> -source /srv/projeto
 
 # Encerra por ID, remove overlay/seed/chaves e mantém histórico SQLite.
-go run . vm stop -config config.yaml -id <UUIDv7>
+go run ./cmd/insula vm stop -config config.yaml -id <UUIDv7>
 ```
 
 Os exemplos com `<UUIDv7>` contêm marcadores ilustrativos. Em comandos reais, substitua pelo ID retornado pela inicialização.

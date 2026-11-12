@@ -6,7 +6,7 @@
 **Estado:** pacote público implementado e testado; interface experimental, ainda sem versão pública estável.
 **Código canônico:** [insulavm/engine.go](../../insulavm/engine.go).
 **Exemplo compilável:** [examples/go-library/main.go](../../examples/go-library/main.go).
-**CLI:** [main.go](../../main.go), que agora utiliza o mesmo motor da biblioteca.
+**CLI:** [main.go](../../cmd/insula/main.go), que agora utiliza o mesmo motor da biblioteca.
 
 ## Contrato-alvo canônico
 
@@ -24,7 +24,7 @@ O `go.mod` existente declara o módulo:
 github.com/ahhvahh/InsulaVM
 ```
 
-A raiz do repositório ainda contém a CLI como `package main`; uma aplicação **não pode importar `package main` como biblioteca**. A nova API pública encontra-se em pacote próprio:
+A CLI está em `cmd/insula/` (`package main`), enquanto a API pública está em `insulavm/`. Uma aplicação **não pode importar `package main` como biblioteca**. A API pública encontra-se em pacote próprio:
 
 ```go
 import "github.com/ahhvahh/InsulaVM/insulavm"
@@ -38,6 +38,8 @@ go mod tidy
 ```
 
 Usar `@main` traz a revisão da branch na resolução inicial; a versão efetiva é fixada no `go.mod` do consumidor. Para integração reprodutível e evolução sem surpresas, **publicar tags semânticas `v0.x.y`** após estabilizar o contrato. Nenhuma tag de versão é declarada criada nesta etapa. Não usar `replace` permanente como mecanismo de publicação; `replace` serve somente para desenvolvimento local.
+
+A implementação de montagem GuestFS, sessões SSH e ferramentas ISO foi extraída para `internal/guestfs/`, `internal/installer/`, `internal/shell/` e `internal/liveiso/`, sem alterar a API. Consulte [ARQ-007 — Pacotes internos](ARQ-007-pacotes-internos.md).
 
 ## API pública atual
 
@@ -58,6 +60,11 @@ Usar `@main` traz a revisão da branch na resolução inicial; a versão efetiva
 | Deploy de arquivo+script | `Engine.DeployToVM(ctx, VMDeployRequest)` | Transfere arquivo e script, extrai opcionalmente, executa Bash e devolve progresso parcial |
 | Congelar VM preparada | `Engine.FreezeVM(ctx, VMFreezeRequest)` | Publica um novo perfil QCOW2 autônomo com nome exclusivo, após desligar VM de origem |
 | Executar por ID | `Engine.ExecVM(ctx, ExecRequest)` | Comando como usuário comum ou elevação explícita por `sudo -n` |
+| Shell persistente por VM | `Engine.ExecuteShellCommand(ctx, ShellCommandRequest)` | Abre ou reutiliza um shell SSH no mesmo processo; devolve `ShellID`, `CommandID`, `Output`, `ExitCode`; histórico em SQLite |
+| Histórico de comandos | `Engine.ShellCommandHistory(ctx, shellID)` | Recupera comandos e saída persistidos, mesmo após o processo terminar |
+| Listar sessões por VM | `Engine.ShellSessionsForVM(ctx, vmID)` | Enumera UUIDs de shell históricos de uma VM |
+| Metadados de sessão | `Engine.ShellSessionInfo(ctx, shellID)` | Consulta status persistido (não comprova conexão ativa após crash) |
+| Encerrar shell | `Engine.CloseShellSession(ctx, shellID)` / `Engine.Close()` | Libera SSH, sem parar a VM |
 
 O `RunRequest` também oferece `OnImportProgress func(ImportProgress)` para informar estágios de transferência. O resultado `RunResult.Imports` contém as importações concluídas. Mais detalhes em [ARQ-005](ARQ-005-importacao-arquivos.md).
 
@@ -143,7 +150,7 @@ if result != nil { fmt.Println("Logs:", result.LogDirectory) }
 return err
 ```
 
-O destino físico **dentro do convidado** é sempre o `guest.destination` global do `config.yaml`, compartilhado entre todas as importações e utilizado por padrão para os jobs. O método `Engine.ImportToVM` recebe apenas `VMID` e `SourcePath`, recuperando IP, chave e usuário do SQLite. O manifesto não contém `destination`, senha ou chave SSH.
+O destino físico **dentro do convidado** é o `guest.destination` do `profile.yaml` selecionado. `Engine.ImportToVM` recebe apenas `VMID` e `SourcePath`, consulta o perfil da VM e resolve o destino, recuperando IP, chave e usuário do SQLite. Para hosts SSH não gerenciados, `Engine.ImportPath` aceita `ImportRequest.Destination` opcional. Perfis antigos sem destino usam o fallback legado de `config.yaml` (ou `/tmp/insulavm/workspace`). O manifesto não contém `destination`, senha ou chave SSH.
 
 A biblioteca permite executar `Engine.Run` com `SSH.User` por Action ou, se omitido, o usuário global `insula`. Para perfil gerenciado, o Cloud-Init cria o usuário escolhido e configura as credenciais específicas da instância. Consulte [ARQ-005](ARQ-005-importacao-arquivos.md).
 
@@ -152,7 +159,7 @@ A biblioteca permite executar `Engine.Run` com `SSH.User` por Action ou, se omit
 ```mermaid
 flowchart TD
     CON[Outro projeto Go] --> API[insulavm.Engine]
-    CLI[CLI main.go] --> API
+    CLI[CLI cmd/insula/main.go] --> API
     API --> CONF[pkg/config]
     API --> PROF[pkg/profile]
     API --> VM[pkg/vm]
@@ -207,3 +214,15 @@ O método `DeployToVM` aceita nativamente `.tar.gz` com `Extract:true`, executan
 O pacote expõe `CloneProfile(ctx, origem, destino)`, `ExportProfileLiveISO(ctx, nome)`, `StartVMFromISO(ctx, LiveISOStartOptions)`, `OpenConsole(ctx, id, stdin, stdout, stderr)` e `StopVMWithOptions(ctx, VMStopOptions)`. Consulte [CONTR-001](../interfaces/CONTR-001-operacoes-canonicas.md) para as pré-condições e [FLUX-006](../fluxos/FLUX-006-teste-integral-iso-vm.md) para o teste integral.
 
 **Limite:** `ExportProfileLiveISO` cria ISO Live somente de guest Debian previamente preparado com `live-boot`, não transforma arbitrariamente ISO netinst em ambiente instalado. `StartVMFromISO` espera guest com Cloud-Init/SSH. Testes em KVM real ainda pendentes.
+
+## Sessão de comandos duradoura (experimental)
+
+Para reutilizar o mesmo diretório atual e variáveis exportadas, use
+`ExecuteShellCommand` com o `ShellID` devolvido pela primeira chamada.
+Cada comando recebe `CommandID` UUIDv7 e persiste no SQLite com saída
+combinada, código de retorno e erro de transporte. A sessão SSH existe
+**somente enquanto o Engine original permanece ativo**; não há daemon
+para reanexação entre processos ou após reiniciar a aplicação.
+O histórico, sim, é persistente. Execute `defer engine.Close()` para
+liberar sessões sem desligar VMs. Consulte
+[FLUX-008](../fluxos/FLUX-008-sessoes-shell.md).

@@ -1,6 +1,7 @@
 package insulavm
 
 import (
+ shelltransport "github.com/ahhvahh/InsulaVM/internal/shell"
  "context"
  "errors"
  "fmt"
@@ -52,7 +53,10 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  }
  if vm.IP==""{return nil,errors.New("VM has no registered IP")}
  workspace:=req.Workspace
- if workspace==""{workspace=e.config.Guest.Destination}
+ if workspace==""{
+  workspace,err=e.ResolveVMWorkspace(vm.Profile)
+  if err!=nil{return nil,fmt.Errorf("resolve VM workspace: %w",err)}
+ }
  if !strings.HasPrefix(workspace,"/")||strings.ContainsAny(workspace,"\x00\r\n"){
   return nil,errors.New("workspace must be an absolute guest path")
  }
@@ -71,7 +75,7 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if err!=nil{return nil,err}
  defer client.Close()
  if req.Workspace=="" {
-  if err:=ensureGuestWorkspace(ctx,client,workspace);err!=nil{return nil,err}
+  if err:=shelltransport.EnsureWorkspace(ctx,client,workspace);err!=nil{return nil,err}
  }
  logRun,err:=storage.NewRun(e.config.Storage.Logs,"vm-"+vm.ID,"exec",time.Now())
  if err!=nil{return nil,err}
@@ -86,4 +90,4 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  err=runner.Run(ctx,"command",[]string{command},false,log)
  return result,errors.Join(err,log.Close())
 }
-func quoteGuest(s string)string{return "'"+strings.ReplaceAll(s,"'","'\"'\"'")+"'"}
+func quoteGuest(s string) string { return shelltransport.QuoteGuest(s) }

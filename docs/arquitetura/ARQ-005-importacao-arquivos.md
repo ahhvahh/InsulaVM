@@ -5,13 +5,13 @@
 
 **Estado:** importação implementada na CLI, biblioteca Go e manifesto; verificada com servidor SSH simulado. Execução real em KVM/Libvirt ainda não validada.
 **Contratos:** [CONTR-001 — Operações e importação atual](../contratos/CONTR-001-operacoes-canonicas.md) e [CONTR-002 — STDIO futuro](../contratos/CONTR-002-transporte-stdio.md).
-**Código:** [archive.go](../../pkg/transfer/archive.go), [remote.go](../../pkg/transfer/remote.go), [import.go](../../insulavm/import.go), [import_vm.go](../../insulavm/import_vm.go) e [import_cli.go](../../import_cli.go).
+**Código:** [archive.go](../../pkg/transfer/archive.go), [remote.go](../../pkg/transfer/remote.go), [import.go](../../insulavm/import.go), [import_vm.go](../../insulavm/import_vm.go) e [import_cli.go](../../cmd/insula/import_cli.go).
 
 ## Componentes e responsabilidades
 
 | Componente | Responsabilidade implementada |
 | --- | --- |
-| `pkg/config` | Fornecer o `guest.destination` único, configurado no host e usado dentro do convidado |
+| `pkg/profile` | Resolver e validar `guest.destination` específico de cada perfil; `pkg/config` mantém apenas o fallback legado |
 | `pkg/transfer/archive.go` | Preparar TAR.GZ temporário dos arquivos e diretórios locais permitidos |
 | `pkg/transfer/remote.go` | Enviar pacote via sessão SSH, verificar o tamanho recebido e extrair no destino |
 | `insulavm/import_vm.go` | Resolver estado, IP e credenciais individuais da VM cadastrada pelo UUIDv7 |

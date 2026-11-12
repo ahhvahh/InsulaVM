@@ -12,7 +12,7 @@ Na raiz do projeto:
 
 ```bash
 git switch fix/ssh-startup-test-cli
-go build -o insula .
+go build -o insula ./cmd/insula
 ./insula test doctor
 ```
 

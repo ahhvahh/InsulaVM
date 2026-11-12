@@ -103,7 +103,7 @@ virsh -c qemu:///system net-info default | grep -Eq 'Active:[[:space:]]+yes' || 
 }
 cd "$ROOT"
 BIN="$STATE/insula-integral-2"
-go build -o "$BIN" .
+go build -o "$BIN" ./cmd/insula
 echo "[integral-2] running required real Go+CLI ZIP/commands/clean-stop test"
 set +e
 output="$(INSULA_IT2_CONFIG="$CONFIG" INSULA_IT2_QCOW2="$IMAGE" INSULA_IT2_CLI="$BIN" \
