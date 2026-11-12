@@ -65,7 +65,7 @@ func TestGuestfsUnmountFailureNeverCleansPrivateKernel(t *testing.T) {
 	isoToolScripts(t, bin, map[string]string{"guestunmount": "echo fuse-detach-error >&2; exit 99"})
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	called := false
-	err := unguestfs.MountReadOnly(t.TempDir(), func() { called = true })
+	err := guestfs.UnmountReadOnly(t.TempDir(), func() { called = true })
 	if !errors.Is(err, guestfs.ErrUnmount) || called || !strings.Contains(err.Error(), "fuse-detach-error") {
 		t.Fatalf("unmount failure must preserve resources: cleanup=%t err=%v", called, err)
 	}
