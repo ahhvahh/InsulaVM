@@ -145,12 +145,8 @@ func vmCommand(args []string)error{
   entries,err:=engine.ListVMStatus(ctx)
   if err!=nil{return err}
   if len(entries)==0{fmt.Println("Nenhuma VM cadastrada pelo InsulaVM");return nil}
-  fmt.Printf("%-64s %-18s %-36s %-12s %-12s %s\n","Nome","Perfil","UUID","SQLite","Libvirt","IP")
-  for _,entry:=range entries{
-   e:=entry.Record
-   fmt.Printf("%-64s %-18s %-36s %-12s %-12s %s\n",e.Name,e.Profile,e.ID,e.Status,entry.LibvirtState,e.IP)
-   if entry.Warning!=""{fmt.Fprintln(os.Stderr,"  [aviso]",entry.Warning)}
-  }
+  writeVMList(os.Stdout,entries)
+  for _,entry:=range entries{if entry.Warning!=""{fmt.Fprintln(os.Stderr,"  [aviso]",entry.Warning)}}
  case "status":
   if *id==""{return errors.New("vm status requires -id")}
   checked,err:=engine.GetVMStatus(ctx,*id)
@@ -339,4 +335,15 @@ func vmCommand(args []string)error{
  default:return errors.New("usage: insula vm start|list|status|shell|stop|delete|stop-all|freeze|exec|import|deploy")
  }
  return nil
+}
+
+ 
+// writeVMList presents operator identity in the requested order while keeping
+// status fields visible to distinguish an active domain from a stale record.
+func writeVMList(out io.Writer,entries []insulavm.VMLiveInfo){
+ fmt.Fprintf(out,"%-64s %-18s %-36s %-12s %-12s %s\n","Nome","Perfil","UUID","SQLite","Libvirt","IP")
+ for _,entry:=range entries{
+  e:=entry.Record
+  fmt.Fprintf(out,"%-64s %-18s %-36s %-12s %-12s %s\n",e.Name,e.Profile,e.ID,e.Status,entry.LibvirtState,e.IP)
+ }
 }
