@@ -91,11 +91,11 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
  if !running && !(stopped&&req.AllowStopped&&req.SkipGuestCleanup){
   return result,fmt.Errorf("VM must be running or explicitly recoverable (SQLite=%s, Libvirt=%s)",record.Status,checked.LibvirtState)
  }
- if !req.SkipGuestCleanup && record.SudoMode!="passwordless"{
+ sourceProfile,sourceDisk,installerISO,err:=e.resolveFreezeSource(record.Profile)
+ if err!=nil{return result,err}
+ if !installerISO && !req.SkipGuestCleanup && record.SudoMode!="passwordless"{
   return result,errors.New("freeze requires passwordless sudo for cloud-init identity cleanup")
  }
- original,err:=e.GetProfile(record.Profile)
- if err!=nil{return result,fmt.Errorf("load source profile: %w",err)}
  // Confirm this is the InsulaVM-owned temporary overlay, not an arbitrary disk.
  root,err:=filepath.Abs(e.config.Storage.Runs)
  if err!=nil{return result,err}
@@ -106,7 +106,7 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
   !strings.HasPrefix(filepath.Base(sourceDir),"insula-vm-"){
   return result,errors.New("unsafe registered instance storage path")
  }
- overlay:=filepath.Join(sourceDir,"overlay.qcow2")
+ overlay:=filepath.Join(sourceDir,sourceDisk)
  stat,err:=os.Lstat(overlay)
  if err!=nil{return result,fmt.Errorf("read VM overlay: %w",err)}
  if !stat.Mode().IsRegular(){return result,errors.New("VM overlay is not a regular file")}
@@ -115,7 +115,9 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
   return result,fmt.Errorf("frozen profile %q already exists; choose another name",req.Name)
  }else if !errors.Is(err,os.ErrNotExist){return result,err}
 
- if !req.SkipGuestCleanup{
+ if installerISO{
+  notify("clean","Installer disk: no Cloud-Init/SSH identity cleanup; guest machine-id, SSH host keys and application secrets are preserved. Sanitize before reuse when needed")
+ }else if !req.SkipGuestCleanup{
   notify("clean","Resetting cloud-init and per-instance SSH identity before capture")
   // The existing SSH connection remains alive long enough to finish cleanup.
   // On retry after a shutdown failure, an operator must set SkipGuestCleanup.
@@ -147,9 +149,9 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
  result.SourceStopped=true
 
  notify("convert","Flattening QCOW2 backing chain into a named independent image")
- frozenProfile:=*original
+ frozenProfile:=sourceProfile
  if frozenProfile.Guest.Destination=="" {frozenProfile.Guest.Destination=e.config.Guest.Destination}
- frozenProfile.SSH=profile.SSH{User:record.SSHUser}
+ if !installerISO {frozenProfile.SSH=profile.SSH{User:record.SSHUser}}
  image,err:=profile.FreezeFromOverlayWithOptions(ctx,e.config.Storage.Profiles,frozenProfile,req.Name,overlay,profile.FreezeOptions{Compress:!req.DisableQCOW2Compression})
  if err!=nil{return result,fmt.Errorf("create frozen profile: %w (original overlay preserved at %s)",err,sourceDir)}
  result.ImagePath=image
@@ -174,4 +176,25 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
  notify("ready","Frozen QCOW2 profile ready: "+req.Name)
 
  return result,nil
+}
+
+ 
+// resolveFreezeSource supports both Cloud-Init overlays and disks created by
+// vm install-iso. An installer profile is not a ready-to-boot profile: only
+// after freeze has safely shut down and converted its installer.qcow2 disk
+// do we publish it as a direct-boot reusable profile.
+func(e *Engine)resolveFreezeSource(name string)(profile.Profile,string,bool,error){
+ original,err:=e.GetProfile(name)
+ if err==nil{return *original,"overlay.qcow2",false,nil}
+ installer,installerErr:=profile.ReadInstaller(e.config.Storage.Profiles,name)
+ if installerErr!=nil{
+  return profile.Profile{},"",false,fmt.Errorf("load source profile %q: %w (installer metadata: %v)",name,err,installerErr)
+ }
+ frozen:=profile.Profile{
+  Name:installer.Name,OS:installer.OS,
+  MemoryMiB:installer.Hardware.RAM.MiB,VCPUs:installer.Hardware.CPU.Quantity,
+  DiskGB:installer.Disk.SizeGB,BootMode:"direct",
+  Workspace:profile.Workspace{Destination:installer.Workspace.Destination},
+ }
+ return frozen,"installer.qcow2",true,nil
 }
