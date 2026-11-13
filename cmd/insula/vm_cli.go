@@ -68,7 +68,7 @@ func vmCommand(args []string)error{
    if *profileName!=""{return errors.New("vm start accepts -id OR -profile, never both")}
    entry,err:=engine.ResumeVM(ctx,*id)
    if err!=nil{return err}
-   fmt.Printf("VM retomada: id=%s profile=%s nome=%s; console: ./insula vm console -id %s\n",entry.ID,entry.Profile,entry.Name,entry.ID)
+   fmt.Printf("VM em execucao: id=%s profile=%s nome=%s; console: ./insula vm console -id %s\n",entry.ID,entry.Profile,entry.Name,entry.ID)
    return nil
   }
   if *profileName==""{return errors.New("vm start requires -profile or -id")}

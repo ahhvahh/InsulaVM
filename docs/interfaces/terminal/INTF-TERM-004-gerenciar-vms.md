@@ -15,7 +15,7 @@ Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatu
 
 | Comando | Parâmetros específicos | Efeito / vínculo ao fluxo |
 | --- | --- | --- |
-| `insula vm start` | Exatamente um de `-profile` (nova VM) ou `-id` (reabrir VM preservada); `-memory-mib`, `-vcpus` opcionais para perfil | Cria nova VM ou reinicia domínio transitório com mesmo UUID/QCOW2; [ARQ-003](../../arquitetura/ARQ-003-configuracao-perfis.md) |
+| `insula vm start` | Exatamente um de `-profile` (nova VM) ou `-id` (reabrir VM preservada); `-memory-mib`, `-vcpus` opcionais para perfil | Cria nova VM ou inicia/retoma uma VM existente com mesmo UUID/QCOW2; [ARQ-003](../../arquitetura/ARQ-003-configuracao-perfis.md) |
 | `insula vm list` | Nenhum além de `-config` | Lista Nome, Perfil, UUID, SQLite, Libvirt e IP, nessa ordem; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 | `insula vm status` | `-id` obrigatório | Exibe identidade/SSH e estados; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 | `insula vm shell` | `-id` obrigatório; `-directory` opcional | Abre SSH na VM. Tenta `profile.yaml workspace.destination` (ou `config.yaml guest.destination`) e, se inacessível, mantém a shell no diretório inicial do usuário, com aviso; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
@@ -32,14 +32,28 @@ A resolução do diretório de trabalho das VMs gerenciadas usa `profile.yaml wo
 
 ## Reiniciar a mesma VM pelo UUID
 
-Se uma VM transitória foi desligada pelo sistema convidado e seu disco ainda existe, o InsulaVM recria o domínio usando a configuração persistida sem gerar novo UUID nem disco:
+O mesmo comando controla a instância preservada sem criar outro UUID, disco ou overlay, tanto na CLI quanto na biblioteca Go (`Engine.ResumeVM(ctx, id)`):
 
 ```bash
 ./insula vm start -id UUID_DA_VM
+./insula vm status -id UUID_DA_VM
 ./insula vm console -id UUID_DA_VM
 ```
 
-Para uma VM criada por `install-iso`, a retomada tenta `vda` (HD instalado) antes do CD-ROM, mantendo a ISO disponível para fallback. Esta ordem só é alterada no XML temporário de retomada; o XML de instalação original permanece intacto. A retomada exige Libvirt `absent`, diretório gerenciado intacto e arquivos `domain.xml` e `installer.qcow2` ou `overlay.qcow2` regulares e associados ao UUID cadastrado. VMs encerradas com `vm stop` ou `vm delete` não podem ser retomadas. A presença do domínio não comprova boot do sistema convidado: valide pelo console e, quando aplicável, por SSH.
+O motor compara o registro SQLite, o `domain.xml` preservado e o disco `vda` gerenciado. Para domínios existentes, também valida o XML real retornado pelo Libvirt antes de qualquer ação.
+
+| Estado real Libvirt | Comportamento de `vm start -id` |
+| --- | --- |
+| `shut off` | Executa `virsh start UUID` sobre o domínio definido existente |
+| `paused` | Executa `virsh resume UUID` |
+| `running` / `blocked` | Retorna sucesso sem iniciar novamente e conserva o IP registrado se o SQLite já estiver `running` |
+| `absent` | Recria o domínio transitório a partir de `domain.xml`, preservando UUID e QCOW2 |
+| `unknown`, `crashed`, `in shutdown` ou outro | Retorna erro sem forçar transição insegura |
+
+As retomadas efetivas exigem confirmação do estado `running` ou `blocked` antes de atualizar o SQLite. O IP anterior é invalidado quando um domínio é iniciado novamente: a obtenção do endereço atual deve ser confirmada pelo Libvirt; `status_sqlite=running` não garante boot do convidado. VMs marcadas como `destroyed`, com diretório/disco ausente ou XML incompatível, não são retomadas.
+
+**Ordem de boot:** ao recriar domínio `absent` de `install-iso`, a inicialização prioriza `vda` antes do CD-ROM por meio de um XML temporário, sem modificar `domain.xml` original. Se o domínio já estiver definido como `shut off`, `virsh start` mantém a ordem de boot configurada no Libvirt; uma definição persistente que ainda priorize o CD-ROM poderá inicializar a ISO instaladora novamente. A alteração de boot em definições existentes não faz parte desta correção.
+
 
 ## Exclusão permanente e limpeza da lista
 
