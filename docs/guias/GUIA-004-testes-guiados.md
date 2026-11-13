@@ -11,7 +11,6 @@
 Na raiz do projeto:
 
 ```bash
-git switch fix/ssh-startup-test-cli
 go build -o insula ./cmd/insula
 ./insula test doctor
 ```
@@ -117,7 +116,9 @@ bash scripts/tests/unit.sh
 bash scripts/tests/integration.sh --config /CAMINHO/config.yaml --installer-iso /CAMINHO/mini.iso
 ```
 
-A primeira suíte usa simuladores, a segunda depende de um host KVM real. O workflow GitHub Actions continua **desativado**, e a CLI `test` não reativa CI.
+A suíte unitária utiliza testes sem dependência obrigatória de KVM; a suíte integral requer hipervisor real. O workflow **Go tests** está configurado para `push` em qualquer branch, enquanto os workflows integrais 1–3 são restritos a PRs com origem `develop` e destino `homolog` ou `main`. A CLI `test` não modifica essa configuração; resultados de execução devem ser consultados no GitHub Actions.
+
+Para um roteiro manual alternativo com a ISO Debian mini, consulte [GUIA-018 — Teste manual Debian 13](GUIA-018-teste-manual-debian-mini-iso.md).
 
 ## Limitações conhecidas
 
