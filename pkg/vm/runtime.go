@@ -61,8 +61,8 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(*Instance,er
 }
 
 // StartWithProgress creates the VM, reports stages, and checks actual Libvirt
-// state during boot. A VM is returned only after SSH (and sudo, if enabled)
-// is ready and the SQLite record was updated.
+// state during boot. Cloud-Init VMs return after SSH/sudo readiness;
+// direct-boot VMs return after Libvirt reports running (not verified guest boot).
 func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,onProgress func(Progress))(*Instance,error){
  return StartWithStartupScript(ctx,c,p,nil,onProgress)
 }
