@@ -152,13 +152,15 @@ VMs criadas com `./insula vm install-iso -profile alpine-virt` guardam o sistema
 ```bash
 ./insula vm status -id UUID_DA_VM
 ./insula vm freeze -id UUID_DA_VM -name abioma-tests
+# Se Libvirt já informar "shut off" após um poweroff manual:
+# ./insula vm freeze -id UUID_DA_VM -name abioma-tests -recover-stopped
 ./insula profile show -name abioma-tests
 ./insula vm start -profile abioma-tests -memory-mib 500 -vcpus 1
 ./insula vm list
 ./insula vm exec -qga -id UUID_NOVO "uname -a"
 ```
 
-O `freeze` usa desligamento gracioso via Libvirt, converte o disco **instalado** com `qemu-img convert -f qcow2 -O qcow2 -c`, verifica que o resultado não possui backing file e registra o novo perfil com `boot_mode: direct`. O novo `vm start` cria um overlay independente e espera somente o domínio entrar em `running` no Libvirt: **não comprova boot do Alpine, rede nem prontidão do QGA**. Confirme pelo console e execute QGA depois que o agente do convidado estiver pronto.
+O `freeze` tenta desligamento gracioso via QEMU Guest Agent (`virsh shutdown --mode agent`), com fallback ACPI; aceita também recuperação explícita de VM `shut off` via `-recover-stopped`. A ausência do agente e do suporte ACPI não ativa parada forçada automática. Depois de comprovar a parada, converte o disco **instalado** com `qemu-img convert -f qcow2 -O qcow2 -c`, verifica que o resultado não possui backing file e registra o novo perfil com `boot_mode: direct`. O novo `vm start` cria um overlay independente e espera somente o domínio entrar em `running` no Libvirt: **não comprova boot do Alpine, rede nem prontidão do QGA**. Confirme pelo console e execute QGA depois que o agente do convidado estiver pronto.
 
 **Segurança:** nesse modo não há limpeza automática de `machine-id`, chaves SSH ou segredos do guest. Remova/regenere identidades e segredos antes de congelar se as novas VMs precisarem ser independentes também dentro do sistema operacional. A criação de overlay não modifica o QCOW2 base. Não use `vm stop` na VM instaladora antes do freeze, pois apaga `installer.qcow2`. Se o desligamento gracioso falhar, o disco é preservado; o `-force-freeze-shutdown` é opt-in e gera risco de inconsistência no filesystem.
 
