@@ -446,6 +446,29 @@ func StopByID(ctx context.Context,c *config.Config,id string)error{
  }
  path,err:=managedInstanceDirectory(c,entry)
  if err!=nil{return err}
+ if live[0].LibvirtState=="shut off"{
+  // A defined, powered-off VM still exists in Libvirt, but no QEMU writer
+  // owns its disk. Remove ONLY the verified definition, never its storage.
+  if entry.ID!=entry.LibvirtUUID{return errors.New("VM registry/Libvirt UUID mismatch; refusing undefine")}
+  output,err:=virsh(ctx,c.Virtualization.LibvirtURI,"dumpxml",id)
+  if err!=nil{return fmt.Errorf("inspect stopped domain before undefine: %w: %s",err,strings.TrimSpace(string(output)))}
+  var defined resumeDomain
+  if err:=xml.Unmarshal(output,&defined);err!=nil{return fmt.Errorf("decode stopped domain XML: %w",err)}
+  disk:=defined.writableDisk()
+  if defined.XMLName.Local!="domain"||defined.UUID!=id||defined.Name!=entry.Name||
+   (disk!=filepath.Join(path,"overlay.qcow2")&&disk!=filepath.Join(path,"installer.qcow2")){
+   return errors.New("stopped Libvirt domain does not match InsulaVM-owned identity and disk; refusing undefine")
+  }
+  if out,err:=virsh(ctx,c.Virtualization.LibvirtURI,"undefine",id);err!=nil{
+   return fmt.Errorf("undefine stopped domain (disk preserved): %w: %s",err,strings.TrimSpace(string(out)))
+  }
+  verified,err:=InspectRegistered(ctx,c.Virtualization.LibvirtURI,[]registry.Entry{entry})
+  if err!=nil{return fmt.Errorf("verify undefine; disk preserved: %w",err)}
+  if len(verified)!=1||verified[0].LibvirtState!="absent"{
+   return fmt.Errorf("domain did not disappear after undefine; disk preserved (Libvirt=%v)",verified)
+  }
+  live[0].LibvirtState="absent"
+ }
  instance:=&Instance{
   ID:id,LibvirtUUID:entry.LibvirtUUID,Name:entry.Name,Directory:path,uri:c.Virtualization.LibvirtURI,
   registryPath:c.Storage.Database,active:live[0].LibvirtState!="absent",
