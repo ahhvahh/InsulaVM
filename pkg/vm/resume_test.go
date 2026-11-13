@@ -37,9 +37,27 @@ func resumeFixture(t *testing.T)(*config.Config,string,string,string){
 case "$3" in
  list)
   if [ -n "$MOCK_LIST_UUID" ]; then echo "$MOCK_LIST_UUID"; fi ;;
- domstate) echo running ;;
+ domstate)
+  if [ -f "$MOCK_ACTIONS" ]; then
+   echo "${MOCK_AFTER_STATE:-running}"
+  else
+   echo "${MOCK_DOMSTATE:-running}"
+  fi ;;
+ dumpxml) cat "$MOCK_DOMAIN_XML" ;;
+ start|resume)
+  if [ "$MOCK_FAIL_ACTION" = "$3" ]; then
+   echo "simulated $3 failure" >&2
+   exit 12
+  fi
+  echo "$3 $4" > "$MOCK_ACTIONS"
+  echo "Domain started" ;;
  create)
+  if [ "$MOCK_FAIL_ACTION" = "create" ]; then
+   echo "simulated create failure" >&2
+   exit 12
+  fi
   cat "$4" > "$MOCK_CAPTURE"
+  echo "$3 $4" > "$MOCK_ACTIONS"
   echo "Domain created" ;;
  *) echo "unexpected virsh command $3" >&2; exit 11 ;;
 esac
@@ -47,7 +65,12 @@ esac
  if err:=os.WriteFile(filepath.Join(bin,"virsh"),[]byte(script),0700);err!=nil{t.Fatal(err)}
  capture:=filepath.Join(root,"created.xml")
  t.Setenv("MOCK_CAPTURE",capture)
+ t.Setenv("MOCK_ACTIONS",filepath.Join(root,"actions"))
+ t.Setenv("MOCK_DOMAIN_XML",filepath.Join(dir,"domain.xml"))
  t.Setenv("MOCK_LIST_UUID","")
+ t.Setenv("MOCK_DOMSTATE","running")
+ t.Setenv("MOCK_AFTER_STATE","running")
+ t.Setenv("MOCK_FAIL_ACTION","")
  t.Setenv("PATH",bin+string(os.PathListSeparator)+os.Getenv("PATH"))
  return c,id,disk,capture
 }
@@ -76,7 +99,6 @@ func TestResumeByIDReusesIDAndBootsInstallerDiskFirst(t *testing.T){
 
 func TestResumeByIDRefusesUnsafeOrMissingVM(t *testing.T){
  cases:=[]struct{name string;modify func(*testing.T,*config.Config,string,string);want string}{
-  {"already running",func(t *testing.T,c *config.Config,id,disk string){t.Setenv("MOCK_LIST_UUID",id)},"state=running"},
   {"missing disk",func(t *testing.T,c *config.Config,id,disk string){if err:=os.Remove(disk);err!=nil{t.Fatal(err)}},"preserved VM disk"},
   {"symlink disk",func(t *testing.T,c *config.Config,id,disk string){
     if err:=os.Remove(disk);err!=nil{t.Fatal(err)}
@@ -107,4 +129,120 @@ func TestResumeByIDCancellationAndUnknownVM(t *testing.T){
  ctx,cancel:=context.WithCancel(context.Background());cancel()
  if _,err:=ResumeByID(ctx,c,id);!errors.Is(err,context.Canceled){t.Fatalf("cancel not propagated: %v",err)}
  if _,err:=ResumeByID(context.Background(),c,"not-registered");err==nil{t.Fatal("unknown VM was resumed")}
+}
+
+func TestResumeByIDDefinedDomainStates(t *testing.T){
+ cases:=[]struct{state,action,wantIP string}{
+  {"shut off","start",""},
+  {"paused","resume",""},
+  {"running","","192.0.2.40"},
+  {"blocked","","192.0.2.40"},
+ }
+ for _,tc:=range cases{
+  t.Run(tc.state,func(t *testing.T){
+   c,id,disk,capture:=resumeFixture(t)
+   t.Setenv("MOCK_LIST_UUID",id)
+   t.Setenv("MOCK_DOMSTATE",tc.state)
+   before,err:=os.ReadFile(disk);if err!=nil{t.Fatal(err)}
+   xmlPath:=filepath.Join(filepath.Dir(disk),"domain.xml")
+   savedXML,err:=os.ReadFile(xmlPath);if err!=nil{t.Fatal(err)}
+   got,err:=ResumeByID(context.Background(),c,id)
+   if err!=nil{t.Fatal(err)}
+   if got.ID!=id||got.LibvirtUUID!=id||got.Status!="running"||got.IP!=tc.wantIP{
+    t.Fatalf("unexpected resumed VM: %+v",got)
+   }
+   actionFile:=os.Getenv("MOCK_ACTIONS")
+   actionData,actionErr:=os.ReadFile(actionFile)
+   if tc.action==""{
+    if !errors.Is(actionErr,os.ErrNotExist){t.Fatalf("running domain must not be restarted: %s %v",actionData,actionErr)}
+   }else if actionErr!=nil||strings.TrimSpace(string(actionData))!=tc.action+" "+id{
+    t.Fatalf("unexpected action for state %q: %s %v",tc.state,actionData,actionErr)
+   }
+   if _,err:=os.Stat(capture);!errors.Is(err,os.ErrNotExist){t.Fatal("existing domain must not be created again")}
+   after,err:=os.ReadFile(disk);if err!=nil{t.Fatal(err)}
+   if string(before)!=string(after){t.Fatal("QCOW2 was modified")}
+   afterXML,err:=os.ReadFile(xmlPath);if err!=nil{t.Fatal(err)}
+   if string(savedXML)!=string(afterXML){t.Fatal("preserved XML was modified")}
+   store,err:=registry.Open(c.Storage.Database);if err!=nil{t.Fatal(err)}
+   defer store.Close()
+   persisted,err:=store.Get(context.Background(),id)
+   if err!=nil||persisted.IP!=tc.wantIP||persisted.Status!="running"{
+    t.Fatalf("wrong registry state: %+v %v",persisted,err)
+   }
+  })
+ }
+}
+
+func TestResumeByIDDefinedDomainRefusesUnexpectedStateOrIdentity(t *testing.T){
+ cases:=[]struct{
+  name,state,failAction,afterState,liveXML,want string
+ }{
+  {"unknown state","in shutdown","","","","state \"in shutdown\""},
+  {"start failed","shut off","start","","","start defined Libvirt domain"},
+  {"resume failed","paused","resume","","","resume defined Libvirt domain"},
+  {"not running after start","shut off","","shut off","","not running after resume"},
+  {"mismatched identity","shut off","","","different-name","does not match"},
+  {"mismatched disk","paused","","","different-disk","does not match"},
+  {"invalid dumped XML","shut off","","","malformed","decode defined"},
+ }
+ for _,tc:=range cases{
+  t.Run(tc.name,func(t *testing.T){
+   c,id,disk,capture:=resumeFixture(t)
+   t.Setenv("MOCK_LIST_UUID",id)
+   t.Setenv("MOCK_DOMSTATE",tc.state)
+   t.Setenv("MOCK_FAIL_ACTION",tc.failAction)
+   if tc.afterState!=""{t.Setenv("MOCK_AFTER_STATE",tc.afterState)}
+   if tc.liveXML!=""{
+    path:=filepath.Join(t.TempDir(),"different.xml")
+    original,err:=os.ReadFile(filepath.Join(filepath.Dir(disk),"domain.xml"))
+    if err!=nil{t.Fatal(err)}
+    var content string
+    switch tc.liveXML{
+    case "different-name":
+     content=strings.Replace(string(original),"insula-alpine-virt-"+id,"unrelated-vm",1)
+    case "different-disk":
+     content=strings.Replace(string(original),disk,"/tmp/unrelated.qcow2",1)
+    default:content="<domain"
+    }
+    if err:=os.WriteFile(path,[]byte(content),0600);err!=nil{t.Fatal(err)}
+    t.Setenv("MOCK_DOMAIN_XML",path)
+   }
+   _,err:=ResumeByID(context.Background(),c,id)
+   if err==nil||!strings.Contains(err.Error(),tc.want){
+    t.Fatalf("expected %q error, got %v",tc.want,err)
+   }
+   store,err:=registry.Open(c.Storage.Database);if err!=nil{t.Fatal(err)}
+   defer store.Close()
+   persisted,err:=store.Get(context.Background(),id)
+   if err!=nil||persisted.Status!="running"||persisted.IP!="192.0.2.40"{
+    t.Fatalf("failed resume must not mutate SQLite: %+v %v",persisted,err)
+   }
+   if _,err:=os.Stat(capture);!errors.Is(err,os.ErrNotExist){t.Fatal("unexpected transient domain creation")}
+   if tc.liveXML!=""{
+    if _,err:=os.Stat(os.Getenv("MOCK_ACTIONS"));!errors.Is(err,os.ErrNotExist){
+     t.Fatal("untrusted Libvirt domain was modified")
+    }
+   }
+  })
+ }
+}
+
+func TestResumeByIDReconcilesAlreadyActiveFailedRecord(t *testing.T){
+ c,id,_,_:=resumeFixture(t)
+ t.Setenv("MOCK_LIST_UUID",id)
+ store,err:=registry.Open(c.Storage.Database);if err!=nil{t.Fatal(err)}
+ if err:=store.SetFailed(context.Background(),id);err!=nil{t.Fatal(err)}
+ _=store.Close()
+ got,err:=ResumeByID(context.Background(),c,id)
+ if err!=nil{t.Fatal(err)}
+ if got.Status!="running"||got.IP!=""{t.Fatalf("wrong reconciled VM: %+v",got)}
+ if _,err:=os.Stat(os.Getenv("MOCK_ACTIONS"));!errors.Is(err,os.ErrNotExist){
+  t.Fatal("already-active VM must not be restarted")
+ }
+ store,err=registry.Open(c.Storage.Database);if err!=nil{t.Fatal(err)}
+ defer store.Close()
+ persisted,err:=store.Get(context.Background(),id)
+ if err!=nil||persisted.Status!="running"||persisted.IP!=""{
+  t.Fatalf("SQLite reconciliation failed: %+v %v",persisted,err)
+ }
 }
