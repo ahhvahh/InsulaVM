@@ -108,6 +108,14 @@ A compressão QCOW2 é **padrão** e corresponde a `VMFreezeRequest{...}` na bib
 
 A execução percorre **somente** os UUIDs do banco SQLite associado ao `config.yaml`. Um domínio externo não registrado nunca é alvo. `-dry-run` mostra o plano sem executar `StopVM`. Em execução real, os domínios existentes são encerrados, inclusive estados não operacionais ainda presentes; ausentes são ignorados. Um erro de estado ou remoção é registrado e não transforma os demais alvos em VMs externas.
 
+## Duplicidade de cadastro e chamadas simultâneas de `vm exec`
+
+- A criação de uma VM com `id`, `libvirt_uuid` ou `name` já cadastrado é **rejeitada**, sem substituir a instância. O erro identifica o campo em conflito: `VM identity already registered: UUID "..." already exists` ou `VM identity already registered: name "..." already exists`. Um UUID excluído também não pode ser reutilizado.
+- `insula vm exec -id UUID -command "comando"` e `insula vm exec -qga -id UUID "comando"` usam a mesma exclusão imediata por UUID. Se outra chamada de `ExecVM` já estiver ativa para esse UUID, a CLI encerra com código `1`, informando `another vm exec is already running; retry after the current command finishes`. Nenhuma execução concorrente é enfileirada ou iniciada nessa situação.
+- `exec` em VMs com UUIDs diferentes pode ocorrer simultaneamente. A proteção cobre chamadas CLI e `Engine.ExecVM` que compartilham `storage.database` no **mesmo host Linux**, por meio de um lock advisory `flock` não bloqueante. Arquivos `.vm-exec-*.lock` ficam ao lado do SQLite e são mantidos para evitar corridas de remoção; não são QCOW2 nem locks do banco.
+- O lock é liberado quando a chamada termina ou o processo encerra. Em timeout/cancelamento de QGA, o **processo dentro do guest pode continuar** mesmo depois que o lock do host for liberado. A proteção não coordena ferramentas externas que não usam o motor, nem `vm shell-command`, `import`, `deploy`, `stop` ou `freeze`.
+- Não existe fila, espera configurável ou migração para PostgreSQL. A biblioteca Go expõe `insulavm.ErrVMExecBusy` para identificação via `errors.Is`, mantendo o mesmo comportamento da CLI.
+
 ## Entradas, saídas e erros
 
 | Aspecto | Contrato efetivo |
