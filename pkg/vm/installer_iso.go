@@ -154,7 +154,8 @@ func installerISODomainXML(id,name string,memoryMiB,vcpus int,disk,iso,mac strin
   "<source file='%s'/><target dev='vda' bus='virtio'/></disk>"+
   "<disk type='file' device='cdrom'><driver name='qemu' type='raw'/>"+
   "<source file='%s'><seclabel model='dac' relabel='no'/></source><target dev='sda' bus='sata'/><readonly/></disk>"+
-  "%s<serial type='pty'><target port='0'/></serial>"+
+  "%s<channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"+
+  "<serial type='pty'><target port='0'/></serial>"+
   "<console type='pty'><target type='serial' port='0'/></console>"+
   // Keep the installer accessible even when the ISO does not use ttyS0.
   // VNC is host-local, auto-allocated and independent of guest DHCP/SSH.

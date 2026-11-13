@@ -19,7 +19,7 @@ Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatu
 | `insula vm list` | Nenhum além de `-config` | Lista Nome, Perfil, UUID, SQLite, Libvirt e IP, nessa ordem; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 | `insula vm status` | `-id` obrigatório | Exibe identidade/SSH e estados; [PERS-001](../../persistencia/PERS-001-registro-instancias.md) |
 | `insula vm shell` | `-id` obrigatório; `-directory` opcional | Abre SSH na VM. Tenta `profile.yaml workspace.destination` (ou `config.yaml guest.destination`) e, se inacessível, mantém a shell no diretório inicial do usuário, com aviso; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
-| `insula vm exec` | `-id`, `-command` obrigatórios; `-workspace`, `-sudo` opcionais | Executa comando e retorna logs; [FLUX-003](../../fluxos/FLUX-003-execucao-sequencial-logs.md) |
+| `insula vm exec` | `-id` e `-command` (SSH); ou `-qga -id UUID "comando"`; `-workspace` opcional | SSH legado ou execução pelo QEMU Guest Agent (sem IP, com stdout/stderr e exit code); [GUIA-017](../../guias/GUIA-017-qga-exec.md) |
 | `insula vm import` | `-id`, `-source` obrigatórios | Copia arquivo/diretório para o destino do perfil (`workspace.destination` ou `guest.destination`); [ARQ-005](../../arquitetura/ARQ-005-importacao-arquivos.md) |
 | `insula vm freeze` | `-id` e `-name` obrigatórios; `-export-iso=false` e `-compress=true` por padrão; `-shutdown-timeout` opcional | Publica QCOW2 independente, opcionalmente comprimido com QEMU; [FLUX-004](../../fluxos/FLUX-004-congelar-vm.md) |
 | `insula vm stop` | `-id` obrigatório | Encerra e remove disco temporário, mantendo o histórico SQLite; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
@@ -136,3 +136,7 @@ A execução percorre **somente** os UUIDs do banco SQLite associado ao `config.
 A CLI `insula vm stop -id UUID -grace-timeout 30s -force-after-timeout=true` tenta `virsh shutdown` e espera até 30 segundos; apenas ao expirar o prazo usa destruição imediata e limpa o overlay. `-force-after-timeout=false` mantém a VM quando o prazo expira. Falhas de Libvirt diferentes de timeout não autorizam forçar. A biblioteca legada `StopVM` permanece com destruição imediata; usar `StopVMWithOptions` para a nova política. Consulte [INTF-TERM-006](INTF-TERM-006-iso-live.md) e [FLUX-006](../../fluxos/FLUX-006-teste-integral-iso-vm.md).
 
 **Estado:** código novo não validado em hipervisor real.
+
+## QEMU Guest Agent em `vm exec`
+
+A opção `-qga` utiliza o canal Virtio do Libvirt, com `guest-exec` e `guest-exec-status` em vez de SSH. A CLI aceita `vm exec -qga -id UUID "comando"` ou `-command "comando"`. A biblioteca oferece `ExecRequest.QGA=true`, mantendo o mesmo método `ExecVM`. A instalação do serviço dentro do guest é responsabilidade da imagem. Consulte [GUIA-017](../../guias/GUIA-017-qga-exec.md) para os procedimentos, limitações de segurança e diagnósticos.
