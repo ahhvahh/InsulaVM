@@ -21,7 +21,7 @@ Os comandos abaixo são a **CLI legada efetivamente implementada**. A nomenclatu
 | `insula vm shell` | `-id` obrigatório; `-directory` opcional | Abre SSH na VM. Tenta `profile.yaml workspace.destination` (ou `config.yaml guest.destination`) e, se inacessível, mantém a shell no diretório inicial do usuário, com aviso; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `insula vm exec` | `-id` e `-command` (SSH); ou `-qga -id UUID "comando"`; `-workspace` opcional | SSH legado ou execução pelo QEMU Guest Agent (sem IP, com stdout/stderr e exit code); [GUIA-017](../../guias/GUIA-017-qga-exec.md) |
 | `insula vm import` | `-id`, `-source` obrigatórios | Copia arquivo/diretório para o destino do perfil (`workspace.destination` ou `guest.destination`); [ARQ-005](../../arquitetura/ARQ-005-importacao-arquivos.md) |
-| `insula vm freeze` | `-id` e `-name` obrigatórios; `-export-iso=false` e `-compress=true` por padrão; `-shutdown-timeout` opcional | Publica QCOW2 independente, opcionalmente comprimido com QEMU; [FLUX-004](../../fluxos/FLUX-004-congelar-vm.md) |
+| `insula vm freeze` | `-id` e `-name` obrigatórios; `-export-iso=false`, `-compress=true` por padrão; `-shutdown-timeout`, `-recover-stopped`, `-skip-guest-cleanup` opcionais | Para `install-iso`, solicita shutdown por QGA, fallback ACPI; publica QCOW2 independente. Recuperação de `shut off` exige `-recover-stopped`; Cloud-Init exige também `-skip-guest-cleanup`. [FLUX-004](../../fluxos/FLUX-004-congelar-vm.md) |
 | `insula vm stop` | `-id` obrigatório | Encerra e remove disco temporário, mantendo o histórico SQLite; [ARQ-006](../../arquitetura/ARQ-006-identidade-registro-sudo.md) |
 | `insula vm delete` | `-id` obrigatório | Confirma ausência no Libvirt, exclui disco/credenciais temporários e elimina registro e histórico de shell do SQLite; preserva logs operacionais |
 | `insula profile delete` | `-name` obrigatório | Exclui perfil e sua imagem-base somente se nenhuma VM registrada ainda referenciá-lo |
@@ -114,6 +114,19 @@ A compressão QCOW2 é **padrão** e corresponde a `VMFreezeRequest{...}` na bib
 O `freeze` utiliza a imagem **instalada**, não a ISO, e publica `boot_mode: direct` em `profile.yaml`. Nesse modo, `vm start` somente confirma o estado do domínio no Libvirt, sem provisionar usuário SSH, Cloud-Init, chaves, sudo ou exigir IP. É necessário verificar separadamente o boot do convidado e a disponibilidade do QEMU Guest Agent. O canal Virtio QGA é incluído no XML; o daemon QGA deve estar instalado e ativo dentro da VM.
 
 No fluxo instalador não há limpeza automática de identificadores do convidado nem segredos. Sanitizar `machine-id`/chaves SSH, se necessário, antes do freeze. A conversão QCOW2 é comprimida por padrão; `vm stop` na VM de origem **antes** do freeze exclui `installer.qcow2`. Em falhas de shutdown ou conversão, o disco é preservado; não force parada sem aceitar o risco de inconsistência.
+
+### Alpine desligado manualmente: recuperar freeze
+
+```bash
+./insula vm status -id 01a1d2c9-d114-74ee-90c5-a2ea26c87a17
+./insula vm freeze -id 01a1d2c9-d114-74ee-90c5-a2ea26c87a17 -name abioma-test -recover-stopped
+./insula profile show -name abioma-test
+./insula vm start -profile abioma-test -memory-mib 500 -vcpus 1
+```
+
+`status_libvirt=shut off` significa que a VM está definida, mas desligada; `SQLite=running` é o histórico não atualizado. A recuperação não liga a VM novamente. A conversão só prossegue se o disco gerenciado e o estado offline forem comprovados. A limpeza posterior usa `virsh undefine` **sem opções para excluir storage**, somente quando UUID, nome e disco da definição conferem com o registro.
+
+Para VM instaladora ainda ativa, `freeze` tenta primeiro o desligamento pelo QEMU Guest Agent (`virsh shutdown --mode agent`), depois ACPI caso necessário. A inexistência do agente **não autoriza force automático**. Em timeout, preservar o disco e orientar a instalação do agente/OpenRC ou `poweroff` no console, seguido de `-recover-stopped`.
 
 ## Exemplo: encerrar VMs gerenciadas
 
