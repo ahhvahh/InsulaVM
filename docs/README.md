@@ -3,15 +3,15 @@
 
 # Documentação — InsulaVM
 
-**Estado geral:** configuração, perfis QCOW2, criação de VMs transitórias, Cloud-Init NoCloud, SQLite, importação, deploy, congelamento de VM e execução SSH com logs estão implementados. Instalação automática por ISO instaladora Debian 13 foi implementada nesta branch e depende de validação em KVM real; checkout Git automático continua não implementado. A branch de trabalho acrescenta operações de ISO Live e testes integrais, ainda sem validação em KVM real.
+**Estado geral (branch `develop`):** implementados perfis QCOW2, VMs transitórias, Cloud-Init NoCloud, SQLite, importação, deploy, freeze e execução SSH/QGA com logs. Instalação não interativa de Debian 13 por ISO e operações de ISO Live existem no código, mas a validação em hipervisor KVM real da revisão atual não foi comprovada nesta auditoria. Checkout Git automático e instalador interativo por console continuam pendentes.
 
 O InsulaVM aceita `config.yaml` global e `profile.yaml` por máquina, lê o perfil selecionado em `insula.yaml`, pode importar arquivos/pastas locais em TAR.GZ antes dos jobs, inicia uma VM descartável usando overlay QCOW2 ou usa uma VM SSH existente, e grava logs por job. A CLI e outros projetos Go podem usar o mesmo motor através do pacote importável `insulavm`. O Linux deve estar instalado em uma imagem com Cloud-Init; a ISO NoCloud de configuração já é gerada, mas a instalação do sistema via ISO instaladora Debian 13 está disponível como operação não interativa ainda sem validação no hipervisor real. O InsulaVM registra as VMs em SQLite.
 
-**Roteiro manual Debian mini.iso:** [GUIA-004 — Instalação, preparação e ISO Live](guias/GUIA-004-teste-manual-debian-mini-iso.md). **Testes guiados:** [GUIA-004 — CLI test, SSH e ISO Live](guias/GUIA-004-testes-guiados.md). **Alpine obrigatório:** [GUIA-005 — boot real de ISO Alpine Virtual](guias/GUIA-005-alpine-iso.md). **Instalar Debian por ISO:** [INTF-TERM-007 — Criar perfil Debian via ISO instaladora](interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md). **Novos fluxos e testes:** [FLUX-006 — Testes integrais VM/ISO Live](fluxos/FLUX-006-teste-integral-iso-vm.md), [GUIA-003 — Testes](guias/GUIA-003-testes.md), [INTF-TERM-006 — ISO Live](interfaces/terminal/INTF-TERM-006-iso-live.md).
+**Roteiro manual Debian mini.iso:** [GUIA-018 — Instalação, preparação e ISO Live](guias/GUIA-018-teste-manual-debian-mini-iso.md). **Testes guiados:** [GUIA-004 — CLI test, SSH e ISO Live](guias/GUIA-004-testes-guiados.md). **Alpine obrigatório:** [GUIA-005 — boot real de ISO Alpine Virtual](guias/GUIA-005-alpine-iso.md). **Instalar Debian por ISO:** [INTF-TERM-007 — Criar perfil Debian via ISO instaladora](interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md). **Novos fluxos e testes:** [FLUX-006 — Testes integrais VM/ISO Live](fluxos/FLUX-006-teste-integral-iso-vm.md), [GUIA-003 — Testes](guias/GUIA-003-testes.md), [INTF-TERM-006 — ISO Live](interfaces/terminal/INTF-TERM-006-iso-live.md).
 
 **Novo Teste Integral 2:** [FLUX-007 — Transferência ZIP, execução e shutdown](fluxos/FLUX-007-teste-integral-zip-vm.md) e [GUIA-006 — Executar e diagnosticar](guias/GUIA-006-teste-integral-2-zip.md).
 
-**Teste Integral 3:** [FLUX-008 — ISO Live e preservação de /tmp/workspace](fluxos/FLUX-008-teste-integral-iso-persistencia.md) e [GUIA-007 — Executar e diagnosticar](guias/GUIA-007-teste-integral-3-iso-persistencia.md). O check `integral-3-iso-workspace-persistence` é preparado para PRs destinadas apenas a `develop`, `homolog` ou `main`.
+**Teste Integral 3:** [FLUX-008 — Freeze QCOW2 comprimido e recuperação de arquivos](fluxos/FLUX-008-teste-integral-iso-persistencia.md) e [GUIA-007 — Executar e diagnosticar](guias/GUIA-007-teste-integral-3-iso-persistencia.md). O check `integral-3-iso-workspace-persistence` é acionado em PRs de `develop` para `homolog` ou `main`. O teste não valida ISO Live nem persistência em `tmpfs`.
 
 A divisão entre API pública e infraestrutura privada está descrita em [ARQ-007 — Pacotes internos](arquitetura/ARQ-007-pacotes-internos.md).
 
@@ -26,12 +26,12 @@ A divisão entre API pública e infraestrutura privada está descrita em [ARQ-00
 | [GUIA-002 — Permissões Libvirt](guias/GUIA-002-permissoes-libvirt.md) | Diagnóstico | UID do QEMU, ACLs e segurança dos discos QCOW2 |
 | [ARQ-001 — Arquitetura do motor](arquitetura/ARQ-001-motor-insulavm.md) | Explicação/arquitetura | Componentes, dependências Go futuras, provisionamento, autenticação, segurança e decisões pendentes |
 | [ARQ-002 — Perfis de VM](arquitetura/ARQ-002-perfis-vm.md) | Arquitetura | Instalação inicial proposta, metadados QCOW2 e overlays descartáveis |
-| [ARQ-003 — Configuração e catálogo](arquitetura/ARQ-003-configuracao-perfis.md) | Arquitetura implementada | Config global, `guest.destination` compartilhado, perfis e Libvirt |
+| [ARQ-003 — Configuração e catálogo](arquitetura/ARQ-003-configuracao-perfis.md) | Arquitetura implementada | Destino por perfil (`workspace.destination`/`guest.destination`), fallback global, perfis e Libvirt |
 | [ARQ-004 — Biblioteca Go](arquitetura/ARQ-004-biblioteca-go.md) | Integração implementada | API Go para orquestradores externos, `Run(ctx, request)`, retorno estruturado e ciclo de vida |
-| [ARQ-005 — Importação TAR.GZ](arquitetura/ARQ-005-importacao-arquivos.md) | Transferência implementada | Destino configurado globalmente, TAR.GZ via SSH, extração e progresso por callback |
+| [ARQ-005 — Importação TAR.GZ](arquitetura/ARQ-005-importacao-arquivos.md) | Transferência implementada | Destino do perfil ou fallback legado, TAR.GZ via SSH, extração e progresso por callback |
 | [ARQ-006 — SSH, SQLite e sudo](arquitetura/ARQ-006-identidade-registro-sudo.md) | Instâncias registradas | UUIDv7, NoCloud seed ISO, SSH Ed25519, IP/MAC e escalonamento sudo sem senha |
 | [FLUX-001 — Execução de manifesto](fluxos/FLUX-001-execucao-manifesto.md) | Fluxo parcialmente implementado | Executar Actions a partir de perfil, preparar repositório, setup, jobs, logs e limpeza |
-| [FLUX-002 — Criar perfil de VM](fluxos/FLUX-002-criacao-perfil-vm.md) | Fluxo proposto | Perguntas de recursos e ISO, instalação Debian, terminal e salvamento |
+| [FLUX-002 — Criar perfil de VM](fluxos/FLUX-002-criacao-perfil-vm.md) | Fluxo proposto | Instalador interativo por console proposto; instalação não interativa Debian por ISO já disponível separadamente |
 | [FLUX-003 — Execução sequencial e logs](fluxos/FLUX-003-execucao-sequencial-logs.md) | Fluxo implementado | Uma sessão por comando, fluxo de stdout/stderr e persistência física por job |
 | [FLUX-004 — Congelar VM](fluxos/FLUX-004-congelar-vm.md) | Fluxo implementado | Preparar identidade, desligar origem, consolidar QCOW2 e publicar perfil reutilizável |
 | [FLUX-005 — Deploy](fluxos/FLUX-005-deploy-arquivos.md) | Fluxo implementado | Transferir arquivo e script, extrair opcionalmente e executar com erro propagado |
@@ -41,7 +41,7 @@ A divisão entre API pública e infraestrutura privada está descrita em [ARQ-00
 | [INTF-TERM-004 — Gerenciamento de VMs](interfaces/terminal/INTF-TERM-004-gerenciar-vms.md) | CLI implementada | Criar, listar, consultar, congelar e encerrar VMs individuais ou em lote |
 | [INTF-TERM-005 — Deploy](interfaces/terminal/INTF-TERM-005-deploy-vm.md) | CLI implementada | Flags, saídas e erros de upload + script por UUID |
 | [PERS-001 — Instâncias SQLite](persistencia/PERS-001-registro-instancias.md) | Persistência | Schema vm_instances, estados e relação lógica com perfis |
-| [Exemplo config.yaml](../config.yaml) | Configuração | Pasta de destino comum, virtualização e SSH |
+| [Exemplo config.yaml](../config.yaml) | Configuração | Fallback legado de destino, virtualização e SSH |
 | [Exemplo de consumo da biblioteca](../examples/go-library/main.go) | Exemplo Go | Outro processo controla execução in-processo, sem sockets |
 | [Exemplo de insula.yaml](../insula.yaml.example) | Exemplo de entrada | Manifesto com usuário SSH opcional, imports sem destino, setup e jobs |
 | [README da raiz](../README.md) | Visão geral | Propósito do projeto e entrada para a documentação |
@@ -52,9 +52,9 @@ A divisão entre API pública e infraestrutura privada está descrita em [ARQ-00
 | --- | --- | --- |
 | `CONTR` | Contratos canônicos da biblioteca Go e CLI | [CONTR-001](contratos/CONTR-001-operacoes-canonicas.md), [CONTR-002](contratos/CONTR-002-transporte-stdio.md) |
 | `REF` | Inventário de operações e referência interna | [REF-001](referencia/REF-001-inventario-operacoes.md) |
-| `GUIA` | Procedimentos e resolução de problemas | [GUIA-001](guias/GUIA-001-operar-insulavm.md), [GUIA-002](guias/GUIA-002-permissoes-libvirt.md) |
+| `GUIA` | Procedimentos e resolução de problemas | [GUIA-001](guias/GUIA-001-operar-insulavm.md), [GUIA-004](guias/GUIA-004-testes-guiados.md), [GUIA-017](guias/GUIA-017-qga-exec.md), [GUIA-018](guias/GUIA-018-teste-manual-debian-mini-iso.md) |
 | `ARQ` | Arquitetura | [ARQ-001](arquitetura/ARQ-001-motor-insulavm.md), [ARQ-002](arquitetura/ARQ-002-perfis-vm.md), [ARQ-003](arquitetura/ARQ-003-configuracao-perfis.md), [ARQ-004](arquitetura/ARQ-004-biblioteca-go.md), [ARQ-005](arquitetura/ARQ-005-importacao-arquivos.md), [ARQ-006](arquitetura/ARQ-006-identidade-registro-sudo.md) |
-| `FLUX` | Fluxos de execução | [FLUX-001](fluxos/FLUX-001-execucao-manifesto.md), [FLUX-002](fluxos/FLUX-002-criacao-perfil-vm.md), [FLUX-003](fluxos/FLUX-003-execucao-sequencial-logs.md), [FLUX-004](fluxos/FLUX-004-congelar-vm.md), [FLUX-005](fluxos/FLUX-005-deploy-arquivos.md) |
+| `FLUX` | Fluxos de execução | [FLUX-001](fluxos/FLUX-001-execucao-manifesto.md), [FLUX-004](fluxos/FLUX-004-congelar-vm.md), [FLUX-008](fluxos/FLUX-008-teste-integral-iso-persistencia.md), [FLUX-009](fluxos/FLUX-009-sessoes-shell.md) |
 | `INTF-TERM` | Interface de terminal | [INTF-TERM-001](interfaces/terminal/INTF-TERM-001-criar-perfil-vm.md), [INTF-TERM-002](interfaces/terminal/INTF-TERM-002-executar-manifesto.md), [INTF-TERM-003](interfaces/terminal/INTF-TERM-003-configuracao-perfis.md), [INTF-TERM-004](interfaces/terminal/INTF-TERM-004-gerenciar-vms.md), [INTF-TERM-005](interfaces/terminal/INTF-TERM-005-deploy-vm.md) |
 | `PERS` | Persistência | [PERS-001](persistencia/PERS-001-registro-instancias.md) |
 

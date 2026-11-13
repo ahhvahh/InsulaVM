@@ -58,7 +58,7 @@ go build -o insula ./cmd/insula
 
 Erros de autenticação agora informam tentativas e limites independentes de DHCP
 e SSH. `test boot` preserva a VM após falha para diagnóstico.
-A `main` não é modificada. O workflow **Go tests** executa a suíte unitária completa apenas em `push` para `develop`; os testes integrais 1–3 executam separadamente em PRs para `develop`, `homolog` ou `main`.
+A `main` não é modificada. O workflow **Go tests** executa a suíte unitária em `push` para qualquer branch (não em tags). Os workflows **Integral 1–3** executam em PRs com origem `develop` e destino `homolog` ou `main`, conforme os gatilhos e as condições definidos em `.github/workflows/`. A aprovação de um merge não equivale a um resultado de testes verificado.
 Veja [GUIA-004 — comandos test](docs/guias/GUIA-004-testes-guiados.md).
 
 Alternativamente, o roteiro manual de ponta a ponta permite instalar, abrir
@@ -68,7 +68,7 @@ uma sessão interativa e exportar a ISO após confirmação:
 bash scripts/tests/manual-debian-mini-iso.sh all
 ```
 
-Consulte [GUIA-004 — roteiro manual](docs/guias/GUIA-004-teste-manual-debian-mini-iso.md).
+Consulte [GUIA-018 — roteiro manual](docs/guias/GUIA-018-teste-manual-debian-mini-iso.md).
 
 ## Laboratorio Debian 13 minimo (5 GiB, 1 CPU, 1 GiB RAM)
 
@@ -186,7 +186,7 @@ O runner [integral-2-zip.sh](scripts/tests/integral-2-zip.sh) usa um QCOW2 Debia
 bash scripts/tests/integral-2-zip.sh
 ~~~
 
-O [workflow Integral 2](.github/workflows/integral-2-zip.yml) é acionado na abertura e em novos commits de PRs para **develop**, **promolog** e **main**. Para bloquear merges, exigir o status **integral-2-zip-upload-command** nas regras dessas branches. A execução real deve ser verificada no GitHub Actions. Veja [GUIA-006](docs/guias/GUIA-006-teste-integral-2-zip.md).
+O [workflow Integral 2](.github/workflows/integral-2-zip.yml) é acionado na abertura, reabertura e atualização de PRs com origem `develop` e destino **`homolog` ou `main`**. O status **integral-2-zip-upload-command** só comprova aprovação se houver uma execução concluída com sucesso; consulte os checks da PR antes de promover a branch. Veja [GUIA-006](docs/guias/GUIA-006-teste-integral-2-zip.md).
 
 ## Teste integral obrigatório: ISO Alpine Linux
 
@@ -200,12 +200,11 @@ Baixa e verifica a ISO oficial Alpine Virtual (~67 MB), inicia **1 CPU/500 MiB**
 
 **GitHub Actions / Teste Integral 1:** O workflow
 [`integral-1-alpine-iso.yml`](.github/workflows/integral-1-alpine-iso.yml)
-roda em abertura, reabertura e novo commit de PRs para `develop`,
-`promolog` e `main`. Status do job: `integral-1-alpine-iso`.
-Para impedir merge em caso de falha, exigir esse check em
-**Settings > Rules > Rulesets/Branches** e incluir o workflow nas
-branches de destino. `promolog` ainda não existe; a validação real
-do runner GitHub-hosted com KVM está pendente.
+roda na abertura, reabertura e atualização de PRs com origem `develop`
+e destino `homolog` ou `main`. Status do job: `integral-1-alpine-iso`.
+Para bloquear uma promoção sem aprovação, configure esse check nas regras
+das branches de destino. A disponibilidade de KVM e o sucesso da execução
+devem ser confirmados nos resultados efetivos do GitHub Actions.
 
 ## ISO Live e testes de integração
 
