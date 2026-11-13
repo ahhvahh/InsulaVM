@@ -18,8 +18,8 @@ Publicar as modificações realizadas em uma VM temporária como um **novo perfi
 - `VMID`: UUIDv7 de VM gerenciada que consta como `running` no SQLite **e** está `running` ou `blocked` no Libvirt.
 - `Name`: nome novo e válido para perfil; não pode existir em `storage.profiles`.
 - `ShutdownTimeout`: prazo positivo para desligamento, padrão de 3 minutos.
-- Perfil original com sistema instalado, `cloud-init` funcional e acesso SSH. A VM original precisa estar provisionada com `ssh.sudo_mode: passwordless`.
-- Disco `overlay.qcow2` regular dentro de `storage.runs/insula-vm-*` e domínio cujo UUID corresponda ao registro.
+- Perfil de origem do tipo QCOW2 gerenciado: sistema instalado, Cloud-Init, SSH e `ssh.sudo_mode: passwordless`. **Alternativamente**, perfil `installer-iso` com sistema já instalado em `installer.qcow2`: não exige SSH/Cloud-Init/sudo, mas não sanitiza a identidade do convidado.
+- Disco `overlay.qcow2` (gerenciado) ou `installer.qcow2` (instalador) regular dentro de `storage.runs/insula-vm-*`, e domínio cujo UUID corresponda ao registro.
 
 ## Sequência
 
@@ -55,12 +55,25 @@ sequenceDiagram
 ## Regras de execução e segurança
 
 1. Validar registro, identidade Libvirt, diretório temporário e nome de destino **antes** de modificar o convidado.
-2. Via `ExecVM` e `sudo -n`, executar `cloud-init clean --logs --machine-id --seed`, remover `authorized_keys` da conta SSH configurada e remover `/etc/ssh/ssh_host_*`. Isso prepara a clonagem, **mas não limpa segredos de aplicativos**.
+2. Para perfil Cloud-Init, usar `ExecVM` e `sudo -n` para limpar `cloud-init`, `authorized_keys` e chaves host SSH. Para perfil instalador, **não tentar** essa limpeza: o guest pode não possuir SSH/Cloud-Init. O operador deve sanitizar manualmente identidades e segredos quando necessário.
 3. Solicitar desligamento normal do convidado com `virsh shutdown`; **não destruir** o domínio antecipadamente.
 4. Só converter após Libvirt informar `absent` para o domínio transitório. Não converter overlay em uso.
-5. Gerar `profiles/<nome>/versions/v001/base.qcow2` por `qemu-img convert`; confirmar formato QCOW2 e ausência de backing file; publicar `profile.yaml` ao final. O registro é exclusivo e não substitui nomes existentes.
+5. Converter o disco de origem (`overlay.qcow2` ou `installer.qcow2`) em `profiles/<nome>/versions/v001/base.qcow2` com `qemu-img convert -c`; confirmar QCOW2 autônomo sem backing file e publicar `profile.yaml` ao final. Para instaladores, registrar `boot_mode: direct`. O registro é exclusivo e não substitui nomes existentes.
 6. Executar `StopVM` para remover arquivos temporários da VM original **depois** de confirmar que o perfil foi salvo.
 7. Reutilizar a base por `vm start -profile <nome>`, inclusive com RAM/vCPUs sobrescritos apenas na instância.
+
+## ISO instaladora e boot direto (Alpine)
+
+```bash
+./insula vm freeze -id UUID_DA_INSTALACAO -name abioma-tests
+./insula profile show -name abioma-tests
+./insula vm start -profile abioma-tests -memory-mib 500 -vcpus 1
+./insula vm exec -qga -id UUID_NOVA_VM "uname -a"
+```
+
+A instância instalada por `vm install-iso` usa `installer.qcow2` e mantém a ISO original somente como mídia de instalação. A imagem congelada é independente da ISO, usa `boot_mode: direct` e é iniciada por um disco gravável temporário com base QCOW2 comprimida. Não há geração de credenciais SSH, NoCloud nem espera por DHCP/SSH. `vm start` comprova apenas o estado `running` no Libvirt; a validação de boot e agente QGA exige verificar o convidado. O agente QGA, se disponível, pode executar comandos sem IP.
+
+**Risco de identidade clonada:** `machine-id`, host keys SSH, senhas e tokens presentes no disco são preservados. Não compartilhe o perfil sem uma sanitização apropriada feita antes de congelar. Para operação segura, o desligamento normal é obrigatório; `-force-freeze-shutdown` deve ser opção explícita de recuperação, com risco de filesystem inconsistente. O disco original é preservado em falhas de desligamento ou conversão. Não executar `vm stop` antes do freeze.
 
 ## Falhas e recuperação
 
