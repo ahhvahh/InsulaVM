@@ -154,8 +154,10 @@ func profileCommand(args []string) error {
                 installer.Name,installer.OS,installer.Hardware.RAM.MiB,installer.Hardware.CPU.Quantity,installer.Disk.SizeGB,installer.Disk.StartISO)
             return nil
         }
-		fmt.Printf("name=%s os=%s memory_mib=%d vcpus=%d disk_gb=%d version=%s image=%s\n",
-			p.Name, p.OS, p.MemoryMiB, p.VCPUs, p.DiskGB, p.Version, p.Image)
+        mode:=p.BootMode
+        if mode==""{mode="cloud-init"}
+		fmt.Printf("name=%s os=%s memory_mib=%d vcpus=%d disk_gb=%d version=%s image=%s boot_mode=%s\n",
+			p.Name, p.OS, p.MemoryMiB, p.VCPUs, p.DiskGB, p.Version, p.Image,mode)
   fmt.Printf("guest_destination=%s\n",p.GuestDestination(engine.Configuration().Guest.Destination))
 	case "register":
 		if *name == "" || *image == "" {
