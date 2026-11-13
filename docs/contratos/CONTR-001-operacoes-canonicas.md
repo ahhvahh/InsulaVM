@@ -3,7 +3,7 @@
 
 # CONTR-001 — Contrato canônico de operações InsulaVM (CLI e biblioteca Go)
 
-**Estado:** contrato de referência aprovado em 2026-11-08; implementação **parcial**. Este documento define o padrão desejado; não confundir assinatura aqui prevista com método já disponível em `insulavm.Engine`.
+**Estado:** contrato de referência aprovado em 2026-11-08; implementação **parcial** na `develop` consultada em 2026-11-13. A tabela abaixo diferencia recursos disponíveis e assinaturas propostas; não considerar um método existente apenas porque aparece na especificação.
 **Escopo:** a mesma operação e semântica acessível por aplicação Go importadora e por linha de comando. Interfaces futuras (UDS/MCP/HTTP) devem adaptar este contrato, sem criar regras divergentes.
 **Complemento obrigatório:** [CONTR-002 — Transporte STDIO](CONTR-002-transporte-stdio.md).
 **Implementações existentes:** [ARQ-004 — Biblioteca](../arquitetura/ARQ-004-biblioteca-go.md), [INTF-TERM-004](../interfaces/terminal/INTF-TERM-004-gerenciar-vms.md) e [INTF-TERM-005](../interfaces/terminal/INTF-TERM-005-deploy-vm.md).
@@ -14,7 +14,7 @@
 2. **Nomes canônicos das operações:** `CreateProfileFromISO`, `CreateVM`, `UploadArchive`, `ExecuteScript`, `ExecuteCommand`, `StopVM`, `StopAllVMs` e `FreezeVM`. Os métodos legados podem continuar como aliases para compatibilidade; uma nova integração deve preferir os canônicos assim que implementados.
 3. **Mesmos argumentos lógicos e mesmos resultados:** diferenças específicas de interface (flags CLI versus estruturas Go) devem ser apenas adaptação de transporte.
 4. **VM é identificada por UUIDv7**, nunca por PID ou ordem de inicialização. A fonte de verdade do estado real é Libvirt; o SQLite guarda cadastro e histórico.
-5. **Diretório remoto único por perfil:** `guest.destination` do `profile.yaml`. Uploads e scripts de execução utilizam esse diretório; não aceitar caminhos arbitrários fornecidos como destino em cada requisição.
+5. **Diretório remoto por perfil:** a implementação atual prioriza `profile.yaml workspace.destination`, depois `profile.yaml guest.destination` e finalmente `config.yaml guest.destination` como fallback legado. Operações canônicas propostas devem respeitar o destino do perfil; chamadas legadas como `ExecVM` ainda admitem `Workspace` explícito.
 6. **Arquivo canônico:** TAR.GZ (`.tar.gz`/`.tgz`). Um upload salva o pacote no diretório configurado; `Extract=true` pede extração adicional. A extração nunca deve ser obrigatória.
 7. **STDIO é dado do programa remoto:** não prefixar, normalizar, truncar, combinar ou traduzir `stdin`, `stdout` ou `stderr`. Diagnóstico do InsulaVM usa canal independente dos três streams. Ver CONTR-002.
 8. **Cada comando é uma execução nova** na mesma VM. Pode-se chamar múltiplos comandos sequencialmente, sem depender da persistência de um shell entre chamadas.
@@ -25,13 +25,13 @@
 
 ## Superfície canônica
 
-| Método Go (desejado) | CLI canônica (desejada) | Entradas lógicas | Retorno obrigatório | Situação na main de 2026-11-08 |
+| Método Go (alvo) | CLI correspondente | Entradas lógicas | Retorno obrigatório | Estado na `develop` em 2026-11-13 |
 | --- | --- | --- | --- | --- |
-| `CreateProfileFromISO` | `insula profile create-from-iso` | Nome, ISO local, RAM MiB, vCPUs, disco GiB, modo de instalação | Perfil, imagem QCOW2, progresso, erro | **Pendente:** instalação de sistema por ISO não existe |
+| `CreateProfileFromISO` | `insula profile create-from-iso` | Nome, ISO local, RAM MiB, vCPUs, disco GiB; modo atual não interativo | Perfil, imagem QCOW2, progresso, erro | **Implementado:** Debian 13 via ISO instaladora com Preseed; teste KVM real da revisão atual **não verificado**. Modo interativo pendente |
 | `CreateVM` | `insula vm create` | Perfil registrado **ou** origem VM existente, RAM, vCPUs, disco opcional, script inicial opcional | UUIDv7, nome, estado, IP/SSH, progresso, erro | **Parcial:** `StartVMWithOptions` cria por perfil, RAM/vCPUs; disco/clone direto pendentes |
 | `UploadArchive` | `insula vm upload` | UUIDv7, caminho TAR.GZ local, `Extract` | Pasta, nome do pacote, bytes, hash/verificação, resultado/erro | **Parcial:** `ImportToVM` compacta e **extrai sempre**; `DeployToVM` envia fonte e executa script |
 | `ExecuteScript` | `insula vm run-script` | UUIDv7, script local, argumentos, stdin, stdout, stderr, timeout, sudo | Exit code, início/fim, logs separados, erro de transporte | **Parcial:** `DeployToVM` executa script, mas mistura progresso com saída |
-| `ExecuteCommand` | `insula vm command` | UUIDv7, executável/argv ou shell explícito, stdin, stdout, stderr, timeout, sudo | Exit code, início/fim, logs separados, erro de transporte | **Parcial:** `ExecVM` executa por SSH; STDIO não é transparente hoje |
+| `ExecuteCommand` | `insula vm command` | UUIDv7, executável/argv ou shell explícito, stdin, stdout, stderr, timeout, sudo | Exit code, início/fim, logs separados, erro de transporte | **Parcial:** `ExecVM` SSH continua legado; `ExecRequest.QGA=true` preserva stdout/stderr binários e exit code após o término, mas não fornece streaming/stdin do contrato-alvo. A API `ExecuteCommand` continua pendente |
 | `StopVM` | `insula vm stop` | UUIDv7 | Confirmação ou erro; estado registrado | **Implementado** (`StopVM`) |
 | `StopAllVMs` | `insula vm stop-all` | DryRun, progresso | Checked, Targets, Stopped, Skipped, Failed, erro agregado | **Implementado** (`StopAllVMs`) |
 | `FreezeVM` | `insula vm freeze` | UUIDv7, nome do perfil, timeout, progresso | Perfil QCOW2 criado, estado de shutdown/limpeza, erro parcial | **Implementado** (`FreezeVM`); a origem é removida após sucesso |
@@ -45,18 +45,11 @@ As grafias CLI canônicas **não são todas executáveis hoje**. Uma CLI não de
 - Exatamente uma origem deve ser informada. Uma ISO instaladora é entrada de `CreateProfileFromISO`, não uma imagem diretamente inicializável por `CreateVM`.
 - `MemoryMiB`, `VCPUs`: zero significa padrão do perfil. `DiskGiB`: zero mantém tamanho original; expansão requer validação do QCOW2 e eventual crescimento de partições/filesystem no guest. Redução destrutiva não é permitida.
 
-### Contratos de dados pretendidos (ilustrativos, ainda não publicados na API Go)
+**API ISO já publicada:** [`CreateProfileFromISORequest`](../../insulavm/create_profile_iso.go) contém `Name`, `ISOPath`, `MemoryMiB`, `VCPUs`, `DiskGB`, `GuestDestination`, `Timeout` e `OnProgress`. Não contém `InstallMode`; a operação atual é não interativa.
+
+### Contratos de dados ainda propostos (ilustrativos, não publicados na API Go)
 
 ```go
-type CreateProfileFromISORequest struct {
-    Name string
-    ISOPath string
-    MemoryMiB int
-    VCPUs int
-    DiskGiB int
-    InstallMode string // attended | unattended (com configuração explícita)
-}
-
 type CreateVMRequest struct {
     ProfileName string
     SourceVMID string // mutuamente exclusivo de ProfileName
@@ -99,7 +92,7 @@ O `ExecuteScript` compartilha os mesmos streams e retorno de `ExecuteCommand`; a
 
 Os métodos **atuais** `ImportToVM(ctx, VMImportRequest)` e `ImportPath(ctx, ImportRequest)` não são sinônimos do futuro `UploadArchive`. O primeiro recebe `VMID` e `SourcePath` local e recupera a identidade da VM registrada; o segundo usa host e credenciais SSH configurados para uma máquina externa.
 
-- O diretório `guest.destination` pertence ao `profile.yaml`, é um caminho Linux absoluto diferente de `/` e usa `/tmp/insulavm/workspace` como fallback quando ausente. `ImportToVM` usa o destino do perfil. `ImportPath` para hosts externos aceita destino explícito; `ExecVM` também aceita `Workspace` explícito. Quando o workspace não é informado, `ExecVM` e jobs usam o destino do perfil.
+- O destino remoto é resolvido a partir de `workspace.destination` do perfil, depois `guest.destination` do perfil, usando o valor global apenas como fallback legado. `ImportToVM` usa o destino do perfil. `ImportPath` para hosts externos e `ExecVM` no modo SSH permitem destino explícito nas suas APIs legadas; por padrão, `ExecVM` e jobs usam o destino do perfil.
 - `SourcePath` pode ser um arquivo regular ou um diretório local; a implementação rejeita symlinks/dispositivos na origem. Uma pasta envia seu conteúdo, sem acrescentar uma pasta externa; arquivos preservam o próprio nome.
 - O InsulaVM cria um TAR.GZ temporário, transmite via SSH, compara o **tamanho** recebido, extrai no workspace e descarta o arquivo temporário. Os dados extraídos podem permanecer se houver erro posterior. Não existe SHA-256 remoto, extração atômica ou retomada.
 - `ImportResult` confirma `Imported` e fornece `DestinationPath` e contagens quando disponíveis. `OnProgress func(ImportProgress)` entrega `Stage`, `Message`, `SourcePath`, `DestinationPath` (informativo), `BytesSent`, `TotalBytes`, `Files` e `At`. Os estágios incluem `connecting`, `validating`, `compressing`, `compressed`, `uploading`, `verifying`, `extracting` e `completed`; falhas usam `failed`.
@@ -117,6 +110,8 @@ Os métodos **atuais** `ImportToVM(ctx, VMImportRequest)` e `ImportPath(ctx, Imp
 - Preservar comandos existentes `vm start`, `vm exec`, `vm import` e `vm deploy` até migração explicitamente versionada. Esses comandos não passam a ser STDIO bruto retroativamente sem compatibilidade.
 
 ## Retornos, progresso e observabilidade
+
+As regras a seguir descrevem a **API canônica pretendida**. O transporte QGA implementado recebe stdout/stderr após o término do processo no guest, enquanto o SSH legado mantém formato próprio; nenhum deles implementa todo o STDIO canônico descrito em [CONTR-002](CONTR-002-transporte-stdio.md).
 
 - Go: `(resultado, error)`; `error != nil` em falhas de infraestrutura, `ExitCode` em término real do programa, mesmo que não zero.
 - `stdout` e `stderr` chegam **durante a execução**, não só ao final. `stdin` é lido do consumidor enquanto o processo remoto o aceitar. O consumidor decide se usa `os.Stdout`, arquivos, pipes ou buffers.
@@ -172,4 +167,4 @@ não substitui o contrato STDIO transparente de `ExecuteCommand`.
 A sessão SSH existe apenas na instância viva de `Engine`; o SQLite
 não transporta conexões entre processos. CLI: `vm shell-command`,
 `vm shell-session` e `vm shell-history`.
-Detalhes: [FLUX-008](../fluxos/FLUX-008-sessoes-shell.md).
+Detalhes: [FLUX-009](../fluxos/FLUX-009-sessoes-shell.md).
