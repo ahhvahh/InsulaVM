@@ -76,4 +76,31 @@ esac
  if _,err:=os.Stat(filepath.Join(root,"data","logs"));!os.IsNotExist(err){
   t.Fatalf("QGA created a persistent output log: %v",err)
  }
+ // With explicit -log, stdout must remain byte-identical, and the
+ // diagnostic path is printed only to stderr, relative to the host CWD.
+ if err:=outFile.Truncate(0);err!=nil{t.Fatal(err)}
+ if _,err:=outFile.Seek(0,io.SeekStart);err!=nil{t.Fatal(err)}
+ if err:=errFile.Truncate(0);err!=nil{t.Fatal(err)}
+ if _,err:=errFile.Seek(0,io.SeekStart);err!=nil{t.Fatal(err)}
+ if err:=vmCommand([]string{"exec","-config",cfg,"-qga","-log","-id",id,"binary"});err!=nil{
+  t.Fatalf("opt-in QGA exec failed: %v",err)
+ }
+ if _,err:=outFile.Seek(0,io.SeekStart);err!=nil{t.Fatal(err)}
+ if _,err:=errFile.Seek(0,io.SeekStart);err!=nil{t.Fatal(err)}
+ out,err=io.ReadAll(outFile);if err!=nil{t.Fatal(err)}
+ stderr,err=io.ReadAll(errFile);if err!=nil{t.Fatal(err)}
+ if !bytes.Equal(out,[]byte{0,255,'O','K','\n'}){t.Fatalf("logged execution altered stdout: %v",out)}
+ if !bytes.HasPrefix(stderr,[]byte{'E',0,'R'}){t.Fatalf("logged execution altered stderr: %v",stderr)}
+ marker:=[]byte("Logs: ")
+ pos:=bytes.Index(stderr,marker)
+ if pos<0{t.Fatalf("log path not printed on stderr: %v",stderr)}
+ relative:=strings.TrimSpace(string(stderr[pos+len(marker):]))
+ if relative==""||filepath.IsAbs(relative)||!strings.HasSuffix(relative,"command.log"){
+  t.Fatalf("invalid relative log file: %q",relative)
+ }
+ content,err:=os.ReadFile(relative)
+ if err!=nil{t.Fatalf("log does not exist at reported relative path %s: %v",relative,err)}
+ if !strings.Contains(string(content),"stdout (base64): AP9PSwo="){
+  t.Fatalf("log missing expected binary output: %s",content)
+ }
 }

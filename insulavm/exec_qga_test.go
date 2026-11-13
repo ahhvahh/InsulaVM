@@ -186,3 +186,24 @@ func TestExecVMQGAWriterShortWritePreservesResult(t *testing.T){
  }
  if result.LogDirectory!=""{t.Fatalf("unexpected log path: %q",result.LogDirectory)}
 }
+
+func TestExecVMQGAOptInLogsOutputWithoutChangingWriters(t *testing.T){
+ engine:=testEngine(t,"")
+ id:="019a5d11-1234-7123-8123-123456789abb"
+ registerQGANoIPVM(t,engine,id)
+ installQGAMock(t,id,`{"return":{"exited":true,"exitcode":0,"out-data":"AP9PSwo=","err-data":"RQBS"}}`)
+ var stdout,stderr bytes.Buffer
+ result,err:=engine.ExecVM(context.Background(),ExecRequest{
+  VMID:id,Command:"echo binary",QGA:true,Log:true,Output:&stdout,ErrorOutput:&stderr,
+ })
+ if err!=nil{t.Fatal(err)}
+ if result==nil||result.LogDirectory==""{t.Fatalf("missing opt-in QGA log: %+v",result)}
+ if !bytes.Equal(stdout.Bytes(),result.Stdout)||!bytes.Equal(stderr.Bytes(),result.Stderr){
+  t.Fatalf("logging changed process output: %+v out=%v err=%v",result,stdout.Bytes(),stderr.Bytes())
+ }
+ content,err:=os.ReadFile(filepath.Join(result.LogDirectory,"command.log"))
+ if err!=nil{t.Fatal(err)}
+ for _,part:=range []string{"echo binary","stdout (base64): AP9PSwo=","stderr (base64): RQBS","exit_code: 0"}{
+  if !strings.Contains(string(content),part){t.Fatalf("missing %q in opt-in log: %s",part,content)}
+ }
+}
