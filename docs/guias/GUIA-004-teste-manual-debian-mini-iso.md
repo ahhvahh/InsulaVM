@@ -1,7 +1,9 @@
-<!-- A-BIOMA-DOC-STANDARD -->
-<!-- A-BIOMA-DOC-REVISADO -->
+<!-- A-BIOMA-DOC-LEGADO -->
+<!-- A-BIOMA-DOC-MIGRADO -->
 
-# GUIA-004 — Teste manual: Debian 13 mini.iso, VM preparada e ISO Live
+# Roteiro manual legado — Debian 13 mini.iso, VM preparada e ISO Live
+
+**Conteúdo lido e migrado para:** [GUIA-018 — Teste manual Debian 13](GUIA-018-teste-manual-debian-mini-iso.md). O roteiro original abaixo permanece disponível para referências históricas.
 
 **Estado:** script criado; a instalação e o boot real não foram executados em host KVM.
 **Contratos:** [INTF-TERM-007](../interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md) e [INTF-TERM-006](../interfaces/terminal/INTF-TERM-006-iso-live.md).

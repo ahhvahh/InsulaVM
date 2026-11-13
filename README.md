@@ -58,7 +58,7 @@ go build -o insula ./cmd/insula
 
 Erros de autenticação agora informam tentativas e limites independentes de DHCP
 e SSH. `test boot` preserva a VM após falha para diagnóstico.
-A `main` não é modificada. O workflow **Go tests** executa a suíte unitária completa apenas em `push` para `develop`; os testes integrais 1–3 executam separadamente em PRs para `develop`, `homolog` ou `main`.
+A `main` não é modificada. O workflow **Go tests** executa a suíte unitária em `push` para qualquer branch (não em tags). Os workflows **Integral 1–3** executam em PRs com origem `develop` e destino `homolog` ou `main`, conforme os gatilhos e as condições definidos em `.github/workflows/`. A aprovação de um merge não equivale a um resultado de testes verificado.
 Veja [GUIA-004 — comandos test](docs/guias/GUIA-004-testes-guiados.md).
 
 Alternativamente, o roteiro manual de ponta a ponta permite instalar, abrir
@@ -68,7 +68,7 @@ uma sessão interativa e exportar a ISO após confirmação:
 bash scripts/tests/manual-debian-mini-iso.sh all
 ```
 
-Consulte [GUIA-004 — roteiro manual](docs/guias/GUIA-004-teste-manual-debian-mini-iso.md).
+Consulte [GUIA-018 — roteiro manual](docs/guias/GUIA-018-teste-manual-debian-mini-iso.md).
 
 ## Laboratorio Debian 13 minimo (5 GiB, 1 CPU, 1 GiB RAM)
 
@@ -145,6 +145,39 @@ O motor utiliza `qemu-img convert -f qcow2 -O qcow2 -c`. A imagem-base comprimid
 
 **Desligamento e recuperação:** o congelamento exige sudo sem senha na VM de origem, solicita desligamento gracioso, não força encerramento sem `-force-freeze-shutdown` e preserva o overlay em falhas antes de publicar o perfil. Consulte [FLUX-004](docs/fluxos/FLUX-004-congelar-vm.md).
 
+## Saída e logs opcionais de comandos na VM
+
+`vm exec` apresenta a saída no console por padrão e não grava o comando nem a resposta em arquivo. Para habilitar diagnóstico persistente (SSH ou QGA), use `-log`:
+
+```bash
+./insula vm exec -qga -id UUID_DA_VM "pwd"
+./insula vm exec -qga -id UUID_DA_VM -workspace /tmp/workspace "pwd && ls"
+./insula vm exec -qga -id UUID_DA_VM -log "uname -a"
+```
+
+`-log` é booleano: o arquivo é escolhido automaticamente em `storage.logs/vm-UUID/exec/.../command.log`. A CLI mostra o endereço **relativo ao diretório de execução do host** no stderr; a saída do guest continua no stdout/stderr. Em Go, `ExecRequest.Log=true` grava o arquivo e `ExecResult.LogDirectory` informa a pasta; sem log, fica vazio.
+
+O diretório de execução **dentro da VM** depende do transporte: SSH usa `workspace.destination`/`guest.destination` do perfil (ou fallback global), enquanto QGA herda o diretório de trabalho do agente. Use `-workspace /caminho/absoluto` para definir um diretório existente na VM. `pwd` mostra o diretório efetivo. QGA preserva bytes nativos em `ExecResult.Stdout/Stderr`, mas os entrega depois do processo terminar, sem streaming contínuo; a saída SSH legada mantém os prefixos de job.
+
+## Congelar uma instalação manual do Alpine (installer.qcow2)
+
+VMs criadas com `./insula vm install-iso -profile alpine-virt` guardam o sistema instalado em `installer.qcow2`. Depois de concluir a instalação no disco (não apenas iniciar o live ISO), é possível criar um perfil reutilizável **sem Cloud-Init, SSH nem sudo**:
+
+```bash
+./insula vm status -id UUID_DA_VM
+./insula vm freeze -id UUID_DA_VM -name abioma-tests
+# Se Libvirt já informar "shut off" após um poweroff manual:
+# ./insula vm freeze -id UUID_DA_VM -name abioma-tests -recover-stopped
+./insula profile show -name abioma-tests
+./insula vm start -profile abioma-tests -memory-mib 500 -vcpus 1
+./insula vm list
+./insula vm exec -qga -id UUID_NOVO "uname -a"
+```
+
+O `freeze` tenta desligamento gracioso via QEMU Guest Agent (`virsh shutdown --mode agent`), com fallback ACPI; aceita também recuperação explícita de VM `shut off` via `-recover-stopped`. A ausência do agente e do suporte ACPI não ativa parada forçada automática. Depois de comprovar a parada, converte o disco **instalado** com `qemu-img convert -f qcow2 -O qcow2 -c`, verifica que o resultado não possui backing file e registra o novo perfil com `boot_mode: direct`. O novo `vm start` cria um overlay independente e espera somente o domínio entrar em `running` no Libvirt: **não comprova boot do Alpine, rede nem prontidão do QGA**. Confirme pelo console e execute QGA depois que o agente do convidado estiver pronto.
+
+**Segurança:** nesse modo não há limpeza automática de `machine-id`, chaves SSH ou segredos do guest. Remova/regenere identidades e segredos antes de congelar se as novas VMs precisarem ser independentes também dentro do sistema operacional. A criação de overlay não modifica o QCOW2 base. Não use `vm stop` na VM instaladora antes do freeze, pois apaga `installer.qcow2`. Se o desligamento gracioso falhar, o disco é preservado; o `-force-freeze-shutdown` é opt-in e gera risco de inconsistência no filesystem.
+
 ## Deploy, execução e encerramento
 
 ```bash
@@ -186,7 +219,7 @@ O runner [integral-2-zip.sh](scripts/tests/integral-2-zip.sh) usa um QCOW2 Debia
 bash scripts/tests/integral-2-zip.sh
 ~~~
 
-O [workflow Integral 2](.github/workflows/integral-2-zip.yml) é acionado na abertura e em novos commits de PRs para **develop**, **promolog** e **main**. Para bloquear merges, exigir o status **integral-2-zip-upload-command** nas regras dessas branches. A execução real deve ser verificada no GitHub Actions. Veja [GUIA-006](docs/guias/GUIA-006-teste-integral-2-zip.md).
+O [workflow Integral 2](.github/workflows/integral-2-zip.yml) é acionado na abertura, reabertura e atualização de PRs com origem `develop` e destino **`homolog` ou `main`**. O status **integral-2-zip-upload-command** só comprova aprovação se houver uma execução concluída com sucesso; consulte os checks da PR antes de promover a branch. Veja [GUIA-006](docs/guias/GUIA-006-teste-integral-2-zip.md).
 
 ## Teste integral obrigatório: ISO Alpine Linux
 
@@ -200,12 +233,11 @@ Baixa e verifica a ISO oficial Alpine Virtual (~67 MB), inicia **1 CPU/500 MiB**
 
 **GitHub Actions / Teste Integral 1:** O workflow
 [`integral-1-alpine-iso.yml`](.github/workflows/integral-1-alpine-iso.yml)
-roda em abertura, reabertura e novo commit de PRs para `develop`,
-`promolog` e `main`. Status do job: `integral-1-alpine-iso`.
-Para impedir merge em caso de falha, exigir esse check em
-**Settings > Rules > Rulesets/Branches** e incluir o workflow nas
-branches de destino. `promolog` ainda não existe; a validação real
-do runner GitHub-hosted com KVM está pendente.
+roda na abertura, reabertura e atualização de PRs com origem `develop`
+e destino `homolog` ou `main`. Status do job: `integral-1-alpine-iso`.
+Para bloquear uma promoção sem aprovação, configure esse check nas regras
+das branches de destino. A disponibilidade de KVM e o sucesso da execução
+devem ser confirmados nos resultados efetivos do GitHub Actions.
 
 ## ISO Live e testes de integração
 

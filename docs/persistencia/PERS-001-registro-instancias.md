@@ -94,6 +94,12 @@ Os métodos `Insert`, `SetRunning`, `SetFailed` e `SetDestroyed` são a fonte de
 
 **Limite:** a pré-checagem de IDs é otimista, portanto não reserva um UUID globalmente entre bancos de dados ou hospedeiros diferentes. A unicidade atômica é garantida para instâncias que compartilham o mesmo SQLite; o Libvirt rejeita conflito de identidade no mesmo hipervisor.
 
+## Mensagens em conflitos de identidade
+
+`Store.Insert` conserva as restrições SQLite `PRIMARY KEY`/`UNIQUE` e rejeita atomicamente qualquer colisão de `id`, `libvirt_uuid` ou `name`, inclusive entre processos concorrentes. Para erros desses campos, retorna `registry.ErrVMAlreadyExists` (identificável com `errors.Is`) com o valor conflitante, em vez da mensagem SQL bruta. Exemplo: `VM identity already registered: name "insula-exemplo" already exists; choose a distinct VM name`. UUIDs removidos mantêm sua tombstone e geram erro específico de reutilização.
+
+Essas colisões não são `SQLITE_BUSY`: esperar milissegundos ou repetir o mesmo `INSERT` não resolveria um conflito de identidade. O registro existente permanece íntegro e não é substituído. `ExecVM` utiliza um lock advisory de arquivo por UUID separado do SQLite; não há fila de operações persistida no banco.
+
 ## Migração e limitações
 
 A inicialização aplica migrações aditivas para as colunas `host_fingerprint`, `sudo_mode` e `ssh_port` em bancos antigos. Não existe reconciliação automática de divergências SQLite/Libvirt ao iniciar o motor. Após remoção da VM, o histórico permanece no banco, mas os arquivos de credenciais e o overlay temporário são descartados.

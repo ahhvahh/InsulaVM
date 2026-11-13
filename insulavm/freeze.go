@@ -24,8 +24,9 @@ type VMFreezeRequest struct {
  // Explicit recovery controls. Never force shutdown or skip credential cleanup by default.
  ForceShutdown bool
  SkipGuestCleanup bool
- // AllowStopped safely captures an existing overlay only if Libvirt confirms
- // the old transient VM is absent AND the operator explicitly opts in.
+ // AllowStopped safely captures a stopped owned disk (Libvirt absent or
+ // shut off) only when the operator explicitly opts in. Cloud-Init profiles
+ // additionally require SkipGuestCleanup; installer disks do not.
  AllowStopped bool
  // ExportISO creates a Debian Live ISO after publishing the QCOW2.
  // The QCOW2 always survives if ISO creation fails.
@@ -55,8 +56,9 @@ type VMFreezeResult struct {
 }
 
 // FreezeVM captures a reusable QCOW2 base, not a bootable ISO.
-// Requires a managed SSH VM with passwordless sudo and cloud-init installed.
-// It cleans cloud-init identity, gracefully shuts down the transient domain,
+// Cloud-Init VMs require managed SSH and passwordless sudo for cleanup.
+// Installer-ISO VMs use installer.qcow2 without guest identity cleanup.
+// It gracefully shuts down the transient domain,
 // flattens its overlay, registers the new profile, and removes source data.
 // If the export fails, the original overlay is intentionally retained.
 func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult,error){
@@ -84,18 +86,19 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
  if record.ID!=record.LibvirtUUID {
   return result,errors.New("registered VM UUID does not match Libvirt domain; refusing freeze")
  }
- // An already-stopped transient VM can be recovered without SSH only with
- // explicit operator approval. A destroyed instance is never recoverable.
+ sourceProfile,sourceDisk,installerISO,err:=e.resolveFreezeSource(record.Profile)
+ if err!=nil{return result,err}
+ // An already-stopped VM may be recovered only by explicit operator opt-in.
+ // A powered-off defined domain is safe to read; no QEMU disk writer remains.
+ // Guest cleanup must have already completed for Cloud-Init profiles.
  running:=record.Status=="running"&&checked.IsRunning()
- stopped:=record.Status=="running"&&checked.LibvirtState=="absent"
- if !running && !(stopped&&req.AllowStopped&&req.SkipGuestCleanup){
-  return result,fmt.Errorf("VM must be running or explicitly recoverable (SQLite=%s, Libvirt=%s)",record.Status,checked.LibvirtState)
+ stopped:=record.Status=="running"&&(checked.LibvirtState=="absent"||checked.LibvirtState=="shut off")
+ if !running && !(stopped&&req.AllowStopped&&(installerISO||req.SkipGuestCleanup)){
+  return result,fmt.Errorf("VM must be running or explicitly recoverable (SQLite=%s, Libvirt=%s); use -recover-stopped for an installed ISO disk, plus -skip-guest-cleanup for a managed Cloud-Init VM",record.Status,checked.LibvirtState)
  }
- if !req.SkipGuestCleanup && record.SudoMode!="passwordless"{
+ if !installerISO && !req.SkipGuestCleanup && record.SudoMode!="passwordless"{
   return result,errors.New("freeze requires passwordless sudo for cloud-init identity cleanup")
  }
- original,err:=e.GetProfile(record.Profile)
- if err!=nil{return result,fmt.Errorf("load source profile: %w",err)}
  // Confirm this is the InsulaVM-owned temporary overlay, not an arbitrary disk.
  root,err:=filepath.Abs(e.config.Storage.Runs)
  if err!=nil{return result,err}
@@ -106,7 +109,7 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
   !strings.HasPrefix(filepath.Base(sourceDir),"insula-vm-"){
   return result,errors.New("unsafe registered instance storage path")
  }
- overlay:=filepath.Join(sourceDir,"overlay.qcow2")
+ overlay:=filepath.Join(sourceDir,sourceDisk)
  stat,err:=os.Lstat(overlay)
  if err!=nil{return result,fmt.Errorf("read VM overlay: %w",err)}
  if !stat.Mode().IsRegular(){return result,errors.New("VM overlay is not a regular file")}
@@ -115,7 +118,9 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
   return result,fmt.Errorf("frozen profile %q already exists; choose another name",req.Name)
  }else if !errors.Is(err,os.ErrNotExist){return result,err}
 
- if !req.SkipGuestCleanup{
+ if installerISO{
+  notify("clean","Installer disk: no Cloud-Init/SSH identity cleanup; guest machine-id, SSH host keys and application secrets are preserved. Sanitize before reuse when needed")
+ }else if !req.SkipGuestCleanup{
   notify("clean","Resetting cloud-init and per-instance SSH identity before capture")
   // The existing SSH connection remains alive long enough to finish cleanup.
   // On retry after a shutdown failure, an operator must set SkipGuestCleanup.
@@ -136,20 +141,26 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
   notify("clean","Guest cleanup skipped by explicit recovery option (verify identity was cleaned previously)")
  }
  if running{
-  notify("shutdown","Requesting graceful VM shutdown; source overlay preserved on failure")
-  forced,shutdownErr:=vm.ShutdownForFreezeWithOptions(ctx,e.config.Virtualization.LibvirtURI,record.LibvirtUUID,req.ShutdownTimeout,req.ForceShutdown)
+  notify("shutdown","Requesting graceful VM shutdown; original disk preserved on failure")
+  var forced bool
+  var shutdownErr error
+  if installerISO{
+   forced,shutdownErr=vm.ShutdownInstallerForFreeze(ctx,e.config.Virtualization.LibvirtURI,record.LibvirtUUID,req.ShutdownTimeout,req.ForceShutdown,func(message string){notify("shutdown",message)})
+  }else{
+   forced,shutdownErr=vm.ShutdownForFreezeWithOptions(ctx,e.config.Virtualization.LibvirtURI,record.LibvirtUUID,req.ShutdownTimeout,req.ForceShutdown)
+  }
   result.ForcedShutdown=forced
   if shutdownErr!=nil{return result,shutdownErr}
   if forced{notify("shutdown","WARNING: forced power-off; captured disk may need filesystem recovery")}
  }else{
-  notify("shutdown","VM already absent in Libvirt; recovering stopped overlay")
+  notify("shutdown","VM already stopped in Libvirt ("+checked.LibvirtState+"); recovering intact disk")
  }
  result.SourceStopped=true
 
  notify("convert","Flattening QCOW2 backing chain into a named independent image")
- frozenProfile:=*original
+ frozenProfile:=sourceProfile
  if frozenProfile.Guest.Destination=="" {frozenProfile.Guest.Destination=e.config.Guest.Destination}
- frozenProfile.SSH=profile.SSH{User:record.SSHUser}
+ if !installerISO {frozenProfile.SSH=profile.SSH{User:record.SSHUser}}
  image,err:=profile.FreezeFromOverlayWithOptions(ctx,e.config.Storage.Profiles,frozenProfile,req.Name,overlay,profile.FreezeOptions{Compress:!req.DisableQCOW2Compression})
  if err!=nil{return result,fmt.Errorf("create frozen profile: %w (original overlay preserved at %s)",err,sourceDir)}
  result.ImagePath=image
@@ -174,4 +185,25 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
  notify("ready","Frozen QCOW2 profile ready: "+req.Name)
 
  return result,nil
+}
+
+ 
+// resolveFreezeSource supports both Cloud-Init overlays and disks created by
+// vm install-iso. An installer profile is not a ready-to-boot profile: only
+// after freeze has safely shut down and converted its installer.qcow2 disk
+// do we publish it as a direct-boot reusable profile.
+func(e *Engine)resolveFreezeSource(name string)(profile.Profile,string,bool,error){
+ original,err:=e.GetProfile(name)
+ if err==nil{return *original,"overlay.qcow2",false,nil}
+ installer,installerErr:=profile.ReadInstaller(e.config.Storage.Profiles,name)
+ if installerErr!=nil{
+  return profile.Profile{},"",false,fmt.Errorf("load source profile %q: %w (installer metadata: %v)",name,err,installerErr)
+ }
+ frozen:=profile.Profile{
+  Name:installer.Name,OS:installer.OS,
+  MemoryMiB:installer.Hardware.RAM.MiB,VCPUs:installer.Hardware.CPU.Quantity,
+  DiskGB:installer.Disk.SizeGB,BootMode:"direct",
+  Workspace:profile.Workspace{Destination:installer.Workspace.Destination},
+ }
+ return frozen,"installer.qcow2",true,nil
 }

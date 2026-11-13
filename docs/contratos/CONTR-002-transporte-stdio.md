@@ -3,7 +3,7 @@
 
 # CONTR-002 — Transporte STDIO fiel para comandos e scripts
 
-**Estado:** contrato canônico aprovado; implementação de transporte fiel **pendente** (o executor legado processa linhas e adiciona prefixos).
+**Estado:** contrato canônico de STDIO em streaming ainda **pendente**. O SSH legado processa linhas com prefixos. O QGA implementado preserva stdout/stderr binários e exit code **após o processo terminar**, com gravação de logs de saída somente quando `ExecRequest.Log` é verdadeiro, mas não oferece streaming ou stdin; não deve ser confundido com o contrato completo.
 **Origem:** [CONTR-001](CONTR-001-operacoes-canonicas.md).
 **Código legado:** [pkg/executor/ssh.go](../../pkg/executor/ssh.go), [insulavm/exec.go](../../insulavm/exec.go) e [insulavm/deploy.go](../../insulavm/deploy.go).
 
@@ -45,7 +45,7 @@ sequenceDiagram
 8. Entregar o `ExitCode` real quando o SSH reportar término. `exit != 0` é **resultado normal de processo**, não erro de transporte. Se a sessão não fornece status confiável, retornar erro próprio, sem inventar `0`.
 9. Escrever logs separados de stdout e stderr (bytes íntegros) e metadados de execução em espaço próprio do host; não injetar logs nos streams.
 10. Progresso de upload/criação e mensagens de diagnóstico devem seguir callbacks/eventos separados. Em CLI canônica `vm command`/`vm run-script`, reservar fd 0/1/2 ao convidado e disponibilizar metadados por resultado/arquivo de controle.
-11. Para `ExecuteScript`, primeiro transferir o script local confiável à pasta `guest.destination`, depois executá-lo no guest com argumentos. A transferência não pode aparecer em stdout/stderr do comando; seus eventos são independentes.
+11. Para `ExecuteScript`, primeiro transferir o script local confiável ao destino configurado no `profile.yaml` (`workspace.destination` ou `guest.destination`, com fallback global legado), depois executá-lo no guest com argumentos. A transferência não pode aparecer em stdout/stderr do comando; seus eventos são independentes.
 12. A cada chamada, iniciar nova sessão/processo. Estado do disco e arquivos persistem enquanto a mesma VM permanecer ativa, mas não assumir que `cd`, variáveis exportadas ou descritores permaneçam entre comandos.
 
 ## Formato Go desejado (ainda não implementado)
@@ -79,7 +79,7 @@ A versão final precisa documentar erro específico quando não for possível ob
 
 ## Diferença em relação ao executor atual
 
-O executor atual [pkg/executor/ssh.go](../../pkg/executor/ssh.go) abre sessões SSH por comando e lê stdout/stderr, mas **converte em linhas**, coloca marcadores como `[job]`/`[stderr]` na saída configurada e registra `<<` nos logs. O `ExecResult` atual não carrega `ExitCode`, e `ExecVM` tem apenas `Output io.Writer` para os dois canais. Esses são comportamentos legados que devem permanecer para chamadas antigas enquanto se implementam `ExecuteCommand` e `ExecuteScript` com STDIO fiel.
+O executor SSH atual [pkg/executor/ssh.go](../../pkg/executor/ssh.go) abre sessões por comando, **converte saída em linhas** e pode acrescentar prefixos como `[job]`/`[stderr]`. O tipo público `ExecResult` já possui `Stdout`, `Stderr`, `ExitCode` e sinalizadores de truncamento, preenchidos pelo caminho QGA (`ExecRequest.QGA=true`); no caminho SSH legado, esse tipo não garante os mesmos dados binários nem o mesmo exit code estruturado. `ExecRequest.Output` é usado no SSH legado; `ErrorOutput` e os campos binários são atendidos pelo QGA. O QGA consulta `guest-exec-status` e entrega bytes somente após o término remoto, não faz streaming e não fornece `Stdin`. `ExecRequest.Output/ErrorOutput` recebem opcionalmente os bytes após a execução; os mesmos dados ficam em `ExecResult.Stdout/Stderr`. **O QGA e o SSH somente criam `command.log` com `ExecRequest.Log=true`; sem essa opção, `ExecResult.LogDirectory` é vazio.** O QGA preserva bytes nativos em `ExecResult.Stdout/Stderr`, e o SSH legado permanece com saída textual decorada. O contrato canônico futuro de logs separados não é implementado por esta opção. Nenhuma dessas implementações substitui o futuro `ExecuteCommand`/`ExecuteScript` com STDIO fiel. Consulte [GUIA-017 — QGA](../guias/GUIA-017-qga-exec.md).
 
 A CLI `vm shell` possui PTY próprio. Uma sessão PTY **não** é equivalente ao transporte STDIO de três canais, pois frequentemente combina stdout/stderr e aplica semântica de terminal. Manter PTY separado.
 

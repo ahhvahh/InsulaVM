@@ -22,6 +22,7 @@ import (
  "github.com/ahhvahh/InsulaVM/pkg/identity"
  "github.com/ahhvahh/InsulaVM/pkg/profile"
  "github.com/ahhvahh/InsulaVM/pkg/registry"
+ "golang.org/x/crypto/ssh"
 )
 
 // Instance represents an ephemeral VM that is recorded in the shared SQLite
@@ -60,8 +61,8 @@ func Start(ctx context.Context,c *config.Config,p *profile.Profile)(*Instance,er
 }
 
 // StartWithProgress creates the VM, reports stages, and checks actual Libvirt
-// state during boot. A VM is returned only after SSH (and sudo, if enabled)
-// is ready and the SQLite record was updated.
+// state during boot. Cloud-Init VMs return after SSH/sudo readiness;
+// direct-boot VMs return after Libvirt reports running (not verified guest boot).
 func StartWithProgress(ctx context.Context,c *config.Config,p *profile.Profile,onProgress func(Progress))(*Instance,error){
  return StartWithStartupScript(ctx,c,p,nil,onProgress)
 }
@@ -95,6 +96,8 @@ func StartWithStartupOptions(ctx context.Context,c *config.Config,p *profile.Pro
   if runErr!=nil{emit("failed","Falha na inicializacao: "+runErr.Error())}
  }()
  if ctx==nil||c==nil||p==nil{return nil,errors.New("context, config and profile are required")}
+ directBoot:=p.BootMode=="direct"
+ if directBoot&&len(startupScript)>0{return nil,errors.New("direct-boot profiles do not support Cloud-Init startup scripts")}
  emit("profile","Verificando imagem-base QCOW2 do perfil "+p.Name)
  image,err:=p.ImagePath()
  if err!=nil{
@@ -110,8 +113,10 @@ func StartWithStartupOptions(ctx context.Context,c *config.Config,p *profile.Pro
  if err:=os.MkdirAll(c.Storage.Runs,0700);err!=nil{return nil,err}
  dir,err:=os.MkdirTemp(c.Storage.Runs,"insula-vm-")
  if err!=nil{return nil,err}
- instance=&Instance{Directory:dir,uri:c.Virtualization.LibvirtURI,registryPath:c.Storage.Database,Profile:p.Name,SudoMode:c.SSH.SudoMode}
- emit("preparing","Preparando armazenamento temporario isolado e credenciais SSH")
+ sudoMode:=c.SSH.SudoMode
+ if directBoot{sudoMode="disabled"}
+ instance=&Instance{Directory:dir,uri:c.Virtualization.LibvirtURI,registryPath:c.Storage.Database,Profile:p.Name,SudoMode:sudoMode}
+ emit("preparing","Preparando armazenamento temporario isolado")
  // Keep a separate reference for cleanup. Start returns (nil, error) on
  // failure, which sets the named result "instance" to nil before deferred
  // functions execute. Using that named result would panic and hide the real
@@ -148,40 +153,52 @@ func StartWithStartupOptions(ctx context.Context,c *config.Config,p *profile.Pro
  instance.ID=id
  progressID=id
  instance.LibvirtUUID=id
- instance.SSHUser=c.SSH.User
- if p.SSH.User!=""{instance.SSHUser=p.SSH.User}
+ if !directBoot {
+  instance.SSHUser=c.SSH.User
+  if p.SSH.User!=""{instance.SSHUser=p.SSH.User}
+ }
  // Use the full UUIDv7: its first eight hex digits are timestamp-derived
  // and can be identical across many concurrent starts of the same profile.
  instance.Name=vmDomainName(p.Name,id)
- instance.SSHPrivateKeyPath=filepath.Join(dir,"client_ed25519")
- instance.SSHKnownHostsPath=filepath.Join(dir,"known_hosts")
+ if !directBoot {
+  instance.SSHPrivateKeyPath=filepath.Join(dir,"client_ed25519")
+  instance.SSHKnownHostsPath=filepath.Join(dir,"known_hosts")
+ }
  macBytes:=make([]byte,3)
  if _,err:=rand.Read(macBytes);err!=nil{return nil,err}
  instance.MACAddress=fmt.Sprintf("52:54:00:%02x:%02x:%02x",macBytes[0],macBytes[1],macBytes[2])
 
- clientKeys,err:=identity.GenerateKey()
- if err!=nil{return nil,err}
- if err:=identity.SavePrivateKey(instance.SSHPrivateKeyPath,clientKeys.PrivatePEM);err!=nil{return nil,err}
- hostKeys,err:=identity.GenerateKey()
- if err!=nil{return nil,err}
- instance.SSHHostFingerprint=identity.Fingerprint(hostKeys.Public)
- seed,err:=cloudinit.PrepareWithStartupScript(ctx,dir,id,instance.SSHUser,instance.SudoMode,clientKeys.PublicAuthorized,hostKeys,startupScript)
- if err!=nil{return nil,err}
- emit("cloud-init","Chaves SSH e ISO NoCloud criadas; perfil de sudo: "+instance.SudoMode)
+ var seedISO string
+ var hostPublicKey ssh.PublicKey
+ if !directBoot {
+  clientKeys,err:=identity.GenerateKey()
+  if err!=nil{return nil,err}
+  if err:=identity.SavePrivateKey(instance.SSHPrivateKeyPath,clientKeys.PrivatePEM);err!=nil{return nil,err}
+  hostKeys,err:=identity.GenerateKey()
+  if err!=nil{return nil,err}
+  hostPublicKey=hostKeys.Public
+  instance.SSHHostFingerprint=identity.Fingerprint(hostKeys.Public)
+  seed,err:=cloudinit.PrepareWithStartupScript(ctx,dir,id,instance.SSHUser,instance.SudoMode,clientKeys.PublicAuthorized,hostKeys,startupScript)
+  if err!=nil{return nil,err}
+  seedISO=seed.ISO
+  emit("cloud-init","Chaves SSH e ISO NoCloud criadas; perfil de sudo: "+instance.SudoMode)
+ }else{
+  emit("boot-mode","Boot direto pelo QCOW2; Cloud-Init e gerenciamento SSH desativados")
+ }
 
  overlay:=filepath.Join(dir,"overlay.qcow2")
  if out,err:=exec.CommandContext(ctx,"qemu-img","create","-f","qcow2","-F","qcow2","-b",image,overlay).CombinedOutput();err!=nil{
   return nil,fmt.Errorf("create overlay: %w: %s",err,strings.TrimSpace(string(out)))
  }
  emit("disk","Overlay QCOW2 criado sem alterar o disco-base")
- xmlSpec:=domainXMLWithBacking(instance.LibvirtUUID,instance.Name,p.MemoryMiB,p.VCPUs,overlay,image,seed.ISO,c.Virtualization.Network,instance.MACAddress)
+ xmlSpec:=domainXMLWithBacking(instance.LibvirtUUID,instance.Name,p.MemoryMiB,p.VCPUs,overlay,image,seedISO,c.Virtualization.Network,instance.MACAddress)
  xmlPath:=filepath.Join(dir,"domain.xml")
  if err:=os.WriteFile(xmlPath,[]byte(xmlSpec),0600);err!=nil{return nil,err}
  // With qemu:///system, Libvirt launches QEMU under a separate non-root
  // Linux account. Grant it access only to the backing disk, overlay and
  // cloud-init seed, without exposing SSH client keys or listing directories.
  if c.Virtualization.QEMUUID > 0 {
-  if err:=grantQEMUStorageAccess(ctx,c.Virtualization.QEMUUID,image,overlay,seed.ISO);err!=nil{
+  if err:=grantQEMUStorageAccess(ctx,c.Virtualization.QEMUUID,image,overlay,seedISO);err!=nil{
    return nil,fmt.Errorf("prepare QEMU disk permissions: %w",err)
   }
  }
@@ -210,6 +227,16 @@ func StartWithStartupOptions(ctx context.Context,c *config.Config,p *profile.Pro
  }else{
   emit("running","Dominio ativo no Libvirt: "+state)
  }
+ if directBoot {
+  store,err=registry.Open(instance.registryPath)
+  if err!=nil{return nil,err}
+  updateErr:=store.SetRunning(ctx,id,"")
+  _=store.Close()
+  if updateErr!=nil{return nil,fmt.Errorf("persist direct-boot VM: %w",updateErr)}
+  emit("ready","Dominio ativo no Libvirt; boot do sistema convidado e QGA ainda nao verificados")
+  success=true
+  return instance,nil
+ }
  emit("dhcp","Aguardando endereco IP via DHCP da rede Libvirt")
  dhcpCtx,stopDHCP:=context.WithTimeout(ctx,3*time.Minute)
  ticker:=time.NewTicker(2*time.Second)
@@ -233,7 +260,7 @@ func StartWithStartupOptions(ctx context.Context,c *config.Config,p *profile.Pro
     instance.IPAddress=ip
     instance.Address=net.JoinHostPort(ip,"22")
     emit("ip","IP obtido: "+ip)
-    if err:=identity.SaveKnownHost(instance.SSHKnownHostsPath,ip,hostKeys.Public);err!=nil{
+    if err:=identity.SaveKnownHost(instance.SSHKnownHostsPath,ip,hostPublicKey);err!=nil{
      stopDHCP()
      return nil,err
     }
@@ -417,13 +444,30 @@ func StopByID(ctx context.Context,c *config.Config,id string)error{
  if entry.Status!="running"&&entry.Status!="creating"&&entry.Status!="failed"{
   return fmt.Errorf("unsupported VM status %q",entry.Status)
  }
- root,err:=filepath.Abs(c.Storage.Runs)
+ path,err:=managedInstanceDirectory(c,entry)
  if err!=nil{return err}
- path,err:=filepath.Abs(entry.InstanceDir)
- if err!=nil{return err}
- relative,err:=filepath.Rel(root,path)
- if err!=nil||relative=="."||relative==".."||strings.HasPrefix(relative,".."+string(filepath.Separator))||!strings.HasPrefix(filepath.Base(path),"insula-vm-"){
-  return errors.New("unsafe registered VM directory")
+ if live[0].LibvirtState=="shut off"{
+  // A defined, powered-off VM still exists in Libvirt, but no QEMU writer
+  // owns its disk. Remove ONLY the verified definition, never its storage.
+  if entry.ID!=entry.LibvirtUUID{return errors.New("VM registry/Libvirt UUID mismatch; refusing undefine")}
+  output,err:=virsh(ctx,c.Virtualization.LibvirtURI,"dumpxml",id)
+  if err!=nil{return fmt.Errorf("inspect stopped domain before undefine: %w: %s",err,strings.TrimSpace(string(output)))}
+  var defined resumeDomain
+  if err:=xml.Unmarshal(output,&defined);err!=nil{return fmt.Errorf("decode stopped domain XML: %w",err)}
+  disk:=defined.writableDisk()
+  if defined.XMLName.Local!="domain"||defined.UUID!=id||defined.Name!=entry.Name||
+   (disk!=filepath.Join(path,"overlay.qcow2")&&disk!=filepath.Join(path,"installer.qcow2")){
+   return errors.New("stopped Libvirt domain does not match InsulaVM-owned identity and disk; refusing undefine")
+  }
+  if out,err:=virsh(ctx,c.Virtualization.LibvirtURI,"undefine",id);err!=nil{
+   return fmt.Errorf("undefine stopped domain (disk preserved): %w: %s",err,strings.TrimSpace(string(out)))
+  }
+  verified,err:=InspectRegistered(ctx,c.Virtualization.LibvirtURI,[]registry.Entry{entry})
+  if err!=nil{return fmt.Errorf("verify undefine; disk preserved: %w",err)}
+  if len(verified)!=1||verified[0].LibvirtState!="absent"{
+   return fmt.Errorf("domain did not disappear after undefine; disk preserved (Libvirt=%v)",verified)
+  }
+  live[0].LibvirtState="absent"
  }
  instance:=&Instance{
   ID:id,LibvirtUUID:entry.LibvirtUUID,Name:entry.Name,Directory:path,uri:c.Virtualization.LibvirtURI,

@@ -3,7 +3,7 @@
 
 # ARQ-003 — Configuração global e catálogo de perfis de VM
 
-**Estado:** Implementado para arquivos e seleção de perfis, criação de overlay QCOW2 e inicialização Libvirt. **Pendente:** instalação inicial a partir de ISO instaladora e clonagem automática de repositórios Git. Cloud-Init NoCloud automático está implementado em [ARQ-006](ARQ-006-identidade-registro-sudo.md).
+**Estado:** Implementado para configuração, seleção de perfis, overlay QCOW2 e inicialização Libvirt. A instalação **não interativa** de Debian 13 por ISO está disponível em `Engine.CreateProfileFromISO` e na CLI `profile create-from-iso`, mas sua execução com KVM real não foi comprovada nesta auditoria. **Pendentes:** instalador interativo por console e checkout Git automático. Cloud-Init NoCloud está descrito em [ARQ-006](ARQ-006-identidade-registro-sudo.md).
 
 **Código fonte:** [config](../../pkg/config/config.go), [profile](../../pkg/profile/profile.go), [runtime](../../pkg/vm/runtime.go), [manifesto](../../pkg/manifest/manifest.go), [CLI](../../cmd/insula/main.go).
 
@@ -114,7 +114,7 @@ O registro das VMs, seus estados históricos e a verificação conjunta SQLite/L
 
 ## Pendências
 
-1. Instalar SO a partir da ISO local com console/terminal, validar a instalação e publicar um novo perfil, conforme [FLUX-002](../fluxos/FLUX-002-criacao-perfil-vm.md).
+1. Implementar instalação **interativa** de SO por ISO com console/terminal, distinta da instalação Debian 13 **não interativa** já implementada (veja [INTF-TERM-007](../interfaces/terminal/INTF-TERM-007-instalar-debian-iso.md)), e comprovar o boot KVM real.
 2. Validar Cloud-Init NoCloud e a autenticação automática em uma VM KVM real; a implementação e os testes simulados estão em [ARQ-006](ARQ-006-identidade-registro-sudo.md).
 3. Checkout automático de um repositório Git remoto; a importação de arquivos locais e criação do diretório compartilhado já estão implementadas.
 4. Versionamento de perfis além de `v001`, locks de publicação, autenticação de operações de manutenção e política de retenção de logs.

@@ -11,13 +11,14 @@ import (
  "fmt"
  "os"
  "os/signal"
+ "path/filepath"
  "time"
 
  "github.com/ahhvahh/InsulaVM/insulavm"
 )
 
 func vmCommand(args []string)error{
- if len(args)==0{return errors.New("usage: insula vm start|start-iso|install-iso|list|status|diagnose|shell|shell-command|shell-session|shell-history|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
+ if len(args)==0{return errors.New("usage: insula vm start|start-iso|install-iso|list|delete|status|diagnose|shell|shell-command|shell-session|shell-history|console|stop|stop-all|freeze|export-iso|exec|import|deploy")}
  command:=args[0]
  fs:=flag.NewFlagSet("vm "+command,flag.ContinueOnError)
  cfgPath:=fs.String("config","config.yaml","InsulaVM global settings")
@@ -33,20 +34,22 @@ func vmCommand(args []string)error{
  exportISO:=fs.Bool("export-iso",false,"optional experimental Debian Live ISO export; default freezes QCOW2 only")
  compressQCOW2:=fs.Bool("compress",true,"compress frozen QCOW2 base with native qemu-img -c; reusable without extracting")
  forceFreeze:=fs.Bool("force-freeze-shutdown",false,"explicitly force-stop VM after graceful timeout; risks crash-consistent disk")
- skipGuestCleanup:=fs.Bool("skip-guest-cleanup",false,"recovery only: guest identity was already cleaned by prior failed freeze")
- allowStopped:=fs.Bool("recover-stopped",false,"recovery only: allow an already stopped transient VM with intact overlay")
+ skipGuestCleanup:=fs.Bool("skip-guest-cleanup",false,"Cloud-Init recovery only: guest identity was already cleaned by prior failed freeze; not required for installer ISO disks")
+ allowStopped:=fs.Bool("recover-stopped",false,"recover an owned VM in Libvirt shut off/absent without restarting; Cloud-Init also requires -skip-guest-cleanup")
  graceTimeout:=fs.Duration("grace-timeout",30*time.Second,"VM graceful shutdown deadline before escalation")
  forceAfterTimeout:=fs.Bool("force-after-timeout",true,"use hard destroy after graceful shutdown deadline")
  dryRun:=fs.Bool("dry-run",false,"list managed VMs that would be stopped by stop-all without changing them")
  id:=fs.String("id","","VM UUIDv7")
  freezeName:=fs.String("name","","unique name for a frozen VM profile")
  freezeOutput:=fs.String("output","","ISO destination (.iso); absolute or relative to the current directory")
- shutdownTimeout:=fs.Duration("shutdown-timeout",3*time.Minute,"graceful guest shutdown deadline for freeze")
+ shutdownTimeout:=fs.Duration("shutdown-timeout",3*time.Minute,"freeze guest shutdown deadline: installer uses QEMU Guest Agent then ACPI")
  commandText:=fs.String("command","","shell command inside the VM")
  workspace:=fs.String("workspace","","guest working directory; default: profile.yaml workspace.destination or guest.destination")
  shellID:=fs.String("shell-id","","shell session UUID for history lookup")
  directory:=fs.String("directory","","guest subdirectory for interactive vm shell (relative to guest.destination)")
  sudo:=fs.Bool("sudo",false,"execute as root via sudo -n (requires passwordless mode)")
+ qga:=fs.Bool("qga",false,"execute via QEMU Guest Agent (no IP/SSH; runs with agent privileges)")
+ execLog:=fs.Bool("log",false,"vm exec only: persist command and output to command.log; print relative host path on stderr")
  source:=fs.String("source","","host file/directory to import")
  script:=fs.String("script","","local Bash file to upload and execute after deploy")
  extract:=fs.Bool("extract",false,"extract trusted .tar.gz/.tgz source in guest.destination before executing script")
@@ -56,7 +59,15 @@ func vmCommand(args []string)error{
   n,out,parseErr:=resolveFreezeTarget(*freezeName,*freezeOutput,fs.Args(),command=="export-iso"||*exportISO)
   if parseErr!=nil{return parseErr}
   *freezeName,*freezeOutput=n,out
+ }else if command=="exec"{
+  if *qga && fs.NArg()==1 && *commandText==""{
+   *commandText=fs.Arg(0)
+  }else if fs.NArg()!=0{
+   return errors.New("vm exec accepts one positional command only with -qga and without -command")
+  }
  }else if fs.NArg()!=0{return errors.New("unexpected vm arguments")}
+ if *qga && command!="exec"{return errors.New("-qga is only supported by vm exec")}
+ if *execLog && command!="exec"{return errors.New("-log is only supported by vm exec")}
  engine,err:=insulavm.New(*cfgPath)
  if err!=nil{return err}
  ctx,cancel:=signal.NotifyContext(context.Background(),os.Interrupt)
@@ -64,7 +75,14 @@ func vmCommand(args []string)error{
  root:=engine.Configuration().Storage.Root
  switch command{
  case "start":
-  if *profileName==""{return errors.New("vm start requires -profile")}
+  if *id!="" {
+   if *profileName!=""{return errors.New("vm start accepts -id OR -profile, never both")}
+   entry,err:=engine.ResumeVM(ctx,*id)
+   if err!=nil{return err}
+   fmt.Printf("VM em execucao: id=%s profile=%s nome=%s; console: ./insula vm console -id %s\n",entry.ID,entry.Profile,entry.Name,entry.ID)
+   return nil
+  }
+  if *profileName==""{return errors.New("vm start requires -profile or -id")}
   current,err:=engine.ListVMStatus(ctx)
   if err!=nil{return fmt.Errorf("verificar instancias ja existentes no Libvirt: %w",err)}
   for _,entry:=range current{
@@ -79,6 +97,13 @@ func vmCommand(args []string)error{
    fmt.Fprintf(os.Stderr,"[InsulaVM][vm:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
   })
   if err!=nil{return presentCLIError(err,root)}
+  if instance.SSHUser=="" {
+   fmt.Printf("VM iniciada no Libvirt: id=%s profile=%s mac=%s (boot do guest ainda nao verificado)\n",instance.ID,instance.Profile,instance.MACAddress)
+   fmt.Println("Console: ./insula vm console -id",instance.ID)
+   fmt.Println("QGA, se instalado no guest: ./insula vm exec -qga -id",instance.ID,"-command \"uname -a\"")
+   fmt.Println("Para encerrar: insula vm stop -id",instance.ID)
+   return nil
+  }
   fmt.Printf("VM pronta: id=%s profile=%s ip=%s mac=%s user=%s sudo=%s\n",
    instance.ID,instance.Profile,instance.IPAddress,instance.MACAddress,instance.SSHUser,instance.SudoMode)
   fmt.Println("SSH:",sshCommandForCLI(instance.SSHPrivateKeyPath,instance.SSHKnownHostsPath,instance.SSHUser,instance.IPAddress))
@@ -138,12 +163,8 @@ func vmCommand(args []string)error{
   entries,err:=engine.ListVMStatus(ctx)
   if err!=nil{return err}
   if len(entries)==0{fmt.Println("Nenhuma VM cadastrada pelo InsulaVM");return nil}
-  fmt.Printf("%-36s %-12s %-12s %-18s %-15s %s\n","UUID","SQLite","Libvirt","IP","Perfil","Nome")
-  for _,entry:=range entries{
-   e:=entry.Record
-   fmt.Printf("%-36s %-12s %-12s %-18s %-15s %s\n",e.ID,e.Status,entry.LibvirtState,e.IP,e.Profile,e.Name)
-   if entry.Warning!=""{fmt.Fprintln(os.Stderr,"  [aviso]",entry.Warning)}
-  }
+  writeVMList(os.Stdout,entries)
+  for _,entry:=range entries{if entry.Warning!=""{fmt.Fprintln(os.Stderr,"  [aviso]",entry.Warning)}}
  case "status":
   if *id==""{return errors.New("vm status requires -id")}
   checked,err:=engine.GetVMStatus(ctx,*id)
@@ -228,9 +249,14 @@ func vmCommand(args []string)error{
  case "exec":
   if *id==""||*commandText==""{return errors.New("vm exec requires -id and -command")}
   result,err:=engine.ExecVM(ctx,insulavm.ExecRequest{
-   VMID:*id,Command:*commandText,Workspace:*workspace,Sudo:*sudo,Output:os.Stdout,
+   VMID:*id,Command:*commandText,Workspace:*workspace,Sudo:*sudo,QGA:*qga,Log:*execLog,
+   Output:os.Stdout,ErrorOutput:os.Stderr,CommandTimeout:*cmdTimeout,
   })
-  if result!=nil{fmt.Println("Logs:",localPathForCLI(result.LogDirectory))}
+  // Never write metadata to stdout. When logging is enabled explicitly,
+  // show the host file relative to the caller's current directory on stderr.
+  if result!=nil && *execLog && result.LogDirectory!=""{
+   fmt.Fprintln(os.Stderr,"Logs:",localPathForCLI(filepath.Join(result.LogDirectory,"command.log")))
+  }
   return presentCLIError(err,root)
  case "import":
   if *id==""||*source==""{return errors.New("vm import requires -id and -source; destination comes from the VM profile.yaml")}
@@ -304,6 +330,10 @@ func vmCommand(args []string)error{
   if err!=nil{return presentCLIError(err,root)}
   fmt.Printf("VM ISO OK: profile=%s iso=%s source=%s forced=%t\n",
    exported.Freeze.ProfileName,localPathForCLI(exported.ISOPath),*id,exported.Freeze.ForcedShutdown)
+ case "delete":
+  if *id==""{return errors.New("vm delete requires -id")}
+  if err:=engine.DeleteVM(ctx,*id);err!=nil{return err}
+  fmt.Printf("VM excluida: %s (dominio, disco temporario, SQLite e historico de shell)\n",*id)
  case "stop-all":
   if *id!=""{return errors.New("vm stop-all does not accept -id; use vm stop -id UUID instead")}
   result,err:=engine.StopAllVMs(ctx,insulavm.VMStopAllOptions{
@@ -325,7 +355,18 @@ func vmCommand(args []string)error{
   result,err:=engine.StopVMWithOptions(ctx,insulavm.VMStopOptions{VMID:*id,GracePeriod:*graceTimeout,ForceAfterTimeout:*forceAfterTimeout})
   if err!=nil{return err}
   fmt.Printf("VM encerrada: %s graceful=%t forced=%t timed_out=%t\n",*id,result.Graceful,result.Forced,result.TimedOut)
- default:return errors.New("usage: insula vm start|list|status|shell|stop|stop-all|freeze|exec|import|deploy")
+ default:return errors.New("usage: insula vm start|list|status|shell|stop|delete|stop-all|freeze|exec|import|deploy")
  }
  return nil
+}
+
+ 
+// writeVMList presents operator identity in the requested order while keeping
+// status fields visible to distinguish an active domain from a stale record.
+func writeVMList(out io.Writer,entries []insulavm.VMLiveInfo){
+ fmt.Fprintf(out,"%-64s %-18s %-36s %-12s %-12s %s\n","Nome","Perfil","UUID","SQLite","Libvirt","IP")
+ for _,entry:=range entries{
+  e:=entry.Record
+  fmt.Fprintf(out,"%-64s %-18s %-36s %-12s %-12s %s\n",e.Name,e.Profile,e.ID,e.Status,entry.LibvirtState,e.IP)
+ }
 }

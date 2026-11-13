@@ -45,7 +45,9 @@ func run(args []string) error {
 			fmt.Println("       insula import -config config.yaml -host 192.0.2.10:22 -source /host/project")
 			fmt.Println("       insula config check -config config.yaml")
 			fmt.Println("       insula vm start -config config.yaml -profile debian-minimal [-memory-mib 2048] [-vcpus 2]")
+			fmt.Println("       insula vm start -id UUIDv7  # reinicia a mesma VM/disco preservado")
 			fmt.Println("       insula vm list -config config.yaml")
+			fmt.Println("       insula vm delete -id UUIDv7  # exclui disco e registro SQLite")
 			fmt.Println("       insula vm status -config config.yaml -id UUIDv7")
 			fmt.Println("       insula vm shell -config config.yaml -id UUIDv7 [-directory InsulaVM]")
             fmt.Println("       insula vm shell-command -id UUIDv7 -command \"ls\"")
@@ -57,9 +59,11 @@ func run(args []string) error {
 			fmt.Println("       insula vm console -id UUIDv7")
 			fmt.Println("       insula vm stop-all -config config.yaml [-dry-run]")
 			fmt.Println("       insula vm freeze -id UUIDv7 -name debian13-tests [-shutdown-timeout 3m]")
-			fmt.Println("       insula vm exec -id UUIDv7 -command \"id -u\" [-sudo]")
+			fmt.Println("       insula vm exec -id UUIDv7 -command \"id -u\" [-sudo] [-log]")
+			fmt.Println("       insula vm exec -qga -id UUIDv7 [-workspace /tmp/workspace] [-log] \"whoami\"  # sem SSH/IP")
 			fmt.Println("       insula vm import -id UUIDv7 -source /host/projeto")
 			fmt.Println("       insula vm deploy -config config.yaml -id UUIDv7 -source pacote.tar.gz -script instalar.sh [-extract] [-sudo]")
+			fmt.Println("       insula profile delete -name NOME  # apenas sem VMs dependentes")
 			fmt.Println("       insula profile list -config config.yaml")
 			fmt.Println("       insula profile show -config config.yaml -name debian-go")
 			fmt.Println("       insula profile register -config config.yaml -name debian-go -image installed.qcow2 -memory-mib 1024 -vcpus 1 -disk-gb 8")
@@ -97,7 +101,7 @@ func configCommand(args []string) error {
 
 func profileCommand(args []string) error {
 	if len(args) == 0 {
-		return errors.New("expected profile list, show, register, clone, create-from-iso or export-iso")
+		return errors.New("expected profile list, show, register, clone, create-from-iso, delete or export-iso")
 	}
 	cmd := args[0]
 	fs := flag.NewFlagSet("profile "+cmd, flag.ContinueOnError)
@@ -126,6 +130,10 @@ func profileCommand(args []string) error {
 		return err
 	}
 	switch cmd {
+	case "delete":
+        if *name=="" {return errors.New("profile delete requires -name")}
+        if err:=engine.DeleteProfile(context.Background(),*name);err!=nil{return err}
+        fmt.Printf("Perfil excluido: %s\n",*name)
 	case "list":
 		names, err := engine.ListProfiles()
 		if err != nil {
@@ -146,8 +154,10 @@ func profileCommand(args []string) error {
                 installer.Name,installer.OS,installer.Hardware.RAM.MiB,installer.Hardware.CPU.Quantity,installer.Disk.SizeGB,installer.Disk.StartISO)
             return nil
         }
-		fmt.Printf("name=%s os=%s memory_mib=%d vcpus=%d disk_gb=%d version=%s image=%s\n",
-			p.Name, p.OS, p.MemoryMiB, p.VCPUs, p.DiskGB, p.Version, p.Image)
+        mode:=p.BootMode
+        if mode==""{mode="cloud-init"}
+		fmt.Printf("name=%s os=%s memory_mib=%d vcpus=%d disk_gb=%d version=%s image=%s boot_mode=%s\n",
+			p.Name, p.OS, p.MemoryMiB, p.VCPUs, p.DiskGB, p.Version, p.Image,mode)
   fmt.Printf("guest_destination=%s\n",p.GuestDestination(engine.Configuration().Guest.Destination))
 	case "register":
 		if *name == "" || *image == "" {
@@ -197,7 +207,7 @@ func profileCommand(args []string) error {
 		if err != nil { return err }
 		fmt.Printf("LIVE ISO OK: %s\n",localPathForCLI(path))
 	default:
-		return errors.New("expected profile list, show, register, clone or export-iso")
+		return errors.New("expected profile list, show, register, clone, delete or export-iso")
 	}
 	return nil
 }

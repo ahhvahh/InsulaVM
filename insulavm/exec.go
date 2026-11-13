@@ -23,17 +23,35 @@ type ExecRequest struct{
  Command string
  Workspace string
  Sudo bool
+ // Output optionally receives native QGA stdout bytes after guest-exec ends.
+ // For legacy SSH this remains the decorated job console output.
+ // Nil is supported; QGA still fills ExecResult.Stdout.
  Output io.Writer
  CommandTimeout time.Duration
+ // QGA selects local QEMU guest-agent execution instead of SSH; no IP needed.
+ QGA bool
+ // ErrorOutput optionally receives unmodified QGA stderr bytes.
+ ErrorOutput io.Writer
+ // Log enables one persistent command.log under storage.logs/vm-UUID/exec.
+ // Default false: stdout/stderr are delivered without per-command logs.
+ Log bool
 }
 type ExecResult struct{
  VMID string
+ // LogDirectory is set only when ExecRequest.Log is true, for SSH or QGA.
  LogDirectory string
  Elevated bool
+ // QGA returns unmodified bytes and the guest's exit code; SSH remains legacy.
+ Stdout []byte
+ Stderr []byte
+ ExitCode *int
+ StdoutTruncated bool
+ StderrTruncated bool
 }
 
 // ExecVM executes one command inside an existing managed VM by UUIDv7.
-// It logs the command and output, and never calls SSH as root.
+// Output is sent to the caller; persistent per-command logs are opt-in via
+// ExecRequest.Log. QGA returns native bytes; legacy SSH decorates job lines.
 func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if ctx==nil{return nil,errors.New("context is required")}
  if req.VMID==""||strings.TrimSpace(req.Command)==""||strings.ContainsRune(req.Command,0){
@@ -48,6 +66,12 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if vm.Status!="running"{
   return nil,fmt.Errorf("VM %s is active in Libvirt but SQLite state is %s; inspect with 'insula vm status -id %s' before executing",vm.ID,vm.Status,vm.ID)
  }
+ // The same nonblocking lock covers SSH and QGA, CLI and library calls.
+ // A concurrent exec against this VM is rejected instead of queued.
+ releaseExecLock,err:=acquireVMExecLock(e.config.Storage.Database,vm.ID)
+ if err!=nil{return nil,err}
+ defer releaseExecLock()
+ if req.QGA{return e.execVMQGA(ctx,vm.ID,req)}
  if req.Sudo&&vm.SudoMode!="passwordless"{
   return nil,errors.New("sudo is not enabled for this VM; set ssh.sudo_mode=passwordless when creating the instance")
  }
@@ -77,17 +101,31 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if req.Workspace=="" {
   if err:=shelltransport.EnsureWorkspace(ctx,client,workspace);err!=nil{return nil,err}
  }
- logRun,err:=storage.NewRun(e.config.Storage.Logs,"vm-"+vm.ID,"exec",time.Now())
- if err!=nil{return nil,err}
- result:=&ExecResult{VMID:vm.ID,LogDirectory:logRun.Directory,Elevated:req.Sudo}
- log,err:=logRun.OpenJob("command")
- if err!=nil{return result,err}
+ result:=&ExecResult{VMID:vm.ID,Elevated:req.Sudo}
+ var log executor.Recorder=discardExecRecorder{}
+ var closeLog func()error=func()error{return nil}
+ if req.Log{
+  logRun,err:=storage.NewRun(e.config.Storage.Logs,"vm-"+vm.ID,"exec",time.Now())
+  if err!=nil{return result,err}
+  result.LogDirectory=logRun.Directory
+  job,err:=logRun.OpenJob("command")
+  if err!=nil{return result,err}
+  log=job
+  closeLog=job.Close
+ }
  command:=req.Command
  if req.Sudo{
   command="sudo -n sh -c "+quoteGuest(command)
  }
  runner:=&executor.Executor{Client:client,Workspace:workspace,Console:req.Output,CommandTimeout:timeout}
  err=runner.Run(ctx,"command",[]string{command},false,log)
- return result,errors.Join(err,log.Close())
+ return result,errors.Join(err,closeLog())
 }
+// discardExecRecorder keeps the SSH executor's existing output behavior
+// without creating log files when persistence was not requested.
+type discardExecRecorder struct{}
+func(discardExecRecorder)Request(string)error{return nil}
+func(discardExecRecorder)Response(string)error{return nil}
+func(discardExecRecorder)Flush()error{return nil}
+
 func quoteGuest(s string) string { return shelltransport.QuoteGuest(s) }

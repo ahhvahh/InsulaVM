@@ -66,6 +66,9 @@ type Profile struct {
  Version string `yaml:"version"`
  Image string `yaml:"image"`
  ISO string `yaml:"iso,omitempty"`
+ // BootMode is "direct" for installed disks without Cloud-Init/managed SSH.
+ // Empty keeps the legacy Cloud-Init boot contract.
+ BootMode string `yaml:"boot_mode,omitempty"`
  Workspace Workspace `yaml:"workspace,omitempty"`
  Guest Guest `yaml:"guest,omitempty"`
  SSH SSH `yaml:"ssh,omitempty"`
@@ -74,6 +77,7 @@ type Profile struct {
 
 func (p *Profile) Validate()error{
  if err:=storage.ValidateName(p.Name);err!=nil{return fmt.Errorf("profile.name: %w",err)}
+ if p.BootMode!="" && p.BootMode!="cloud-init" && p.BootMode!="direct" {return fmt.Errorf("unsupported profile.boot_mode %q",p.BootMode)}
  if p.MemoryMiB<128 || p.MemoryMiB>1024*1024 {return errors.New("memory_mib must be between 128 and 1048576")}
  if p.VCPUs<1 || p.VCPUs>256 {return errors.New("vcpus must be between 1 and 256")}
  if p.DiskGB<1 {return errors.New("disk_gb must be positive")}

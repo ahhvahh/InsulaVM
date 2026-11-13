@@ -1,7 +1,9 @@
-<!-- A-BIOMA-DOC-STANDARD -->
-<!-- A-BIOMA-DOC-REVISADO -->
+<!-- A-BIOMA-DOC-LEGADO -->
+<!-- A-BIOMA-DOC-MIGRADO -->
 
-# FLUX-008 — Shell persistente por VM e histórico SQLite
+# Fluxo legado — shell persistente por VM e histórico SQLite
+
+**Conteúdo lido e migrado para:** [FLUX-009 — Shell persistente por VM](FLUX-009-sessoes-shell.md). O roteiro original abaixo permanece disponível para referências históricas.
 
 **Estado:** implementado no motor Go; testes em KVM/SSH real ainda pendentes.
 **Código:** [shell_sessions.go](../../insulavm/shell_sessions.go), [transport.go](../../internal/shell/transport.go), [shell_history.go](../../pkg/registry/shell_history.go).
