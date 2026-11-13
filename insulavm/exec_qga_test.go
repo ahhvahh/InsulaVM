@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+ "io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,10 +72,11 @@ func TestExecVMQGAWithoutIPOrSSH(t *testing.T) {
 		result.ExitCode == nil || *result.ExitCode != 0 {
 		t.Fatalf("invalid QGA output: %+v; out=%q err=%q", result, &stdout, &stderr)
 	}
-	logged, err := os.ReadFile(filepath.Join(result.LogDirectory, "command.log"))
-	if err != nil || !strings.Contains(string(logged), "whoami") ||
-		!strings.Contains(string(logged), "root") {
-		t.Fatalf("QGA execution log not preserved: %q %v", logged, err)
+	if result.LogDirectory != "" {
+		t.Fatalf("QGA must not create a command log directory: %q", result.LogDirectory)
+	}
+	if _, err := os.Stat(engine.config.Storage.Logs); !os.IsNotExist(err) {
+		t.Fatalf("QGA must not write captured output to storage.logs: %v", err)
 	}
 }
 
@@ -103,7 +105,7 @@ func TestExecVMQGASecurityAndExitErrors(t *testing.T) {
 	}
 	res, err := engine.ExecVM(context.Background(), ExecRequest{VMID:id,Command:"false",QGA:true})
 	if res == nil || res.ExitCode == nil || *res.ExitCode != 23 || err == nil {
-		t.Fatalf("QGA failure must return exit code and logs: %+v %v", res, err)
+		t.Fatalf("QGA failure must return exit code and captured bytes: %+v %v", res, err)
 	}
 	var remote *vmtransport.QGAExitError
 	if !errors.As(err, &remote) || remote.Code != 23 {
@@ -141,4 +143,46 @@ func TestExecVMRejectsOverlappingCommandsWithTypedError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestExecVMQGABinaryNativeBytesWithoutLog(t *testing.T) {
+ engine := testEngine(t, "")
+ id := "019a5d11-1234-7123-8123-123456789abe"
+ registerQGANoIPVM(t, engine, id)
+ installQGAMock(t, id, `{"return":{"exited":true,"exitcode":0,"out-data":"AP9PSwo=","err-data":"RQBS"}}`)
+ wantOut := []byte{0, 255, 'O', 'K', '\n'}
+ wantErr := []byte{'E', 0, 'R'}
+ var stdout, stderr bytes.Buffer
+ result, err := engine.ExecVM(context.Background(), ExecRequest{
+  VMID: id, Command: "binary", QGA: true, Output: &stdout, ErrorOutput: &stderr,
+ })
+ if err != nil {t.Fatal(err)}
+ if !bytes.Equal(result.Stdout,wantOut) || !bytes.Equal(result.Stderr,wantErr) ||
+  !bytes.Equal(stdout.Bytes(),wantOut)||!bytes.Equal(stderr.Bytes(),wantErr) {
+  t.Fatalf("QGA modified native bytes: result=%+v stdout=%v stderr=%v",result,stdout.Bytes(),stderr.Bytes())
+ }
+ if result.LogDirectory!="" {t.Fatalf("unexpected QGA log path: %q",result.LogDirectory)}
+ if _,err:=os.Stat(engine.config.Storage.Logs);!os.IsNotExist(err) {
+  t.Fatalf("QGA persisted binary output: %v",err)
+ }
+ // Providing no writers must still return the same bytes.
+ result,err=engine.ExecVM(context.Background(),ExecRequest{VMID:id,Command:"binary",QGA:true})
+ if err!=nil||!bytes.Equal(result.Stdout,wantOut)||!bytes.Equal(result.Stderr,wantErr){
+  t.Fatalf("nil writers lost captured bytes: %+v %v",result,err)
+ }
+}
+
+type shortQGAWriter struct{}
+func (shortQGAWriter)Write(p []byte)(int,error){return 0,nil}
+
+func TestExecVMQGAWriterShortWritePreservesResult(t *testing.T){
+ engine:=testEngine(t,"")
+ id:="019a5d11-1234-7123-8123-123456789abf"
+ registerQGANoIPVM(t,engine,id)
+ installQGAMock(t,id,`{"return":{"exited":true,"exitcode":0,"out-data":"cm9vdAo="}}`)
+ result,err:=engine.ExecVM(context.Background(),ExecRequest{VMID:id,Command:"whoami",QGA:true,Output:shortQGAWriter{}})
+ if !errors.Is(err,io.ErrShortWrite)||result==nil||string(result.Stdout)!="root\n"{
+  t.Fatalf("writer short write must surface error without losing response: %+v %v",result,err)
+ }
+ if result.LogDirectory!=""{t.Fatalf("unexpected log path: %q",result.LogDirectory)}
 }

@@ -249,8 +249,10 @@ func vmCommand(args []string)error{
    VMID:*id,Command:*commandText,Workspace:*workspace,Sudo:*sudo,QGA:*qga,
    Output:os.Stdout,ErrorOutput:os.Stderr,CommandTimeout:*cmdTimeout,
   })
-  if result!=nil{
-   if *qga{fmt.Fprintln(os.Stderr,"Logs:",localPathForCLI(result.LogDirectory))}else{fmt.Println("Logs:",localPathForCLI(result.LogDirectory))}
+  // QGA stdout/stderr are the VM process' unmodified output; unlike legacy
+  // SSH exec, QGA does not create a per-command log directory.
+  if result!=nil && !*qga && result.LogDirectory!=""{
+   fmt.Println("Logs:",localPathForCLI(result.LogDirectory))
   }
   return presentCLIError(err,root)
  case "import":
