@@ -145,6 +145,20 @@ O motor utiliza `qemu-img convert -f qcow2 -O qcow2 -c`. A imagem-base comprimid
 
 **Desligamento e recuperação:** o congelamento exige sudo sem senha na VM de origem, solicita desligamento gracioso, não força encerramento sem `-force-freeze-shutdown` e preserva o overlay em falhas antes de publicar o perfil. Consulte [FLUX-004](docs/fluxos/FLUX-004-congelar-vm.md).
 
+## Saída e logs opcionais de comandos na VM
+
+`vm exec` apresenta a saída no console por padrão e não grava o comando nem a resposta em arquivo. Para habilitar diagnóstico persistente (SSH ou QGA), use `-log`:
+
+```bash
+./insula vm exec -qga -id UUID_DA_VM "pwd"
+./insula vm exec -qga -id UUID_DA_VM -workspace /tmp/workspace "pwd && ls"
+./insula vm exec -qga -id UUID_DA_VM -log "uname -a"
+```
+
+`-log` é booleano: o arquivo é escolhido automaticamente em `storage.logs/vm-UUID/exec/.../command.log`. A CLI mostra o endereço **relativo ao diretório de execução do host** no stderr; a saída do guest continua no stdout/stderr. Em Go, `ExecRequest.Log=true` grava o arquivo e `ExecResult.LogDirectory` informa a pasta; sem log, fica vazio.
+
+O diretório de execução **dentro da VM** depende do transporte: SSH usa `workspace.destination`/`guest.destination` do perfil (ou fallback global), enquanto QGA herda o diretório de trabalho do agente. Use `-workspace /caminho/absoluto` para definir um diretório existente na VM. `pwd` mostra o diretório efetivo. QGA preserva bytes nativos em `ExecResult.Stdout/Stderr`, mas os entrega depois do processo terminar, sem streaming contínuo; a saída SSH legada mantém os prefixos de job.
+
 ## Congelar uma instalação manual do Alpine (installer.qcow2)
 
 VMs criadas com `./insula vm install-iso -profile alpine-virt` guardam o sistema instalado em `installer.qcow2`. Depois de concluir a instalação no disco (não apenas iniciar o live ISO), é possível criar um perfil reutilizável **sem Cloud-Init, SSH nem sudo**:
