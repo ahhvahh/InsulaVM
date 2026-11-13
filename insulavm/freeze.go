@@ -55,8 +55,9 @@ type VMFreezeResult struct {
 }
 
 // FreezeVM captures a reusable QCOW2 base, not a bootable ISO.
-// Requires a managed SSH VM with passwordless sudo and cloud-init installed.
-// It cleans cloud-init identity, gracefully shuts down the transient domain,
+// Cloud-Init VMs require managed SSH and passwordless sudo for cleanup.
+// Installer-ISO VMs use installer.qcow2 without guest identity cleanup.
+// It gracefully shuts down the transient domain,
 // flattens its overlay, registers the new profile, and removes source data.
 // If the export fails, the original overlay is intentionally retained.
 func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult,error){
