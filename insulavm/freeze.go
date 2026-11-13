@@ -24,8 +24,9 @@ type VMFreezeRequest struct {
  // Explicit recovery controls. Never force shutdown or skip credential cleanup by default.
  ForceShutdown bool
  SkipGuestCleanup bool
- // AllowStopped safely captures an existing overlay only if Libvirt confirms
- // the old transient VM is absent AND the operator explicitly opts in.
+ // AllowStopped safely captures a stopped owned disk (Libvirt absent or
+ // shut off) only when the operator explicitly opts in. Cloud-Init profiles
+ // additionally require SkipGuestCleanup; installer disks do not.
  AllowStopped bool
  // ExportISO creates a Debian Live ISO after publishing the QCOW2.
  // The QCOW2 always survives if ISO creation fails.
@@ -85,15 +86,16 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
  if record.ID!=record.LibvirtUUID {
   return result,errors.New("registered VM UUID does not match Libvirt domain; refusing freeze")
  }
- // An already-stopped transient VM can be recovered without SSH only with
- // explicit operator approval. A destroyed instance is never recoverable.
- running:=record.Status=="running"&&checked.IsRunning()
- stopped:=record.Status=="running"&&checked.LibvirtState=="absent"
- if !running && !(stopped&&req.AllowStopped&&req.SkipGuestCleanup){
-  return result,fmt.Errorf("VM must be running or explicitly recoverable (SQLite=%s, Libvirt=%s)",record.Status,checked.LibvirtState)
- }
  sourceProfile,sourceDisk,installerISO,err:=e.resolveFreezeSource(record.Profile)
  if err!=nil{return result,err}
+ // An already-stopped VM may be recovered only by explicit operator opt-in.
+ // A powered-off defined domain is safe to read; no QEMU disk writer remains.
+ // Guest cleanup must have already completed for Cloud-Init profiles.
+ running:=record.Status=="running"&&checked.IsRunning()
+ stopped:=record.Status=="running"&&(checked.LibvirtState=="absent"||checked.LibvirtState=="shut off")
+ if !running && !(stopped&&req.AllowStopped&&(installerISO||req.SkipGuestCleanup)){
+  return result,fmt.Errorf("VM must be running or explicitly recoverable (SQLite=%s, Libvirt=%s); use -recover-stopped for an installed ISO disk, plus -skip-guest-cleanup for a managed Cloud-Init VM",record.Status,checked.LibvirtState)
+ }
  if !installerISO && !req.SkipGuestCleanup && record.SudoMode!="passwordless"{
   return result,errors.New("freeze requires passwordless sudo for cloud-init identity cleanup")
  }
@@ -139,13 +141,19 @@ func(e *Engine)FreezeVM(ctx context.Context,req VMFreezeRequest)(*VMFreezeResult
   notify("clean","Guest cleanup skipped by explicit recovery option (verify identity was cleaned previously)")
  }
  if running{
-  notify("shutdown","Requesting graceful VM shutdown; source overlay preserved on failure")
-  forced,shutdownErr:=vm.ShutdownForFreezeWithOptions(ctx,e.config.Virtualization.LibvirtURI,record.LibvirtUUID,req.ShutdownTimeout,req.ForceShutdown)
+  notify("shutdown","Requesting graceful VM shutdown; original disk preserved on failure")
+  var forced bool
+  var shutdownErr error
+  if installerISO{
+   forced,shutdownErr=vm.ShutdownInstallerForFreeze(ctx,e.config.Virtualization.LibvirtURI,record.LibvirtUUID,req.ShutdownTimeout,req.ForceShutdown,func(message string){notify("shutdown",message)})
+  }else{
+   forced,shutdownErr=vm.ShutdownForFreezeWithOptions(ctx,e.config.Virtualization.LibvirtURI,record.LibvirtUUID,req.ShutdownTimeout,req.ForceShutdown)
+  }
   result.ForcedShutdown=forced
   if shutdownErr!=nil{return result,shutdownErr}
   if forced{notify("shutdown","WARNING: forced power-off; captured disk may need filesystem recovery")}
  }else{
-  notify("shutdown","VM already absent in Libvirt; recovering stopped overlay")
+  notify("shutdown","VM already stopped in Libvirt ("+checked.LibvirtState+"); recovering intact disk")
  }
  result.SourceStopped=true
 

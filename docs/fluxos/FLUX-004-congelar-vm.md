@@ -15,7 +15,7 @@ Publicar as modificações realizadas em uma VM temporária como um **novo perfi
 
 ## Entradas e pré-condições
 
-- `VMID`: UUIDv7 de VM gerenciada que consta como `running` no SQLite **e** está `running` ou `blocked` no Libvirt.
+- `VMID`: UUIDv7 de VM gerenciada com SQLite `running` e Libvirt `running`/`blocked`. Na recuperação `-recover-stopped`, também é aceito Libvirt `shut off` ou `absent` com disco intacto; para Cloud-Init, exigir adicionalmente `-skip-guest-cleanup`.
 - `Name`: nome novo e válido para perfil; não pode existir em `storage.profiles`.
 - `ShutdownTimeout`: prazo positivo para desligamento, padrão de 3 minutos.
 - Perfil de origem do tipo QCOW2 gerenciado: sistema instalado, Cloud-Init, SSH e `ssh.sudo_mode: passwordless`. **Alternativamente**, perfil `installer-iso` com sistema já instalado em `installer.qcow2`: não exige SSH/Cloud-Init/sudo, mas não sanitiza a identidade do convidado.
@@ -36,8 +36,8 @@ sequenceDiagram
     C->>L: Verifica existência e estado real
     C->>P: Confere nome exclusivo e perfil de origem
     C->>V: ExecVM com sudo (limpa cloud-init e chaves SSH)
-    C->>L: shutdown UUID
-    loop Até domínio ficar ausente ou expirar prazo
+    C->>L: instalador: shutdown --mode agent; fallback ACPI / gerenciada: shutdown
+    loop Até domínio ficar absent ou shut off ou expirar prazo
         C->>L: list/domstate
     end
     alt Desligamento comprovado
@@ -56,10 +56,10 @@ sequenceDiagram
 
 1. Validar registro, identidade Libvirt, diretório temporário e nome de destino **antes** de modificar o convidado.
 2. Para perfil Cloud-Init, usar `ExecVM` e `sudo -n` para limpar `cloud-init`, `authorized_keys` e chaves host SSH. Para perfil instalador, **não tentar** essa limpeza: o guest pode não possuir SSH/Cloud-Init. O operador deve sanitizar manualmente identidades e segredos quando necessário.
-3. Solicitar desligamento normal do convidado com `virsh shutdown`; **não destruir** o domínio antecipadamente.
-4. Só converter após Libvirt informar `absent` para o domínio transitório. Não converter overlay em uso.
+3. Para instaladores, solicitar `virsh shutdown UUID --mode agent` primeiro, com espera limitada. Se o QEMU Guest Agent não responder, solicitar `virsh shutdown UUID --mode acpi`. Se o agente aceitar mas a VM permanecer ativa por 15 segundos, enviar também ACPI. O fluxo Cloud-Init mantém `virsh shutdown UUID`. **Não destruir** sem `-force-freeze-shutdown`.
+4. Só converter depois de comprovar o estado Libvirt `absent` ou `shut off`. Esses estados não têm QEMU escrevendo no disco. Estados `unknown`, `paused`, `running`, `blocked` e `in shutdown` não autorizam conversão. Em recuperação manual, exigir `-recover-stopped`; para Cloud-Init, também `-skip-guest-cleanup`.
 5. Converter o disco de origem (`overlay.qcow2` ou `installer.qcow2`) em `profiles/<nome>/versions/v001/base.qcow2` com `qemu-img convert -c`; confirmar QCOW2 autônomo sem backing file e publicar `profile.yaml` ao final. Para instaladores, registrar `boot_mode: direct`. O registro é exclusivo e não substitui nomes existentes.
-6. Executar `StopVM` para remover arquivos temporários da VM original **depois** de confirmar que o perfil foi salvo.
+6. Executar `StopVM` para limpar a VM original **somente após** publicar o perfil. Se Libvirt ainda registrar um domínio `shut off`, verificar UUID, nome e caminho do disco `vda` contra o registro antes de `virsh undefine UUID` (sem flags de remoção de storage); confirmar domínio `absent` antes de apagar arquivos temporários.
 7. Reutilizar a base por `vm start -profile <nome>`, inclusive com RAM/vCPUs sobrescritos apenas na instância.
 
 ## ISO instaladora e boot direto (Alpine)
@@ -75,15 +75,29 @@ A instância instalada por `vm install-iso` usa `installer.qcow2` e mantém a IS
 
 **Risco de identidade clonada:** `machine-id`, host keys SSH, senhas e tokens presentes no disco são preservados. Não compartilhe o perfil sem uma sanitização apropriada feita antes de congelar. Para operação segura, o desligamento normal é obrigatório; `-force-freeze-shutdown` deve ser opção explícita de recuperação, com risco de filesystem inconsistente. O disco original é preservado em falhas de desligamento ou conversão. Não executar `vm stop` antes do freeze.
 
+### Recuperar uma instalação já desligada (Libvirt: shut off)
+
+```bash
+./insula vm status -id UUID_DA_INSTALACAO
+./insula vm freeze -id UUID_DA_INSTALACAO -name abioma-test -recover-stopped
+./insula profile show -name abioma-test
+```
+
+Para discos de perfil instalador, `-skip-guest-cleanup` não é necessário: não há identidade Cloud-Init gerenciada. Para perfis Cloud-Init, `-recover-stopped -skip-guest-cleanup` permanece obrigatório, e o operador deve ter evidência de que a limpeza foi feita previamente.
+
+Se o QEMU Guest Agent estiver ausente/inativo e ACPI não encerrar o sistema, o freeze termina com erro e preserva o disco; não tenta injetar comandos de shell/credenciais no console. O operador pode usar `vm console` e `poweroff` dentro do guest, e então recuperar com `-recover-stopped`.
+
+**Atenção ao boot instalador Alpine:** confirma-se a instalação no disco somente após iniciar o sistema a partir do `vda`, não basta visualizar o login do Live ISO. Conteúdo criado em `/tmp` ou sistemas `tmpfs` não faz parte do disco persistente.
+
 ## Falhas e recuperação
 
 | Falha | Efeito verificado |
 | --- | --- |
 | Nome inválido/duplicado, VM sem sudo ou não ativa | Recusa antes do comando de preparação no convidado |
 | Limpeza do Cloud-Init falha | Operação interrompida; VM de origem não é desligada pelo fluxo |
-| Desligamento falha ou excede prazo | Não converte o disco; overlay é preservado |
+| QGA/ACPI não encerram o guest dentro do prazo | Não converte o disco; `installer.qcow2` ou overlay é preservado. Não há force implícito. |
 | Conversão ou validação QCOW2 falha | Diretório de novo perfil parcial é removido; overlay original preservado |
-| Perfil criado, falha ao limpar VM original | Retorna erro e o `VMFreezeResult.ImagePath` já preenchido; perfil permanece |
+| Perfil criado, falha ao limpar VM original | Retorna erro e o `VMFreezeResult.ImagePath` já preenchido; perfil permanece. `shut off` precisa ter identidade e `vda` confirmados antes de `undefine`. |
 | Contexto cancelado | Operação interrompida; consultar `vm status` e arquivos restantes antes de recuperar |
 
 A imagem resultante ainda pode conter tokens, dados privados, arquivos temporários e configurações próprias de aplicações. O operador deve remover esses conteúdos antes de congelar. Não existe sanitização automática abrangente.
