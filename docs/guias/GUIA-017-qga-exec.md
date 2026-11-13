@@ -11,7 +11,7 @@
 A CLI oferece `insula vm exec -qga -id UUID_DA_VM "comando"`.
 Equivalente Go: `Engine.ExecVM(ctx, ExecRequest{VMID: id, Command: "whoami", QGA: true})`.
 
-O InsulaVM valida a VM no SQLite e o estado `running` do domínio Libvirt; não usa IP, DHCP ou SSH. Envia `guest-exec` pelo canal Virtio `org.qemu.guest_agent.0`, recebe um PID e consulta `guest-exec-status` até conclusão ou timeout. A resposta preserva stdout/stderr como `[]byte` e oferece `ExitCode *int`. Na CLI, stdout e stderr remotos saem em seus respectivos canais, enquanto caminhos de logs e falhas vão a stderr.
+O InsulaVM valida a VM no SQLite e o estado `running` do domínio Libvirt; não usa IP, DHCP ou SSH. Envia `guest-exec` pelo canal Virtio `org.qemu.guest_agent.0`, recebe um PID e consulta `guest-exec-status` até conclusão ou timeout. A resposta preserva stdout/stderr como `[]byte` e oferece `ExitCode *int`. Na CLI, stdout e stderr remotos saem em seus respectivos canais **sem a linha `Logs:`**. O modo QGA não grava `command.log` nem cria diretórios de logs por execução. Erros de infraestrutura continuam no canal de diagnóstico da CLI.
 
 ## Preparar a VM Alpine
 
@@ -60,7 +60,32 @@ Para a CLI, os argumentos `-qga` e `-id` devem aparecer antes do comando posicio
 - **Concorrência sem fila:** enquanto `Engine.ExecVM` executa um comando (SSH ou QGA) para um UUID, uma segunda chamada `vm exec` para a mesma VM retorna `insulavm.ErrVMExecBusy` (`errors.Is` na biblioteca; código `1` e mensagem legível na CLI). Para outras VMs, a execução continua concorrente. O lock Linux `flock` é imediato e compartilhado entre CLI/biblioteca no mesmo host que utiliza o mesmo `storage.database`.
 - O lock é liberado no retorno da chamada ou no encerramento do processo host, **não** prova que um guest-exec remoto foi interrompido após timeout. Reconfirme o estado no convidado antes de reenviar comandos não idempotentes. Não existe espera automática nem fila; operações externas e outros métodos não compartilham esse lock.
 - O canal Virtio não expõe TCP/IP, mas seu acesso depende das permissões do Libvirt e da integridade do guest. Não disponibilize a execução do agente a usuários não confiáveis.
-- `ExecResult.LogDirectory` identifica o histórico; o arquivo `command.log` é diagnóstico textual. Saídas binárias permanecem sem transformação em `ExecResult.Stdout/Stderr`.
+- `ExecRequest.Output` e `ExecRequest.ErrorOutput` aceitam `io.Writer` para receber bytes nativos após o processo terminar. Mesmo quando ambos são `nil`, `ExecResult.Stdout`, `ExecResult.Stderr` e `ExecResult.ExitCode` permanecem acessíveis.
+- No QGA, `ExecResult.LogDirectory` é vazio e os bytes do processo **não são persistidos automaticamente**. O transporte SSH legado conserva sua política de `command.log`. O bloqueio de concorrência e o histórico das VMs não mudam.
+
+## Consumo do stdout pela biblioteca Go
+
+Os campos `Stdout` e `Stderr` são bytes nativos; o consumidor decide se imprime, armazena ou interpreta. A implementação é síncrona, sem streaming em tempo real do QGA.
+
+```go
+engine, err := insulavm.New("config.yaml")
+if err != nil { return err }
+
+result, err := engine.ExecVM(ctx, insulavm.ExecRequest{
+    VMID: "UUID_DA_VM",
+    Command: "uname -a",
+    QGA: true,
+    Output: os.Stdout,      // opcional: copiar stdout após a execução
+    ErrorOutput: os.Stderr, // opcional: copiar stderr após a execução
+})
+if result != nil {
+    // Também disponível: result.Stdout, result.Stderr, result.ExitCode.
+    // Se Output=io.Writer foi fornecido, evite imprimir Stdout novamente.
+}
+return err
+```
+
+Na CLI, `./insula vm exec -qga -id UUID_DA_VM "uname -a"` imprime apenas os bytes stdout do processo em stdout. Redirecionamento funciona normalmente: `./insula vm exec -qga -id UUID_DA_VM "cat /etc/os-release" > os-release.txt`. O InsulaVM não acrescenta rótulos, mensagens ou quebras de linha à saída bruta.
 
 ## Testes
 
