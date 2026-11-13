@@ -58,6 +58,11 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if vm.Status!="running"{
   return nil,fmt.Errorf("VM %s is active in Libvirt but SQLite state is %s; inspect with 'insula vm status -id %s' before executing",vm.ID,vm.Status,vm.ID)
  }
+ // The same nonblocking lock covers SSH and QGA, CLI and library calls.
+ // A concurrent exec against this VM is rejected instead of queued.
+ releaseExecLock,err:=acquireVMExecLock(e.config.Storage.Database,vm.ID)
+ if err!=nil{return nil,err}
+ defer releaseExecLock()
  if req.QGA{return e.execVMQGA(ctx,vm.ID,req)}
  if req.Sudo&&vm.SudoMode!="passwordless"{
   return nil,errors.New("sudo is not enabled for this VM; set ssh.sudo_mode=passwordless when creating the instance")
