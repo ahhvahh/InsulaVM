@@ -31,12 +31,14 @@ type ExecRequest struct{
  // QGA selects local QEMU guest-agent execution instead of SSH; no IP needed.
  QGA bool
  // ErrorOutput optionally receives unmodified QGA stderr bytes.
- // QGA does not persist captured output in storage.logs.
  ErrorOutput io.Writer
+ // Log enables one persistent command.log under storage.logs/vm-UUID/exec.
+ // Default false: stdout/stderr are delivered without per-command logs.
+ Log bool
 }
 type ExecResult struct{
  VMID string
- // LogDirectory is populated by legacy SSH exec; it is empty for QGA.
+ // LogDirectory is set only when ExecRequest.Log is true, for SSH or QGA.
  LogDirectory string
  Elevated bool
  // QGA returns unmodified bytes and the guest's exit code; SSH remains legacy.
@@ -48,8 +50,8 @@ type ExecResult struct{
 }
 
 // ExecVM executes one command inside an existing managed VM by UUIDv7.
-// Legacy SSH execution logs the command and output. QGA does not create a
-// command log: results are returned as native bytes and/or to request writers.
+// Output is sent to the caller; persistent per-command logs are opt-in via
+// ExecRequest.Log. QGA returns native bytes; legacy SSH decorates job lines.
 func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if ctx==nil{return nil,errors.New("context is required")}
  if req.VMID==""||strings.TrimSpace(req.Command)==""||strings.ContainsRune(req.Command,0){
@@ -99,17 +101,31 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if req.Workspace=="" {
   if err:=shelltransport.EnsureWorkspace(ctx,client,workspace);err!=nil{return nil,err}
  }
- logRun,err:=storage.NewRun(e.config.Storage.Logs,"vm-"+vm.ID,"exec",time.Now())
- if err!=nil{return nil,err}
- result:=&ExecResult{VMID:vm.ID,LogDirectory:logRun.Directory,Elevated:req.Sudo}
- log,err:=logRun.OpenJob("command")
- if err!=nil{return result,err}
+ result:=&ExecResult{VMID:vm.ID,Elevated:req.Sudo}
+ var log executor.Recorder=discardExecRecorder{}
+ var closeLog func()error=func()error{return nil}
+ if req.Log{
+  logRun,err:=storage.NewRun(e.config.Storage.Logs,"vm-"+vm.ID,"exec",time.Now())
+  if err!=nil{return result,err}
+  result.LogDirectory=logRun.Directory
+  job,err:=logRun.OpenJob("command")
+  if err!=nil{return result,err}
+  log=job
+  closeLog=job.Close
+ }
  command:=req.Command
  if req.Sudo{
   command="sudo -n sh -c "+quoteGuest(command)
  }
  runner:=&executor.Executor{Client:client,Workspace:workspace,Console:req.Output,CommandTimeout:timeout}
  err=runner.Run(ctx,"command",[]string{command},false,log)
- return result,errors.Join(err,log.Close())
+ return result,errors.Join(err,closeLog())
 }
+// discardExecRecorder keeps the SSH executor's existing output behavior
+// without creating log files when persistence was not requested.
+type discardExecRecorder struct{}
+func(discardExecRecorder)Request(string)error{return nil}
+func(discardExecRecorder)Response(string)error{return nil}
+func(discardExecRecorder)Flush()error{return nil}
+
 func quoteGuest(s string) string { return shelltransport.QuoteGuest(s) }
