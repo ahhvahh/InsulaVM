@@ -41,7 +41,7 @@ func registerQGANoIPVM(t *testing.T, engine *Engine, id string) {
 	}
 	defer store.Close()
 	entry := registry.Entry{
-		ID: id, LibvirtUUID: id, Name: "insula-qga-test", Profile: "missing-ssh-profile",
+		ID: id, LibvirtUUID: id, Name: "insula-qga-test-" + id, Profile: "missing-ssh-profile",
 		MAC: "52:54:00:00:00:33", SSHPort: 22, InstanceDir: t.TempDir(), SudoMode: "disabled",
 	}
 	if err := store.Insert(context.Background(), entry); err != nil {
@@ -108,5 +108,37 @@ func TestExecVMQGASecurityAndExitErrors(t *testing.T) {
 	var remote *vmtransport.QGAExitError
 	if !errors.As(err, &remote) || remote.Code != 23 {
 		t.Fatalf("typed remote exit error lost: %v", err)
+	}
+}
+
+
+func TestExecVMRejectsOverlappingCommandsWithTypedError(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		qga  bool
+	}{
+		{"QGA", true},
+		{"SSH", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			engine := testEngine(t, "")
+			id := "019a5d11-1234-7123-8123-123456789abc"
+			registerQGANoIPVM(t, engine, id)
+			installQGAMock(t, id, `{"return":{"exited":true,"exitcode":0}}`)
+
+			unlock, err := acquireVMExecLock(engine.config.Storage.Database, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer unlock()
+
+			result, err := engine.ExecVM(context.Background(), ExecRequest{
+				VMID: id, Command: "whoami", QGA: tc.qga,
+			})
+			if result != nil || !errors.Is(err, ErrVMExecBusy) ||
+				!strings.Contains(err.Error(), id) {
+				t.Fatalf("concurrent %s exec should be rejected before guest execution: result=%+v err=%v", tc.name, result, err)
+			}
+		})
 	}
 }

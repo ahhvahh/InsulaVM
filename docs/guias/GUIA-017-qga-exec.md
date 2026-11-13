@@ -57,6 +57,8 @@ Para a CLI, os argumentos `-qga` e `-id` devem aparecer antes do comando posicio
 - O resultado contém `Stdout`, `Stderr`, `ExitCode` e sinalizadores de truncamento. Erros de saída diferente de zero são distintos dos erros de transporte.
 - `guest-exec` captura a saída **após** o processo terminar; não é streaming contínuo. Output truncado é tratado como erro e os bytes disponíveis são preservados.
 - Timeout ou cancelamento interrompe a espera no host, **não garante encerramento do processo remoto**. A VM e o disco são preservados.
+- **Concorrência sem fila:** enquanto `Engine.ExecVM` executa um comando (SSH ou QGA) para um UUID, uma segunda chamada `vm exec` para a mesma VM retorna `insulavm.ErrVMExecBusy` (`errors.Is` na biblioteca; código `1` e mensagem legível na CLI). Para outras VMs, a execução continua concorrente. O lock Linux `flock` é imediato e compartilhado entre CLI/biblioteca no mesmo host que utiliza o mesmo `storage.database`.
+- O lock é liberado no retorno da chamada ou no encerramento do processo host, **não** prova que um guest-exec remoto foi interrompido após timeout. Reconfirme o estado no convidado antes de reenviar comandos não idempotentes. Não existe espera automática nem fila; operações externas e outros métodos não compartilham esse lock.
 - O canal Virtio não expõe TCP/IP, mas seu acesso depende das permissões do Libvirt e da integridade do guest. Não disponibilize a execução do agente a usuários não confiáveis.
 - `ExecResult.LogDirectory` identifica o histórico; o arquivo `command.log` é diagnóstico textual. Saídas binárias permanecem sem transformação em `ExecResult.Stdout/Stderr`.
 

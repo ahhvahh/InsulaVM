@@ -9,6 +9,7 @@ import (
  "fmt"
  "os"
  "path/filepath"
+ "strings"
  "time"
 
  sqlite3 "modernc.org/sqlite"
@@ -34,6 +35,10 @@ type Entry struct {
  UpdatedAt string
  FinishedAt string
 }
+
+// ErrVMAlreadyExists identifies a conflicting registered VM UUID or domain name.
+// The database's UNIQUE constraints remain authoritative for concurrent creates.
+var ErrVMAlreadyExists = errors.New("VM identity already registered")
 
 type Store struct{db *sql.DB}
 
@@ -166,6 +171,23 @@ func(s *Store)Insert(ctx context.Context,e Entry)error{
  ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
   e.ID,e.LibvirtUUID,e.Name,e.Profile,e.IP,e.MAC,e.HostFingerprint,e.SudoMode,e.SSHUser,e.SSHPort,e.PrivateKeyPath,e.KnownHostsPath,
   e.InstanceDir,"creating",now,now)
+ if err==nil{return nil}
+ var constraint *sqlite3.Error
+ if !errors.As(err,&constraint)||constraint.Code()&0xff!=19{
+  return err
+ }
+ // Only translate known identity constraints. Do not turn unrelated
+ // CHECK/NOT NULL violations into misleading "duplicate VM" errors.
+ switch {
+ case strings.Contains(err.Error(),"vm_instances.id"):
+  return fmt.Errorf("%w: UUID %q already exists; use another VM ID",ErrVMAlreadyExists,e.ID)
+ case strings.Contains(err.Error(),"vm_instances.libvirt_uuid"):
+  return fmt.Errorf("%w: Libvirt UUID %q already exists",ErrVMAlreadyExists,e.LibvirtUUID)
+ case strings.Contains(err.Error(),"vm_instances.name"):
+  return fmt.Errorf("%w: name %q already exists; choose a distinct VM name",ErrVMAlreadyExists,e.Name)
+ case strings.Contains(err.Error(),"VM UUID was previously used"):
+  return fmt.Errorf("%w: UUID %q was previously used and cannot be reused",ErrVMAlreadyExists,e.ID)
+ }
  return err
 }
 

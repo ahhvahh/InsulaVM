@@ -100,6 +100,27 @@ Na criação, o motor consulta `storage.database` e gera outro UUIDv7 quando enc
 
 A pré-verificação otimista não substitui as restrições atômicas: uma rara colisão gerada simultaneamente pode causar erro seguro na criação, sem reciclar o ID.
 
+### Erros explícitos de cadastro e `ExecVM` concorrente
+
+O registro de VM em `pkg/registry` retorna `registry.ErrVMAlreadyExists` para UUID ou nome duplicado, inclusive UUID removido anteriormente. A restrição `UNIQUE` do SQLite permanece a garantia de atomicidade; não há inserção com substituição nem espera em caso de duplicidade.
+
+O método público `Engine.ExecVM(ctx, ExecRequest)` aplica exclusão não bloqueante por UUID, tanto para transporte SSH como QGA. Se outro `ExecVM` estiver ativo para a mesma VM no mesmo host e sobre o mesmo `storage.database`, retorna `insulavm.ErrVMExecBusy` e resultado `nil`. O consumidor pode usar:
+
+```go
+result, err := engine.ExecVM(ctx, insulavm.ExecRequest{
+    VMID: id, Command: "uname -a", QGA: true,
+})
+if errors.Is(err, insulavm.ErrVMExecBusy) {
+    // Outra chamada exec está em andamento para este UUID.
+    return err
+}
+_ = result
+```
+
+A CLI `vm exec` usa o mesmo método e apresenta o erro em `stderr` com código de saída `1`. O lock é `flock(LOCK_EX|LOCK_NB)` no host Linux, mantido durante a chamada e liberado pelo fechamento do descriptor; não exige um processo servidor nem novas tabelas. VMs com UUID distinto permanecem independentes. Os arquivos de lock não devem ser apagados durante o uso; possuem permissões restritas e ficam junto ao banco.
+
+**Limites:** o bloqueio é advisory e exclusivo de `ExecVM`; não engloba `shell-command`, `import`, `deploy`, `stop` ou `freeze` nem comandos enviados fora do InsulaVM. O QGA pode manter o processo do guest após timeout/cancelamento no host; a liberação do lock não confirma a interrupção remota. Não existem fila, espera automática ou coordenação entre hosts.
+
 ### `StartVMWithOptions`
 
 `VMStartOptions` contém `Profile` (nome registrado), `MemoryMiB` e `VCPUs` (zero mantém o padrão do perfil), `StartupScriptPath` (script administrativo confiável, opcional), `StopOnContextDone` e `OnStopError`. A função devolve `*vm.Instance` (inclui `ID`, `Name`, `IPAddress`, credenciais SSH) e `error`. Sem `StopOnContextDone`, a VM permanece ativa até `StopVM`/`Cleanup`. Quando habilitada, a limpeza ao cancelar o contexto é **assíncrona e de melhor esforço**; use `StopVM` para aguardar a operação e observar erros.
