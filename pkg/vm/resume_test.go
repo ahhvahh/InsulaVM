@@ -246,3 +246,25 @@ func TestResumeByIDReconcilesAlreadyActiveFailedRecord(t *testing.T){
   t.Fatalf("SQLite reconciliation failed: %+v %v",persisted,err)
  }
 }
+
+func TestResumeByIDRestartsDefinedOverlay(t *testing.T){
+ c,id,installerDisk,capture:=resumeFixture(t)
+ overlay:=filepath.Join(filepath.Dir(installerDisk),"overlay.qcow2")
+ if err:=os.Rename(installerDisk,overlay);err!=nil{t.Fatal(err)}
+ xmlPath:=filepath.Join(filepath.Dir(overlay),"domain.xml")
+ original,err:=os.ReadFile(xmlPath);if err!=nil{t.Fatal(err)}
+ amended:=strings.Replace(string(original),installerDisk,overlay,1)
+ if amended==string(original){t.Fatal("fixture XML does not reference installer disk")}
+ if err:=os.WriteFile(xmlPath,[]byte(amended),0600);err!=nil{t.Fatal(err)}
+ t.Setenv("MOCK_LIST_UUID",id)
+ t.Setenv("MOCK_DOMSTATE","shut off")
+ got,err:=ResumeByID(context.Background(),c,id)
+ if err!=nil{t.Fatal(err)}
+ if got.ID!=id||got.IP!=""||got.Status!="running"{t.Fatalf("unexpected resumed overlay: %+v",got)}
+ if _,err:=os.Stat(overlay);err!=nil{t.Fatalf("overlay missing: %v",err)}
+ if _,err:=os.Stat(capture);!errors.Is(err,os.ErrNotExist){t.Fatal("unexpected domain recreation")}
+ actions,err:=os.ReadFile(os.Getenv("MOCK_ACTIONS"))
+ if err!=nil||strings.TrimSpace(string(actions))!="start "+id{
+  t.Fatalf("expected defined domain start, got %s: %v",actions,err)
+ }
+}
