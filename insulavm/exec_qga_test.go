@@ -41,7 +41,7 @@ func registerQGANoIPVM(t *testing.T, engine *Engine, id string) {
 	}
 	defer store.Close()
 	entry := registry.Entry{
-		ID: id, LibvirtUUID: id, Name: "insula-qga-test", Profile: "missing-ssh-profile",
+		ID: id, LibvirtUUID: id, Name: "insula-qga-test-" + id, Profile: "missing-ssh-profile",
 		MAC: "52:54:00:00:00:33", SSHPort: 22, InstanceDir: t.TempDir(), SudoMode: "disabled",
 	}
 	if err := store.Insert(context.Background(), entry); err != nil {
