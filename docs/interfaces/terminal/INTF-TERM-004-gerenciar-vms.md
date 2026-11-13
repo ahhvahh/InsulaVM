@@ -99,6 +99,22 @@ O sucesso de `freeze` imprime `FREEZE SUCCESS: name=... source=...`. A imagem é
 
 A compressão QCOW2 é **padrão** e corresponde a `VMFreezeRequest{...}` na biblioteca. Para desabilitá-la, usar `-compress=false` ou `VMFreezeRequest.DisableQCOW2Compression=true`. O arquivo permanece em formato QCOW2 e pode ser reutilizado imediatamente por novas VMs. O perfil é salvo no caminho `storage.profiles` do YAML; para usar um volume externo, configure ali o caminho absoluto do volume **antes de congelar**. Armazenar o perfil em volume desconectado impede iniciar novas VMs que dependam dele.
 
+## Perfil instalado por ISO, sem SSH e sem Cloud-Init
+
+`vm install-iso` registra uma VM cujo disco é `installer.qcow2`. Após instalar o sistema operacional no disco virtual, o `freeze` suporta esse formato:
+
+```bash
+./insula vm status -id UUID_DA_VM
+./insula vm freeze -id UUID_DA_VM -name abioma-tests
+./insula profile show -name abioma-tests
+./insula vm start -profile abioma-tests -memory-mib 500 -vcpus 1
+./insula vm exec -qga -id UUID_NOVA_VM "uname -a"
+```
+
+O `freeze` utiliza a imagem **instalada**, não a ISO, e publica `boot_mode: direct` em `profile.yaml`. Nesse modo, `vm start` somente confirma o estado do domínio no Libvirt, sem provisionar usuário SSH, Cloud-Init, chaves, sudo ou exigir IP. É necessário verificar separadamente o boot do convidado e a disponibilidade do QEMU Guest Agent. O canal Virtio QGA é incluído no XML; o daemon QGA deve estar instalado e ativo dentro da VM.
+
+No fluxo instalador não há limpeza automática de identificadores do convidado nem segredos. Sanitizar `machine-id`/chaves SSH, se necessário, antes do freeze. A conversão QCOW2 é comprimida por padrão; `vm stop` na VM de origem **antes** do freeze exclui `installer.qcow2`. Em falhas de shutdown ou conversão, o disco é preservado; não force parada sem aceitar o risco de inconsistência.
+
 ## Exemplo: encerrar VMs gerenciadas
 
 ```bash

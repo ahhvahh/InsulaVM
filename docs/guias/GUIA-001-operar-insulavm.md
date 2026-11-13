@@ -11,7 +11,7 @@
 
 1. Registre um perfil QCOW2 com sistema já instalado e Cloud-Init. A ISO Debian instaladora não é aceita como perfil pronto.
 2. Inicie uma VM descartável, faça os ajustes em seu próprio overlay e confirme os comandos/testes necessários.
-3. Se a intenção for preservar o ambiente, faça o congelamento por nome **antes** de `vm stop`; congelar exige sudo sem senha configurado na origem.
+3. Se a intenção for preservar o ambiente, faça o congelamento por nome **antes** de `vm stop`. Perfis Cloud-Init exigem sudo sem senha; VMs criadas com `vm install-iso` utilizam `installer.qcow2` e são congeladas sem SSH/Cloud-Init (sem limpeza automática da identidade do guest).
 4. Crie novas VMs a partir do novo perfil. Os overlays de cada instância permanecem independentes.
 
 ```bash
@@ -23,6 +23,18 @@
 ```
 
 **Atenção:** `vm freeze` encerra e elimina a instância de origem após publicar o QCOW2 autônomo. Veja [FLUX-004](../fluxos/FLUX-004-congelar-vm.md). Para encerrar outras VMs gerenciadas, simule antes com `./insula vm stop-all -dry-run`.
+
+## Congelar o Alpine instalado por ISO
+
+```bash
+./insula vm status -id UUID_DA_VM
+./insula vm freeze -id UUID_DA_VM -name abioma-tests
+./insula profile show -name abioma-tests
+./insula vm start -profile abioma-tests -memory-mib 500 -vcpus 1
+./insula vm exec -qga -id UUID_NOVA_VM "uname -a"
+```
+
+O perfil de origem `installer-iso` armazena o Linux instalado no arquivo `installer.qcow2`. A conversão registra uma base independente comprimida e `boot_mode: direct`, sem ISO/Cloud-Init e sem validação SSH. A inicialização reporta somente domínio Libvirt `running`; valide boot e disponibilidade do QGA dentro do guest. Prepare manualmente a identidade da imagem antes do freeze quando houver necessidade de host keys ou `machine-id` únicos. Não execute `vm stop` antes do freeze, pois isso remove o disco instalador.
 
 ## Deploy direto
 

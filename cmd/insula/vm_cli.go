@@ -94,6 +94,13 @@ func vmCommand(args []string)error{
    fmt.Fprintf(os.Stderr,"[InsulaVM][vm:%s] %s\n",p.Stage,localMessageForCLI(p.Message,root))
   })
   if err!=nil{return presentCLIError(err,root)}
+  if instance.SSHUser=="" {
+   fmt.Printf("VM iniciada no Libvirt: id=%s profile=%s mac=%s (boot do guest ainda nao verificado)\n",instance.ID,instance.Profile,instance.MACAddress)
+   fmt.Println("Console: ./insula vm console -id",instance.ID)
+   fmt.Println("QGA, se instalado no guest: ./insula vm exec -qga -id",instance.ID,"-command \"uname -a\"")
+   fmt.Println("Para encerrar: insula vm stop -id",instance.ID)
+   return nil
+  }
   fmt.Printf("VM pronta: id=%s profile=%s ip=%s mac=%s user=%s sudo=%s\n",
    instance.ID,instance.Profile,instance.IPAddress,instance.MACAddress,instance.SSHUser,instance.SudoMode)
   fmt.Println("SSH:",sshCommandForCLI(instance.SSHPrivateKeyPath,instance.SSHKnownHostsPath,instance.SSHUser,instance.IPAddress))

@@ -29,11 +29,15 @@ func grantQEMUStorageAccess(ctx context.Context, uid int, baseImage, overlay, se
  if _, err := exec.LookPath("setfacl"); err != nil {
   return fmt.Errorf("QEMU ACL provisioning requires setfacl (Debian: sudo apt install acl): %w", err)
  }
- // Prepare the full ancestry of all three files, including $HOME when the
+ // Prepare the full ancestry of the base, writable overlay and optional seed,
+ // including $HOME when the
  // operator deliberately stores a VM profile under a private home directory.
  // Root-owned ancestors with search permission for others need no changes.
+ files:=[]struct{path,perm string}{{baseImage,"r--"},{overlay,"rw-"}}
+ if seedISO!=""{files=append(files,struct{path,perm string}{seedISO,"r--"})}
  checked := map[string]bool{}
- for _, file := range []string{baseImage, overlay, seedISO} {
+ for _,spec:=range files {
+  file:=spec.path
   resolved, err := filepath.EvalSymlinks(file)
   if err != nil { return fmt.Errorf("resolve VM storage file %q: %w", file, err) }
   dir := filepath.Dir(resolved)
@@ -57,9 +61,7 @@ func grantQEMUStorageAccess(ctx context.Context, uid int, baseImage, overlay, se
    dir = parent
   }
  }
- for _, spec := range []struct{path,perm string}{
-  {baseImage, "r--"}, {overlay, "rw-"}, {seedISO, "r--"},
- } {
+ for _,spec:=range files {
   resolved, err := filepath.EvalSymlinks(spec.path)
   if err != nil { return fmt.Errorf("resolve VM disk %q: %w", spec.path, err) }
   info, err := os.Stat(resolved)
