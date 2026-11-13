@@ -11,6 +11,7 @@ import (
  "fmt"
  "os"
  "os/signal"
+ "path/filepath"
  "time"
 
  "github.com/ahhvahh/InsulaVM/insulavm"
@@ -48,6 +49,7 @@ func vmCommand(args []string)error{
  directory:=fs.String("directory","","guest subdirectory for interactive vm shell (relative to guest.destination)")
  sudo:=fs.Bool("sudo",false,"execute as root via sudo -n (requires passwordless mode)")
  qga:=fs.Bool("qga",false,"execute via QEMU Guest Agent (no IP/SSH; runs with agent privileges)")
+ execLog:=fs.Bool("log",false,"vm exec only: persist command and output to command.log; print relative host path on stderr")
  source:=fs.String("source","","host file/directory to import")
  script:=fs.String("script","","local Bash file to upload and execute after deploy")
  extract:=fs.Bool("extract",false,"extract trusted .tar.gz/.tgz source in guest.destination before executing script")
@@ -65,6 +67,7 @@ func vmCommand(args []string)error{
   }
  }else if fs.NArg()!=0{return errors.New("unexpected vm arguments")}
  if *qga && command!="exec"{return errors.New("-qga is only supported by vm exec")}
+ if *execLog && command!="exec"{return errors.New("-log is only supported by vm exec")}
  engine,err:=insulavm.New(*cfgPath)
  if err!=nil{return err}
  ctx,cancel:=signal.NotifyContext(context.Background(),os.Interrupt)
@@ -246,13 +249,13 @@ func vmCommand(args []string)error{
  case "exec":
   if *id==""||*commandText==""{return errors.New("vm exec requires -id and -command")}
   result,err:=engine.ExecVM(ctx,insulavm.ExecRequest{
-   VMID:*id,Command:*commandText,Workspace:*workspace,Sudo:*sudo,QGA:*qga,
+   VMID:*id,Command:*commandText,Workspace:*workspace,Sudo:*sudo,QGA:*qga,Log:*execLog,
    Output:os.Stdout,ErrorOutput:os.Stderr,CommandTimeout:*cmdTimeout,
   })
-  // QGA stdout/stderr are the VM process' unmodified output; unlike legacy
-  // SSH exec, QGA does not create a per-command log directory.
-  if result!=nil && !*qga && result.LogDirectory!=""{
-   fmt.Println("Logs:",localPathForCLI(result.LogDirectory))
+  // Never write metadata to stdout. When logging is enabled explicitly,
+  // show the host file relative to the caller's current directory on stderr.
+  if result!=nil && *execLog && result.LogDirectory!=""{
+   fmt.Fprintln(os.Stderr,"Logs:",localPathForCLI(filepath.Join(result.LogDirectory,"command.log")))
   }
   return presentCLIError(err,root)
  case "import":
