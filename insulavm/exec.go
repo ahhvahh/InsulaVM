@@ -23,15 +23,20 @@ type ExecRequest struct{
  Command string
  Workspace string
  Sudo bool
+ // Output optionally receives native QGA stdout bytes after guest-exec ends.
+ // For legacy SSH this remains the decorated job console output.
+ // Nil is supported; QGA still fills ExecResult.Stdout.
  Output io.Writer
  CommandTimeout time.Duration
  // QGA selects local QEMU guest-agent execution instead of SSH; no IP needed.
  QGA bool
- // ErrorOutput receives unmodified QGA stderr bytes; Output receives stdout.
+ // ErrorOutput optionally receives unmodified QGA stderr bytes.
+ // QGA does not persist captured output in storage.logs.
  ErrorOutput io.Writer
 }
 type ExecResult struct{
  VMID string
+ // LogDirectory is populated by legacy SSH exec; it is empty for QGA.
  LogDirectory string
  Elevated bool
  // QGA returns unmodified bytes and the guest's exit code; SSH remains legacy.
@@ -43,7 +48,8 @@ type ExecResult struct{
 }
 
 // ExecVM executes one command inside an existing managed VM by UUIDv7.
-// It logs the command and output, and never calls SSH as root.
+// Legacy SSH execution logs the command and output. QGA does not create a
+// command log: results are returned as native bytes and/or to request writers.
 func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if ctx==nil{return nil,errors.New("context is required")}
  if req.VMID==""||strings.TrimSpace(req.Command)==""||strings.ContainsRune(req.Command,0){
