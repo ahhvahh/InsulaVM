@@ -25,11 +25,21 @@ type ExecRequest struct{
  Sudo bool
  Output io.Writer
  CommandTimeout time.Duration
+ // QGA selects local QEMU guest-agent execution instead of SSH; no IP needed.
+ QGA bool
+ // ErrorOutput receives unmodified QGA stderr bytes; Output receives stdout.
+ ErrorOutput io.Writer
 }
 type ExecResult struct{
  VMID string
  LogDirectory string
  Elevated bool
+ // QGA returns unmodified bytes and the guest's exit code; SSH remains legacy.
+ Stdout []byte
+ Stderr []byte
+ ExitCode *int
+ StdoutTruncated bool
+ StderrTruncated bool
 }
 
 // ExecVM executes one command inside an existing managed VM by UUIDv7.
@@ -48,6 +58,7 @@ func(e *Engine)ExecVM(ctx context.Context,req ExecRequest)(*ExecResult,error){
  if vm.Status!="running"{
   return nil,fmt.Errorf("VM %s is active in Libvirt but SQLite state is %s; inspect with 'insula vm status -id %s' before executing",vm.ID,vm.Status,vm.ID)
  }
+ if req.QGA{return e.execVMQGA(ctx,vm.ID,req)}
  if req.Sudo&&vm.SudoMode!="passwordless"{
   return nil,errors.New("sudo is not enabled for this VM; set ssh.sudo_mode=passwordless when creating the instance")
  }

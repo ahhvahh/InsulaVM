@@ -19,6 +19,7 @@ func TestInstallerISODomainXMLContract(t *testing.T){
   "device='cdrom'","<readonly/>","<seclabel model='dac' relabel='no'/>","type='qcow2'","bus='virtio'",
   "guest&#39;s &amp; disk.qcow2","alpine&#39;s &amp; installer.iso",
   "<serial type='pty'>","<console type='pty'>","<source network='default'/>",
+  "<channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>",
  }{
   if !strings.Contains(spec,part){t.Errorf("missing %q in domain XML: %s",part,spec)}
  }
@@ -73,6 +74,10 @@ func TestInstallerISOVNCAndSerialConsoles(t *testing.T) {
      Serial []struct{} `xml:"serial"`
      Console []struct{} `xml:"console"`
      Interface []struct{} `xml:"interface"`
+     Channels []struct {
+      Type string `xml:"type,attr"`
+      Target struct {Type string `xml:"type,attr"`; Name string `xml:"name,attr"`} `xml:"target"`
+     } `xml:"channel"`
     } `xml:"devices"`
    }
    if err:=xml.Unmarshal([]byte(spec),&parsed);err!=nil{t.Fatalf("invalid domain XML: %v",err)}
@@ -90,6 +95,9 @@ func TestInstallerISOVNCAndSerialConsoles(t *testing.T) {
    }
    if len(devices.Serial)!=1||len(devices.Console)!=1{
     t.Errorf("serial console must remain available: serial=%d console=%d",len(devices.Serial),len(devices.Console))
+   }
+   if len(devices.Channels)!=1||devices.Channels[0].Type!="unix"||devices.Channels[0].Target.Type!="virtio"||devices.Channels[0].Target.Name!="org.qemu.guest_agent.0"{
+    t.Errorf("installer must expose exactly one QGA channel: %+v",devices.Channels)
    }
    if got:=len(devices.Interface);got!=tc.wantInterfaces {
     t.Errorf("NIC count=%d, want=%d",got,tc.wantInterfaces)

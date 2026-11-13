@@ -47,6 +47,7 @@ func vmCommand(args []string)error{
  shellID:=fs.String("shell-id","","shell session UUID for history lookup")
  directory:=fs.String("directory","","guest subdirectory for interactive vm shell (relative to guest.destination)")
  sudo:=fs.Bool("sudo",false,"execute as root via sudo -n (requires passwordless mode)")
+ qga:=fs.Bool("qga",false,"execute via QEMU Guest Agent (no IP/SSH; runs with agent privileges)")
  source:=fs.String("source","","host file/directory to import")
  script:=fs.String("script","","local Bash file to upload and execute after deploy")
  extract:=fs.Bool("extract",false,"extract trusted .tar.gz/.tgz source in guest.destination before executing script")
@@ -56,7 +57,14 @@ func vmCommand(args []string)error{
   n,out,parseErr:=resolveFreezeTarget(*freezeName,*freezeOutput,fs.Args(),command=="export-iso"||*exportISO)
   if parseErr!=nil{return parseErr}
   *freezeName,*freezeOutput=n,out
+ }else if command=="exec"{
+  if *qga && fs.NArg()==1 && *commandText==""{
+   *commandText=fs.Arg(0)
+  }else if fs.NArg()!=0{
+   return errors.New("vm exec accepts one positional command only with -qga and without -command")
+  }
  }else if fs.NArg()!=0{return errors.New("unexpected vm arguments")}
+ if *qga && command!="exec"{return errors.New("-qga is only supported by vm exec")}
  engine,err:=insulavm.New(*cfgPath)
  if err!=nil{return err}
  ctx,cancel:=signal.NotifyContext(context.Background(),os.Interrupt)
@@ -231,9 +239,12 @@ func vmCommand(args []string)error{
  case "exec":
   if *id==""||*commandText==""{return errors.New("vm exec requires -id and -command")}
   result,err:=engine.ExecVM(ctx,insulavm.ExecRequest{
-   VMID:*id,Command:*commandText,Workspace:*workspace,Sudo:*sudo,Output:os.Stdout,
+   VMID:*id,Command:*commandText,Workspace:*workspace,Sudo:*sudo,QGA:*qga,
+   Output:os.Stdout,ErrorOutput:os.Stderr,CommandTimeout:*cmdTimeout,
   })
-  if result!=nil{fmt.Println("Logs:",localPathForCLI(result.LogDirectory))}
+  if result!=nil{
+   if *qga{fmt.Fprintln(os.Stderr,"Logs:",localPathForCLI(result.LogDirectory))}else{fmt.Println("Logs:",localPathForCLI(result.LogDirectory))}
+  }
   return presentCLIError(err,root)
  case "import":
   if *id==""||*source==""{return errors.New("vm import requires -id and -source; destination comes from the VM profile.yaml")}
