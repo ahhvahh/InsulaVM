@@ -110,3 +110,25 @@ func TestExecVMQGASecurityAndExitErrors(t *testing.T) {
 		t.Fatalf("typed remote exit error lost: %v", err)
 	}
 }
+
+
+func TestExecVMRejectsOverlappingQGAWithTypedError(t *testing.T) {
+	engine := testEngine(t, "")
+	id := "019a5d11-1234-7123-8123-123456789abc"
+	registerQGANoIPVM(t, engine, id)
+	installQGAMock(t, id, `{"return":{"exited":true,"exitcode":0}}`)
+
+	unlock, err := acquireVMExecLock(engine.config.Storage.Database, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+
+	result, err := engine.ExecVM(context.Background(), ExecRequest{
+		VMID: id, Command: "whoami", QGA: true,
+	})
+	if result != nil || !errors.Is(err, ErrVMExecBusy) ||
+		!strings.Contains(err.Error(), id) {
+		t.Fatalf("concurrent QGA exec should be rejected before guest-exec: result=%+v err=%v", result, err)
+	}
+}
